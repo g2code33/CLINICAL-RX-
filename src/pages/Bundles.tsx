@@ -1,0 +1,341 @@
+import { useState } from 'react';
+import { useData } from '../stores/data';
+import { PageHeader, EmptyState, Pill } from '../components/ui';
+import { Modal } from '../components/Modal';
+import { generateBundle, mergeBundles } from '../services/bundler';
+import { bundleToMarkdown, bundleToJson, downloadText, copyToClipboard } from '../services/export';
+import { scanForPhi, privacyWarning } from '../services/privacy';
+import { aiChat } from '../services/ai';
+import type { Bundle } from '../types';
+
+type Filter = 'all' | 'auto' | 'manual' | 'merged';
+
+const TYPE_LABEL: Record<string, string> = {
+  'auto-daily': '🤖 Auto Daily',
+  'auto-weekly': '🤖 Auto Weekly',
+  'manual-day': '✍️ Manual Day',
+  'manual-week': '✍️ Manual Week',
+  'manual-custom': '✍️ Manual Custom',
+  merged: '🔗 Merged',
+};
+
+function addDays(iso: string, n: number): string {
+  const d = new Date(iso + 'T00:00:00');
+  d.setDate(d.getDate() + n);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+function todayIso() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+export function Bundles() {
+  const bundles = useData((s) => s.bundles);
+  const days = useData((s) => s.days);
+  const setStatus = useData((s) => s.setStatus);
+  const [filter, setFilter] = useState<Filter>('all');
+  const [query, setQuery] = useState('');
+  const [createOpen, setCreateOpen] = useState(false);
+  const [selected, setSelected] = useState<string[]>([]);
+  const [viewing, setViewing] = useState<Bundle | null>(null);
+  const [merging, setMerging] = useState(false);
+  const [aiReply, setAiReply] = useState<string | null>(null);
+
+  async function doAutoDaily() {
+    setStatus('Generating auto daily bundle…');
+    const day = days.find((d) => d.date === todayIso());
+    await generateBundle({
+      type: 'auto-daily',
+      title: `AUTO — Daily Bundle — ${todayIso()}`,
+      periodStart: todayIso(),
+      periodEnd: todayIso(),
+      sourceModules: ['day', 'disease', 'medicine', 'investigation', 'question'],
+    });
+    void day;
+    setStatus('✓ Auto daily bundle created');
+  }
+
+  async function doAutoWeekly() {
+    const end = todayIso();
+    const start = addDays(end, -6);
+    setStatus('Generating auto weekly bundle…');
+    await generateBundle({
+      type: 'auto-weekly',
+      title: `AUTO — Weekly Bundle — Week ${start}→${end}`,
+      periodStart: start,
+      periodEnd: end,
+      sourceModules: ['day', 'disease', 'medicine', 'investigation', 'question'],
+    });
+    setStatus('✓ Auto weekly bundle created');
+  }
+
+  async function doManual(type: 'manual-day' | 'manual-week' | 'manual-custom', name: string) {
+    const end = todayIso();
+    const start = type === 'manual-day' ? end : type === 'manual-week' ? addDays(end, -6) : addDays(end, -30);
+    setStatus('Creating manual bundle…');
+    await generateBundle({ type, title: name, periodStart: start, periodEnd: end });
+    setStatus('✓ Manual bundle created');
+    setCreateOpen(false);
+  }
+
+  async function doMerge() {
+    if (selected.length < 1) return;
+    setMerging(true);
+    setStatus('Merging bundles…');
+    const sources = bundles.filter((b) => selected.includes(b.id));
+    await mergeBundles(selected, `MERGED — Clinical Review — ${sources.length} bundles`);
+    setSelected([]);
+    setMerging(false);
+    setStatus('✓ Merged bundle created');
+  }
+
+  const filtered = bundles.filter((b) => {
+    if (query && !b.title.toLowerCase().includes(query.toLowerCase())) return false;
+    if (filter === 'all') return true;
+    if (filter === 'auto') return b.type.startsWith('auto');
+    if (filter === 'manual') return b.type.startsWith('manual');
+    if (filter === 'merged') return b.type === 'merged';
+    return true;
+  });
+
+  const hasAuto = bundles.some((b) => b.type.startsWith('auto'));
+  const hasManual = bundles.some((b) => b.type.startsWith('manual'));
+
+  return (
+    <div>
+      <PageHeader
+        title="Bundle Library"
+        subtitle="Automatic, manual and merged bundles — each stored independently and permanently."
+        action={
+          <div className="flex gap-2">
+            <button className="btn-secondary" onClick={doAutoDaily}>🤖 Auto Daily</button>
+            <button className="btn-secondary" onClick={doAutoWeekly}>🤖 Auto Weekly</button>
+            <button className="btn-primary" onClick={() => setCreateOpen(true)}>＋ Create Bundle</button>
+          </div>
+        }
+      />
+
+      {selected.length > 0 && (
+        <div className="mb-4 flex items-center gap-3 rounded-lg border border-brand-300 bg-brand-50 p-3 dark:border-brand-700 dark:bg-brand-900">
+          <span className="text-sm font-semibold text-brand-800 dark:text-brand-200">{selected.length} selected</span>
+          <button className="btn-primary !py-1 text-xs" disabled={merging} onClick={doMerge}>🔗 Merge & Analyze</button>
+          <button className="btn-ghost !py-1 text-xs" onClick={() => setSelected([])}>Clear</button>
+        </div>
+      )}
+
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        <input className="input max-w-sm" placeholder="🔍 Search bundles…" value={query} onChange={(e) => setQuery(e.target.value)} />
+        <div className="flex gap-1.5">
+          {(['all', 'auto', 'manual', 'merged'] as Filter[]).map((f) => (
+            <button
+              key={f}
+              onClick={() => setFilter(f)}
+              className={`rounded-full px-3 py-1 text-xs font-medium ${filter === f ? 'bg-brand-600 text-white' : 'bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-200'}`}
+            >
+              {f[0].toUpperCase() + f.slice(1)}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {filtered.length === 0 ? (
+        <EmptyState icon="📦" title="No bundles here" hint={hasAuto || hasManual ? 'Try a different filter, or create a bundle.' : 'Generate an auto bundle or press + Create Bundle to get started.'} />
+      ) : (
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {filtered.map((b) => (
+            <div key={b.id} className="card flex flex-col justify-between hover:border-brand-400">
+              <div>
+                <div className="mb-1 flex items-center justify-between">
+                  <Pill color={b.type.startsWith('auto') ? 'green' : b.type === 'merged' ? 'slate' : 'amber'}>{TYPE_LABEL[b.type]}</Pill>
+                  <input
+                    type="checkbox"
+                    checked={selected.includes(b.id)}
+                    onChange={(e) =>
+                      setSelected(e.target.checked ? [...selected, b.id] : selected.filter((x) => x !== b.id))
+                    }
+                    className="h-4 w-4 accent-brand-600"
+                  />
+                </div>
+                <h3 className="font-bold text-slate-800 dark:text-slate-100">{b.title}</h3>
+                <div className="text-xs text-slate-400">{b.periodStart} → {b.periodEnd}</div>
+                <p className="mt-2 line-clamp-2 text-sm text-slate-500 dark:text-slate-400">{b.summary}</p>
+                {b.sourceBundleIds.length > 0 && <div className="mt-1 text-[11px] text-slate-400">🔗 Merged from {b.sourceBundleIds.length} bundle(s)</div>}
+              </div>
+              <button className="btn-secondary mt-3 w-full" onClick={() => setViewing(b)}>Open →</button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Manual create modal */}
+      <Modal open={createOpen} onClose={() => setCreateOpen(false)} title="Create Manual Bundle">
+        <ManualCreate onCreate={doManual} />
+      </Modal>
+
+      {/* Bundle detail */}
+      {viewing && <BundleDetail bundle={viewing} onClose={() => { setViewing(null); setAiReply(null); }} />}
+    </div>
+  );
+}
+
+function ManualCreate({ onCreate }: { onCreate: (type: 'manual-day' | 'manual-week' | 'manual-custom', name: string) => Promise<void> }) {
+  const [mode, setMode] = useState<'manual-day' | 'manual-week' | 'manual-custom' | null>(null);
+  const [name, setName] = useState('');
+  if (!mode) {
+    return (
+      <div className="space-y-3">
+        {([
+          { t: 'manual-day', icon: '📅', d: 'Create a bundle for one day' },
+          { t: 'manual-week', icon: '📆', d: 'Create a weekly bundle' },
+          { t: 'manual-custom', icon: '📦', d: 'Bundle anything you choose' },
+        ] as const).map((o) => (
+          <button key={o.t} className="card flex w-full items-center gap-3 text-left hover:border-brand-500" onClick={() => setMode(o.t)}>
+            <span className="text-2xl">{o.icon}</span>
+            <div>
+              <div className="font-semibold">{o.t === 'manual-day' ? 'Day' : o.t === 'manual-week' ? 'Week' : 'Custom'} bundle</div>
+              <div className="text-xs text-slate-400">{o.d}</div>
+            </div>
+          </button>
+        ))}
+      </div>
+    );
+  }
+  return (
+    <div className="space-y-3">
+      <div className="text-sm text-slate-500">Name this bundle</div>
+      <input autoFocus className="input" placeholder="e.g. My Hypertension Revision" value={name} onChange={(e) => setName(e.target.value)} />
+      <div className="flex justify-end gap-2">
+        <button className="btn-secondary" onClick={() => setMode(null)}>Back</button>
+        <button className="btn-primary" disabled={!name.trim()} onClick={() => onCreate(mode, name.trim())}>Create Bundle ✓</button>
+      </div>
+    </div>
+  );
+}
+
+function BundleDetail({ bundle, onClose }: { bundle: Bundle; onClose: () => void }) {
+  const setStatus = useData((s) => s.setStatus);
+  const [followUp, setFollowUp] = useState('');
+  const [thinking, setThinking] = useState(false);
+
+  const settings = useData((s) => s.settings);
+  const chatCfg = settings?.ai?.['chat'];
+
+  function exportMd() {
+    const finding = scanForPhi(bundleToMarkdown(bundle));
+    const text = bundleToMarkdown(bundle);
+    if (finding.length) {
+      alert(`⚠️ Potential patient-identifying info detected (${privacyWarning(finding)}). Please review before sharing. Exporting anyway.`);
+    }
+    downloadText(`${bundle.title.replace(/[^a-z0-9]/gi, '_')}.md`, text);
+  }
+  function exportJson() {
+    downloadText(`${bundle.title.replace(/[^a-z0-9]/gi, '_')}.json`, bundleToJson(bundle), 'application/json');
+  }
+  async function share() {
+    const text = bundleToMarkdown(bundle);
+    const finding = scanForPhi(text);
+    if (finding.length) {
+      alert(`⚠️ Potential patient-identifying info detected (${privacyWarning(finding)}). Review before sharing.`);
+    }
+    await copyToClipboard(text);
+    setStatus('✓ Bundle copied — paste it anywhere to share');
+  }
+  async function askAI() {
+    if (!chatCfg?.apiKey) {
+      setStatus('⚠️ Add an API key in Settings → AI → Clinical Chat first.');
+      return;
+    }
+    setThinking(true);
+    setStatus('🤖 Clinical AI is thinking…');
+    const res = await aiChat(
+      chatCfg,
+      'You are a clinical learning tutor for a Level 200 pharmacy student. Explain the bundle concisely, identify knowledge gaps and recommend revision.',
+      bundleToMarkdown(bundle)
+    );
+    setThinking(false);
+    if (res.ok) {
+      setStatus('✓ AI explained the bundle');
+      setFollowUp(res.text);
+    } else {
+      setStatus('⚠️ ' + res.error);
+    }
+  }
+
+  return (
+    <Modal open onClose={onClose} title={bundle.title} wide>
+      <div className="space-y-5 text-sm">
+        <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
+          <Pill color="slate">{TYPE_LABEL[bundle.type]}</Pill>
+          <span>{bundle.periodStart} → {bundle.periodEnd}</span>
+          {bundle.aiModel && <Pill color="brand">AI: {bundle.aiModel}</Pill>}
+        </div>
+
+        <div>
+          <h3 className="label">Summary</h3>
+          <div className="whitespace-pre-wrap rounded-lg bg-slate-50 p-3 dark:bg-slate-700">{bundle.summary || 'No summary.'}</div>
+        </div>
+
+        {Object.keys(bundle.stats).length > 0 && (
+          <div>
+            <h3 className="label">Statistics</h3>
+            <div className="grid grid-cols-3 gap-2">
+              {Object.entries(bundle.stats).map(([k, v]) => (
+                <div key={k} className="rounded-lg bg-brand-50 p-2 text-center dark:bg-brand-900">
+                  <div className="text-lg font-bold text-brand-700 dark:text-brand-300">{v}</div>
+                  <div className="text-[11px] text-slate-500">{k}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div className="grid gap-4 lg:grid-cols-2">
+          <div>
+            <h3 className="label">Knowledge gaps</h3>
+            <ul className="space-y-1">
+              {bundle.knowledgeGaps.length ? bundle.knowledgeGaps.map((g, i) => <li key={i} className="text-slate-600 dark:text-slate-300">• {g}</li>) : <li className="text-slate-400">None identified.</li>}
+            </ul>
+          </div>
+          <div>
+            <h3 className="label">Recommended revision</h3>
+            <ul className="space-y-1">
+              {bundle.recommendedRevision.length ? bundle.recommendedRevision.map((r, i) => <li key={i} className="text-slate-600 dark:text-slate-300">• {r}</li>) : <li className="text-slate-400">None.</li>}
+            </ul>
+          </div>
+        </div>
+
+        {bundle.highlights.length > 0 && (
+          <div>
+            <h3 className="label">Highlights</h3>
+            <div className="flex flex-wrap gap-1.5">
+              {bundle.highlights.map((h, i) => <Pill key={i} color="amber">{h}</Pill>)}
+            </div>
+          </div>
+        )}
+
+        {bundle.sourceBundleIds.length > 0 && (
+          <div>
+            <h3 className="label">Lineage (merged from)</h3>
+            <div className="space-y-1 text-slate-500">
+              {bundle.sourceBundleIds.map((id) => <div key={id}>→ {id}</div>)}
+            </div>
+          </div>
+        )}
+
+        <div className="flex flex-wrap gap-2 border-t border-slate-200 pt-3 dark:border-slate-700">
+          <button className="btn-secondary" onClick={askAI} disabled={thinking}>{thinking ? '🤖 Thinking…' : '🤖 Ask AI'}</button>
+          <button className="btn-secondary" onClick={exportMd}>⬇ Export Markdown</button>
+          <button className="btn-secondary" onClick={exportJson}>⬇ Export JSON</button>
+          <button className="btn-primary" onClick={share}>📤 Share / Copy</button>
+        </div>
+
+        {followUp && (
+          <div className="rounded-lg border border-brand-200 bg-brand-50 p-3 text-slate-700 dark:border-brand-700 dark:bg-brand-900 dark:text-slate-200">
+            <div className="mb-1 font-semibold">🤖 AI response</div>
+            <div className="whitespace-pre-wrap">{followUp}</div>
+          </div>
+        )}
+      </div>
+    </Modal>
+  );
+}
