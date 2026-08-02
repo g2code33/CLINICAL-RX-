@@ -65,7 +65,7 @@ export default function App() {
     return (
       <div className="flex h-screen items-center justify-center bg-slate-900 text-slate-100">
         <div className="text-center">
-          <img src="./icon-512.png" alt="CLINICAL Rx logo" className="mx-auto mb-3 h-16 w-16 rounded-2xl object-cover" />
+          <img src="./v1.PNG" alt="CLINICAL Rx logo" className="mx-auto mb-3 h-16 w-16 rounded-2xl object-cover" />
           <div className="animate-pulse text-lg font-semibold">CLINICAL Rx</div>
           <div className="text-sm text-slate-400">Starting your clinical companion…</div>
         </div>

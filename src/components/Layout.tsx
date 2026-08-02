@@ -44,7 +44,7 @@ export function Layout({ children }: { children: ReactNode }) {
       {/* Desktop sidebar */}
       <aside className="hidden w-56 shrink-0 flex-col border-r border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-800 lg:flex">
         <div className="flex items-center gap-2.5 border-b border-slate-200 px-4 py-4 dark:border-slate-700">
-          <img src="./icon-512.png" alt="CLINICAL Rx" className="h-9 w-9 rounded-lg object-cover" />
+          <img src="./v1.PNG" alt="CLINICAL Rx" className="h-9 w-9 rounded-lg object-cover" />
           <div>
             <div className="text-sm font-extrabold tracking-tight text-brand-700 dark:text-brand-300">CLINICAL Rx</div>
             <div className="text-[11px] text-slate-400">Clinical Companion</div>
@@ -81,7 +81,7 @@ export function Layout({ children }: { children: ReactNode }) {
         {/* Top bar */}
         <div className="flex items-center justify-between gap-2 border-b border-slate-200 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-800 lg:px-6 lg:py-3">
           <div className="flex min-w-0 items-center gap-2">
-            <img src="./icon-512.png" alt="CLINICAL Rx" className="h-7 w-7 rounded-lg object-cover lg:hidden" />
+            <img src="./v1.PNG" alt="CLINICAL Rx" className="h-7 w-7 rounded-lg object-cover lg:hidden" />
             <div className="truncate text-sm font-medium text-slate-500 dark:text-slate-300">
               🟢 <span className="hidden sm:inline">{status}</span>
               <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-semibold text-slate-500 dark:bg-slate-700 dark:text-slate-300">
