@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useData } from '../stores/data';
 import { PageHeader, EmptyState } from './ui';
 import { Modal, TagInput } from './Modal';
+import { explainEntity } from '../services/aiTools';
 import type { ModuleType } from '../types';
 
 export interface FieldConfig {
@@ -23,15 +24,17 @@ interface Props {
   factory: () => Record<string, any>;
   renderCard: (rec: any) => React.ReactNode;
   searchKeys?: string[];
+  explainKind?: 'disease' | 'medicine' | 'investigation';
 }
 
-export function EntityManager({ module, title, subtitle, icon, emptyText, emptyHint, fields, factory, renderCard, searchKeys }: Props) {
+export function EntityManager({ module, title, subtitle, icon, emptyText, emptyHint, fields, factory, renderCard, searchKeys, explainKind }: Props) {
   const all = useData((s) => s.all(module));
   const save = useData((s) => s.save);
   const remove = useData((s) => s.remove);
   const [editing, setEditing] = useState<any | null>(null);
   const [creating, setCreating] = useState(false);
   const [query, setQuery] = useState('');
+  const [explain, setExplain] = useState<{ rec: any; text: string; loading: boolean; error?: string } | null>(null);
 
   function openCreate() {
     setCreating(true);
@@ -71,6 +74,18 @@ export function EntityManager({ module, title, subtitle, icon, emptyText, emptyH
             <div key={rec.id} className="card flex flex-col justify-between hover:border-brand-400">
               {renderCard(rec)}
               <div className="mt-3 flex justify-end gap-2">
+                {explainKind && (
+                  <button
+                    className="btn-ghost !py-1 text-xs hover:text-brand-600"
+                    onClick={async () => {
+                      setExplain({ rec, text: '', loading: true });
+                      const res = await explainEntity(explainKind, rec);
+                      setExplain((ex) => (ex ? { rec, text: res.ok ? res.text : '', loading: false, error: res.ok ? undefined : res.error } : ex));
+                    }}
+                  >
+                    🤖 Explain
+                  </button>
+                )}
                 <button className="btn-secondary !py-1 text-xs" onClick={() => openEdit(rec)}>Edit</button>
                 <button className="btn-ghost !py-1 text-xs hover:text-red-500" onClick={() => remove(module, rec.id)}>Delete</button>
               </div>
@@ -90,6 +105,18 @@ export function EntityManager({ module, title, subtitle, icon, emptyText, emptyH
               <button className="btn-primary" onClick={persist}>Save ✓</button>
             </div>
           </div>
+        )}
+      </Modal>
+
+      <Modal open={!!explain} onClose={() => setExplain(null)} title={`🤖 AI explain · ${explain?.rec?.name ?? title}`} wide>
+        {explain?.loading ? (
+          <div className="flex items-center gap-2 text-slate-500">
+            <span className="h-4 w-4 animate-spin rounded-full border-2 border-brand-500 border-t-transparent" /> AI Clinical Tutor is thinking…
+          </div>
+        ) : explain?.error ? (
+          <div className="rounded-lg bg-red-50 p-3 text-sm text-red-700 dark:bg-red-900 dark:text-red-200">⚠️ {explain.error}</div>
+        ) : (
+          <div className="whitespace-pre-wrap rounded-lg bg-slate-50 p-4 text-sm leading-relaxed text-slate-700 dark:bg-slate-700 dark:text-slate-200">{explain?.text}</div>
         )}
       </Modal>
     </div>

@@ -8,6 +8,7 @@ export function Diseases() {
   return (
     <EntityManager
       module="disease"
+      explainKind="disease"
       title="Diseases / Conditions"
       subtitle="Apply WHO → WHAT → WHERE → WHY → HOW → DT to each condition."
       icon="🦠"

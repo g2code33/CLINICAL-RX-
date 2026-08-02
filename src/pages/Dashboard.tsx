@@ -89,12 +89,21 @@ export function Dashboard() {
         </div>
       </div>
 
-      <div className="card flex flex-wrap items-center gap-3">
-        <div className="flex-1 min-w-52">
-          <h2 className="font-semibold">📦 Generate today's bundle</h2>
-          <p className="text-xs text-slate-400">AI gathers everything you recorded today into a shareable clinical summary.</p>
+      <div className="grid gap-4 lg:grid-cols-2">
+        <div className="card flex flex-wrap items-center gap-3">
+          <div className="flex-1 min-w-52">
+            <h2 className="font-semibold">🗣 Capture by typing</h2>
+            <p className="text-xs text-slate-400">Describe your day naturally — AI extracts diseases, medicines, investigations &amp; lessons for you.</p>
+          </div>
+          <button className="btn-primary" onClick={() => navigate('/ai')}>Open AI →</button>
         </div>
-        <button className="btn-primary" onClick={() => navigate('/bundles')}>Go to Bundles →</button>
+        <div className="card flex flex-wrap items-center gap-3">
+          <div className="flex-1 min-w-52">
+            <h2 className="font-semibold">📦 Generate today's bundle</h2>
+            <p className="text-xs text-slate-400">AI gathers everything you recorded today into a shareable clinical summary.</p>
+          </div>
+          <button className="btn-primary" onClick={() => navigate('/bundles')}>Go to Bundles →</button>
+        </div>
       </div>
 
       <QuickAdd open={quick} onClose={() => setQuick(false)} />

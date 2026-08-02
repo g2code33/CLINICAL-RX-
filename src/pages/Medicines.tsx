@@ -6,6 +6,7 @@ export function Medicines() {
   return (
     <EntityManager
       module="medicine"
+      explainKind="medicine"
       title="Medicines"
       subtitle="Learn and document every drug you encounter."
       icon="💊"

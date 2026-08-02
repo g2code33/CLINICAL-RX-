@@ -6,6 +6,7 @@ export function Investigations() {
   return (
     <EntityManager
       module="investigation"
+      explainKind="investigation"
       title="Investigations / Labs"
       subtitle="Document tests, why they're requested, results and interpretation."
       icon="🧪"
