@@ -26,9 +26,11 @@ export interface Profile extends BaseRecord {
 
 export type AppearanceMode = 'light' | 'dark' | 'system';
 
+export type AiProvider = 'openai' | 'anthropic' | 'openrouter' | 'nvidia' | 'custom';
+
 export interface AiModuleConfig {
   enabled: boolean;
-  provider: 'openai' | 'anthropic' | 'openrouter' | 'custom';
+  provider: AiProvider;
   apiKey: string;
   model: string;
   baseUrl?: string;

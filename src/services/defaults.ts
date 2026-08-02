@@ -1,5 +1,6 @@
 import { uid } from '../stores/data';
 import type {
+  AiProvider,
   Bundle,
   ClinicalDay,
   Disease,
@@ -22,7 +23,7 @@ export const AI_MODULES = [
 ] as const;
 
 export function defaultAiConfig() {
-  const conf: Record<string, { enabled: boolean; provider: 'openai' | 'anthropic' | 'openrouter' | 'custom'; apiKey: string; model: string; baseUrl?: string }> = {};
+  const conf: Record<string, { enabled: boolean; provider: AiProvider; apiKey: string; model: string; baseUrl?: string }> = {};
   for (const m of AI_MODULES) {
     conf[m.key] = { enabled: true, provider: 'openai', apiKey: '', model: 'gpt-4o-mini', baseUrl: '' };
   }

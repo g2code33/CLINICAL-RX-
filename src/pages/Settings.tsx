@@ -212,12 +212,18 @@ export function SettingsPage() {
                       <option value="openai">OpenAI</option>
                       <option value="anthropic">Anthropic</option>
                       <option value="openrouter">OpenRouter</option>
+                      <option value="nvidia">NVIDIA NIM</option>
                       <option value="custom">Custom</option>
                     </select>
                   </div>
                   <div>
                     <label className="label">Model</label>
-                    <input className="input" value={cfg.model} placeholder="gpt-4o-mini" onChange={(e) => updateAi(draft, m.key, { model: e.target.value }, saveSettings, setDraft)} />
+                    <input
+                      className="input"
+                      value={cfg.model}
+                      placeholder={modelPlaceholder(cfg.provider)}
+                      onChange={(e) => updateAi(draft, m.key, { model: e.target.value }, saveSettings, setDraft)}
+                    />
                   </div>
                   <div>
                     <label className="label">API Key</label>
@@ -232,6 +238,12 @@ export function SettingsPage() {
                   <div className="mt-2">
                     <label className="label">Base URL</label>
                     <input className="input" value={cfg.baseUrl ?? ''} placeholder="https://api.example.com" onChange={(e) => updateAi(draft, m.key, { baseUrl: e.target.value }, saveSettings, setDraft)} />
+                  </div>
+                )}
+                {cfg.provider === 'nvidia' && (
+                  <div className="mt-2 rounded bg-slate-50 px-3 py-2 text-[11px] text-slate-500 dark:bg-slate-700 dark:text-slate-300">
+                    🟩 NVIDIA NIM endpoint: <code>https://integrate.api.nvidia.com/v1</code> · default model{' '}
+                    <code>meta/llama-3.3-70b-instruct</code>. Use any model available on your NVIDIA build.
                   </div>
                 )}
               </div>
@@ -249,6 +261,19 @@ export function SettingsPage() {
       </div>
     </div>
   );
+}
+
+function modelPlaceholder(provider: string): string {
+  switch (provider) {
+    case 'nvidia':
+      return 'meta/llama-3.3-70b-instruct';
+    case 'anthropic':
+      return 'claude-3-5-sonnet-latest';
+    case 'openrouter':
+      return 'openai/gpt-4o-mini';
+    default:
+      return 'gpt-4o-mini';
+  }
 }
 
 function updateAi(draft: Settings, key: string, patch: any, saveSettings: any, setDraft: any) {

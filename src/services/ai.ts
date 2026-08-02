@@ -5,8 +5,15 @@ export type AiResult = { ok: true; text: string } | { ok: false; error: string }
 function baseUrlFor(cfg: AiModuleConfig): string {
   if (cfg.provider === 'anthropic') return 'https://api.anthropic.com';
   if (cfg.provider === 'openrouter') return 'https://openrouter.ai/api';
+  if (cfg.provider === 'nvidia') return 'https://integrate.api.nvidia.com';
   if (cfg.baseUrl) return cfg.baseUrl.replace(/\/$/, '');
   return 'https://api.openai.com';
+}
+
+function defaultModelFor(cfg: AiModuleConfig): string {
+  if (cfg.provider === 'nvidia') return 'meta/llama-3.3-70b-instruct';
+  if (cfg.provider === 'anthropic') return 'claude-3-5-sonnet-latest';
+  return 'gpt-4o-mini';
 }
 
 function headersFor(cfg: AiModuleConfig): Record<string, string> {
@@ -31,7 +38,7 @@ export async function aiChat(cfg: AiModuleConfig, system: string, user: string):
         method: 'POST',
         headers: headersFor(cfg),
         body: JSON.stringify({
-          model: cfg.model || 'claude-3-5-sonnet-latest',
+          model: cfg.model || defaultModelFor(cfg),
           max_tokens: 2000,
           system,
           messages: [{ role: 'user', content: user }],
@@ -47,7 +54,7 @@ export async function aiChat(cfg: AiModuleConfig, system: string, user: string):
       method: 'POST',
       headers: headersFor(cfg),
       body: JSON.stringify({
-        model: cfg.model || 'gpt-4o-mini',
+        model: cfg.model || defaultModelFor(cfg),
         messages: [
           { role: 'system', content: system },
           { role: 'user', content: user },
