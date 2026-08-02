@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { hasElectronBridge } from '../db/adapter';
 
-type Phase =
+export type Phase =
   | { state: 'idle' }
   | { state: 'checking' }
   | { state: 'available'; version?: string }
@@ -10,7 +10,9 @@ type Phase =
   | { state: 'downloaded'; version?: string }
   | { state: 'error'; message: string };
 
-export function UpdatePanel() {
+// Hook that both the header indicator and the full Settings panel share, so
+// they stay in sync and the header can show an "update available" notice.
+export function useUpdateState() {
   const [meta, setMeta] = useState<{ appVersion: string; enabled: boolean; owner: string; repo: string } | null>(null);
   const [phase, setPhase] = useState<Phase>({ state: 'idle' });
   const isElectron = hasElectronBridge();
@@ -24,6 +26,31 @@ export function UpdatePanel() {
     return off;
   }, [isElectron]);
 
+  return { meta, phase, isElectron, setPhase };
+}
+
+export function UpdatePanel() {
+  const { meta, phase, isElectron, setPhase } = useUpdateState();
+
+  async function check() {
+    if (!window.clinicalRx) return;
+    setPhase({ state: 'checking' });
+    const res = await window.clinicalRx.update.check();
+    if (!res.ok && res.reason === 'dev') {
+      setPhase({ state: 'error', message: 'Dev mode: updates are only available in packaged builds.' });
+    } else if (!res.ok) {
+      setPhase({ state: 'error', message: res.message || 'Check failed. Make sure you are connected to the internet.' });
+    }
+  }
+  async function download() {
+    if (!window.clinicalRx) return;
+    setPhase({ state: 'downloading', percent: 0 });
+    await window.clinicalRx.update.download();
+  }
+  async function install() {
+    await window.clinicalRx?.update.install();
+  }
+
   if (!isElectron) {
     return (
       <div className="card">
@@ -33,23 +60,6 @@ export function UpdatePanel() {
         </p>
       </div>
     );
-  }
-
-  async function check() {
-    setPhase({ state: 'checking' });
-    const res = await window.clinicalRx!.update.check();
-    if (!res.ok && res.reason === 'dev') {
-      setPhase({ state: 'error', message: 'Dev mode: updates are only available in packaged builds.' });
-    } else if (!res.ok) {
-      setPhase({ state: 'error', message: res.message || 'Check failed. Make sure you are connected to the internet.' });
-    }
-  }
-  async function download() {
-    setPhase({ state: 'downloading', percent: 0 });
-    await window.clinicalRx!.update.download();
-  }
-  async function install() {
-    await window.clinicalRx!.update.install();
   }
 
   const btn = 'btn-secondary';

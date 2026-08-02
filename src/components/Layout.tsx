@@ -6,6 +6,7 @@ import { SearchModal } from './SearchModal';
 import { SyncIndicator } from './SyncIndicator';
 import { ShortcutHelp } from './ShortcutHelp';
 import { CommandPalette } from './CommandPalette';
+import { UpdateBadge } from './UpdateBadge';
 
 const NAV = [
   { to: '/', icon: '🏠', label: 'Home' },
@@ -84,12 +85,10 @@ export function Layout({ children }: { children: ReactNode }) {
             <img src="./v1.PNG" alt="CLINICAL Rx" className="h-7 w-7 rounded-lg object-cover lg:hidden" />
             <div className="truncate text-sm font-medium text-slate-500 dark:text-slate-300">
               🟢 <span className="hidden sm:inline">{status}</span>
-              <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-semibold text-slate-500 dark:bg-slate-700 dark:text-slate-300">
-                v{__APP_VERSION__}
-              </span>
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-2 lg:gap-3">
+            <UpdateBadge />
             <SyncIndicator />
             <button className="btn-ghost !py-1 text-sm" onClick={() => setSearchOpen(true)} title="Global search (Ctrl/⌘+K)">
               🔍
