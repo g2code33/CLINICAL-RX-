@@ -39,6 +39,7 @@
       "dist/**/*",
       "dist-electron/**/*",
       "build/icon.png",
+      "build/icon.ico",
       "package.json"
     ],
     "asar": true,
@@ -51,14 +52,14 @@
           ]
         }
       ],
-      "icon": "build/icon.png",
+      "icon": "build/icon.ico",
       "artifactName": "ClinicalRx-Setup-${version}.${ext}"
     },
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
-      "installerIcon": "build/icon.png",
-      "uninstallerIcon": "build/icon.png"
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico"
     },
     "linux": {
       "target": [
