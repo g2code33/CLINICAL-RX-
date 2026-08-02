@@ -243,7 +243,10 @@ export function SettingsPage() {
         </p>
       </div>
 
-      <div className="mt-6 text-center text-xs text-slate-400">CLINICAL Rx v1.0.0 · Built with React + Electron + SQLite · Web via Vercel</div>
+      <div className="mt-6 flex flex-col items-center gap-2 text-center text-xs text-slate-400">
+        <img src="./icon-512.png" alt="CLINICAL Rx logo" className="h-10 w-10 rounded-lg object-cover" />
+        <div>CLINICAL Rx v1.0.0 · Built with React + Electron + SQLite · Web via Vercel</div>
+      </div>
     </div>
   );
 }

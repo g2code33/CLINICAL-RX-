@@ -31,6 +31,7 @@
     "files": [
       "dist/**/*",
       "dist-electron/**/*",
+      "build/icon.png",
       "package.json"
     ],
     "asar": true,
@@ -43,11 +44,14 @@
           ]
         }
       ],
+      "icon": "build/icon.ico",
       "artifactName": "ClinicalRx-Setup-${version}.${ext}"
     },
     "nsis": {
       "oneClick": false,
-      "allowToChangeInstallationDirectory": true
+      "allowToChangeInstallationDirectory": true,
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico"
     },
     "linux": {
       "target": [
@@ -64,6 +68,7 @@
           ]
         }
       ],
+      "icon": "build/icon.png",
       "category": "Education",
       "maintainer": "g2code33",
       "artifactName": "clinical-rx-${version}-${arch}.${ext}"

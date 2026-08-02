@@ -15,6 +15,7 @@ function createWindow() {
     minWidth: 980,
     minHeight: 640,
     title: 'Clinical Rx',
+    icon: path.join(__dirname, '../build/icon.png'),
     backgroundColor: '#0f172a',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
