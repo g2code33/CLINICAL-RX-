@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useData } from '../stores/data';
 import { PageHeader, EmptyState, Pill } from '../components/ui';
 import { Modal } from '../components/Modal';
-import { generateBundle, mergeBundles } from '../services/bundler';
+import { generateBundle, mergeBundles, processAiQueue, getPendingAiCount, aiAvailable } from '../services/bundler';
 import { bundleToMarkdown, bundleToJson, bundleToPdf, downloadText, copyToClipboard } from '../services/export';
 import { scanForPhi, privacyWarning } from '../services/privacy';
 import { aiChat } from '../services/ai';
@@ -40,6 +40,21 @@ export function Bundles() {
   const [viewing, setViewing] = useState<Bundle | null>(null);
   const [merging, setMerging] = useState(false);
   const [aiReply, setAiReply] = useState<string | null>(null);
+  const pendingAiCount = getPendingAiCount();
+
+  async function processPendingAi() {
+    if (!navigator.onLine) {
+      setStatus('⚠️ You are offline. Connect to the internet and try again.');
+      return;
+    }
+    if (!aiAvailable()) {
+      setStatus('⚠️ Enable the AI Bundler module and add an API key in Settings → AI first.');
+      return;
+    }
+    setStatus('🤖 Processing pending AI bundles…');
+    const r = await processAiQueue();
+    setStatus(r.processed ? `✓ AI processed ${r.processed} bundle(s)` : 'No pending AI bundles');
+  }
 
   async function doAutoDaily() {
     setStatus('Generating auto daily bundle…');
@@ -107,7 +122,12 @@ export function Bundles() {
         title="Bundle Library"
         subtitle="Automatic, manual and merged bundles — each stored independently and permanently."
         action={
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
+            {pendingAiCount > 0 && (
+              <button className="btn-secondary border-amber-300 text-amber-700 dark:border-amber-700 dark:text-amber-300" onClick={processPendingAi} title="Process bundles awaiting AI with the AI Bundler">
+                🤖 {pendingAiCount} AI pending
+              </button>
+            )}
             <button className="btn-secondary" onClick={doAutoDaily}>🤖 Auto Daily</button>
             <button className="btn-secondary" onClick={doAutoWeekly}>🤖 Auto Weekly</button>
             <button className="btn-primary" onClick={() => setCreateOpen(true)}>＋ Create Bundle</button>
@@ -145,8 +165,11 @@ export function Bundles() {
           {filtered.map((b) => (
             <div key={b.id} className="card flex flex-col justify-between hover:border-brand-400">
               <div>
-                <div className="mb-1 flex items-center justify-between">
-                  <Pill color={b.type.startsWith('auto') ? 'green' : b.type === 'merged' ? 'slate' : 'amber'}>{TYPE_LABEL[b.type]}</Pill>
+                <div className="mb-1 flex items-center justify-between gap-2">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <Pill color={b.type.startsWith('auto') ? 'green' : b.type === 'merged' ? 'slate' : 'amber'}>{TYPE_LABEL[b.type]}</Pill>
+                    {b.aiPending && <Pill color="amber">🤖 AI pending</Pill>}
+                  </div>
                   <input
                     type="checkbox"
                     checked={selected.includes(b.id)}
@@ -282,6 +305,11 @@ function BundleDetail({ bundle, onClose }: { bundle: Bundle; onClose: () => void
           <span>{bundle.periodStart} → {bundle.periodEnd}</span>
           {bundle.aiModel && <Pill color="brand">AI: {bundle.aiModel}</Pill>}
         </div>
+        {bundle.aiPending && (
+          <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:border-amber-700 dark:bg-amber-900 dark:text-amber-200">
+            🤖 This bundle was created while offline and has a local summary. When you're back online with the AI Bundler configured, it will be enriched with AI — press "Process AI pending" above, or it runs automatically when you reconnect.
+          </div>
+        )}
 
         <div>
           <h3 className="label">Summary</h3>

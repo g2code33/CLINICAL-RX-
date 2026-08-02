@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useData } from './stores/data';
 import { newSettings } from './services/defaults';
+import { setupAutoAndReconnect } from './services/autoBundle';
 import { useUi } from './stores/ui';
 import { Layout } from './components/Layout';
 import { Onboarding } from './components/Onboarding';
@@ -26,6 +27,15 @@ export default function App() {
   useEffect(() => {
     init();
   }, [init]);
+
+  // Once data is loaded, trigger automatic bundles for completed days/weeks and
+  // process any pending-AI bundles when the user is back online.
+  useEffect(() => {
+    if (ready) {
+      const cleanup = setupAutoAndReconnect();
+      return cleanup;
+    }
+  }, [ready]);
 
   const settings = useData((s) => s.settings);
   useEffect(() => {

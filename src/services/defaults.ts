@@ -56,6 +56,7 @@ export function newSettings(): Settings {
     ai: defaultAiConfig(),
     learningProfile: { preferredExplanation: ['simple-first', 'step-by-step', 'pharmacy-focused', 'clinical-examples'] },
     onlineAccount: { connected: false },
+    aiPendingBundles: [],
   };
 }
 

@@ -55,6 +55,7 @@ export interface Settings extends BaseRecord {
     lastSynced?: number;
     syncing?: boolean;
   };
+  aiPendingBundles: string[]; // bundle ids awaiting AI enrichment once online
 }
 
 export interface ClinicalDay extends BaseRecord {
@@ -144,6 +145,7 @@ export interface Bundle extends BaseRecord {
   periodStart: string;
   periodEnd: string;
   aiModel?: string;
+  aiPending?: boolean; // true when created offline/without AI, waiting to be enriched once online
   summary: string;
   knowledgeGaps: string[];
   recommendedRevision: string[];

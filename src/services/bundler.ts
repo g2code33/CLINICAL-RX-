@@ -95,10 +95,23 @@ function localHighlights(ctx: Context): string[] {
   return top.map(([name, n]) => `${name} (${n}x)`);
 }
 
-async function enrichWithAi(bundle: Bundle, ctx: Context): Promise<Bundle> {
+export interface EnrichResult {
+  bundle: Bundle;
+  succeeded: boolean;
+  reason?: string;
+}
+
+export function aiAvailable(): boolean {
+  const cfg = useData.getState().settings?.ai?.['bundler'];
+  return !!cfg?.enabled && !!cfg?.apiKey;
+}
+
+async function enrichWithAi(bundle: Bundle, ctx: Context): Promise<EnrichResult> {
   const settings = useData.getState().settings;
   const cfg = settings?.ai?.['bundler'];
-  if (!cfg?.enabled || !cfg.apiKey) return bundle; // stay offline/local
+  if (!cfg?.enabled || !cfg.apiKey) {
+    return { bundle, succeeded: false, reason: 'no-config' };
+  }
 
   const prompt = [
     `You are CLINICAL Rx, a clinical learning assistant for a Level 200 Pharmacy student.`,
@@ -109,16 +122,60 @@ async function enrichWithAi(bundle: Bundle, ctx: Context): Promise<Bundle> {
   ].join('\n');
 
   const res = await aiChat(cfg, 'You write concise clinical learning summaries for pharmacy students.', prompt);
-  if (res.ok) {
-    const t = res.text;
-    const pick = (label: string) =>
-      (t.split(label)[1]?.split('\n').slice(1).filter((l) => l.trim().startsWith('-') || /^\d+[.)]/.test(l.trim())).map((l) => l.replace(/^[-*•\d.)\s]+/, '').trim()).filter(Boolean)) || [];
-    bundle = { ...bundle, summary: t, aiModel: cfg.model };
-    const gaps = pick('KNOWLEDGE GAPS').length ? pick('KNOWLEDGE GAPS') : bundle.knowledgeGaps;
-    const rev = pick('RECOMMENDED REVISION').length ? pick('RECOMMENDED REVISION') : bundle.recommendedRevision;
-    bundle = { ...bundle, knowledgeGaps: gaps, recommendedRevision: rev };
+  if (!res.ok) {
+    return { bundle, succeeded: false, reason: 'offline-or-error' };
   }
-  return bundle;
+
+  const t = res.text;
+  const pick = (label: string) =>
+    (t.split(label)[1]?.split('\n').slice(1).filter((l) => l.trim().startsWith('-') || /^\d+[.)]/.test(l.trim())).map((l) => l.replace(/^[-*•\d.)\s]+/, '').trim()).filter(Boolean)) || [];
+  const enriched = { ...bundle, summary: t, aiModel: cfg.model, aiPending: false };
+  const gaps = pick('KNOWLEDGE GAPS').length ? pick('KNOWLEDGE GAPS') : bundle.knowledgeGaps;
+  const rev = pick('RECOMMENDED REVISION').length ? pick('RECOMMENDED REVISION') : bundle.recommendedRevision;
+  return { bundle: { ...enriched, knowledgeGaps: gaps, recommendedRevision: rev }, succeeded: true };
+}
+
+/** Mark a bundle as awaiting AI enrichment (used when created offline). */
+export async function queueAiPending(bundleId: string) {
+  const s = useData.getState();
+  if (!s.settings) return;
+  const list = Array.from(new Set([...(s.settings.aiPendingBundles ?? []), bundleId]));
+  await s.saveSettings({ ...s.settings, updatedAt: Date.now(), aiPendingBundles: list });
+}
+
+/** Re-process every pending bundle with AI (run once you're back online). */
+export async function processAiQueue(): Promise<{ processed: number; failed: number }> {
+  const s = useData.getState();
+  const settings = s.settings;
+  if (!settings || !settings.aiPendingBundles?.length) return { processed: 0, failed: 0 };
+  if (!aiAvailable()) return { processed: 0, failed: 0 };
+
+  let processed = 0;
+  let failed = 0;
+  const remaining: string[] = [];
+  for (const id of settings.aiPendingBundles) {
+    const bundle = s.bundles.find((b) => b.id === id);
+    if (!bundle) continue;
+    const ctx = collectContext(bundle.periodStart, bundle.periodEnd);
+    const { bundle: enriched, succeeded } = await enrichWithAi(bundle, ctx);
+    if (succeeded) {
+      await s.save('bundle', enriched);
+      processed++;
+    } else {
+      remaining.push(id);
+      failed++;
+    }
+  }
+
+  const next = useData.getState().settings;
+  if (next) {
+    await useData.getState().saveSettings({ ...next, updatedAt: Date.now(), aiPendingBundles: remaining });
+  }
+  return { processed, failed };
+}
+
+export function getPendingAiCount(): number {
+  return useData.getState().settings?.aiPendingBundles?.length ?? 0;
 }
 
 export async function generateBundle(input: BundleCreateInput): Promise<Bundle> {
@@ -138,8 +195,18 @@ export async function generateBundle(input: BundleCreateInput): Promise<Bundle> 
   bundle.sourceBundleIds = input.sourceBundleIds ?? [];
   bundle.sourceIds = [...ctx.days, ...ctx.diseases, ...ctx.medicines, ...ctx.investigations, ...ctx.questions].map((r) => r.id);
 
-  const enriched = await enrichWithAi(bundle, ctx);
+  const enriched = await generateBundleWithAi(bundle, ctx);
   await useData.getState().save('bundle', enriched);
+  return enriched;
+}
+
+async function generateBundleWithAi(bundle: Bundle, ctx: Context): Promise<Bundle> {
+  const { bundle: enriched, succeeded } = await enrichWithAi(bundle, ctx);
+  if (!succeeded) {
+    const pending = { ...enriched, aiPending: true };
+    await queueAiPending(pending.id);
+    return pending;
+  }
   return enriched;
 }
 
@@ -174,7 +241,8 @@ export async function mergeBundles(sourceBundleIds: string[], title: string): Pr
   bundle.sourceBundleIds = sourceBundleIds;
   bundle.summary = `Merged clinical review combining ${sources.length} bundle(s).`;
 
-  const enriched = await enrichWithAi(bundle, collectContext(start, end));
+  const ctx = collectContext(start, end);
+  const enriched = await generateBundleWithAi(bundle, ctx);
   await useData.getState().save('bundle', enriched);
   return enriched;
 }
