@@ -1,10 +1,13 @@
 import { NavLink } from 'react-router-dom';
 import type { ReactNode } from 'react';
 import { useData } from '../stores/data';
+import { useUi } from '../stores/ui';
+import { SearchModal } from './SearchModal';
 
 const NAV = [
   { to: '/', icon: '🏠', label: 'Home' },
   { to: '/clinical', icon: '📋', label: 'Clinical Days' },
+  { to: '/calendar', icon: '📅', label: 'Calendar' },
   { to: '/diseases', icon: '🦠', label: 'Diseases' },
   { to: '/medicines', icon: '💊', label: 'Medicines' },
   { to: '/investigations', icon: '🧪', label: 'Investigations' },
@@ -19,6 +22,8 @@ const NAV = [
 export function Layout({ children }: { children: ReactNode }) {
   const status = useData((s) => s.status);
   const profile = useData((s) => s.profile);
+  const searchOpen = useUi((s) => s.searchOpen);
+  const setSearchOpen = useUi((s) => s.setSearchOpen);
 
   return (
     <div className="flex h-screen bg-slate-50 text-slate-800 dark:bg-slate-900 dark:text-slate-100">
@@ -58,14 +63,24 @@ export function Layout({ children }: { children: ReactNode }) {
       </aside>
 
       <main className="flex min-w-0 flex-1 flex-col">
-        <div className="flex items-center justify-between border-b border-slate-200 bg-white px-6 py-3 dark:border-slate-700 dark:bg-slate-800">
+        <div className="flex items-center justify-between gap-3 border-b border-slate-200 bg-white px-6 py-3 dark:border-slate-700 dark:bg-slate-800">
           <div className="text-sm font-medium text-slate-500 dark:text-slate-300">🟢 {status}</div>
-          <div className="text-xs text-slate-400">
-            Clinical Day {profile?.clinicalDay ?? 1} · {profile?.site}
+          <div className="flex items-center gap-3">
+            <button
+              className="btn-ghost !py-1 text-sm"
+              onClick={() => setSearchOpen(true)}
+              title="Global search (Ctrl/⌘+K)"
+            >
+              🔍 Search
+            </button>
+            <div className="text-xs text-slate-400">
+              Clinical Day {profile?.clinicalDay ?? 1} · {profile?.site}
+            </div>
           </div>
         </div>
         <div className="flex-1 overflow-y-auto p-6">{children}</div>
       </main>
+      <SearchModal open={searchOpen} onClose={() => setSearchOpen(false)} />
     </div>
   );
 }

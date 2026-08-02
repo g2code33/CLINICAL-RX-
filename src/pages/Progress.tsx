@@ -1,4 +1,5 @@
 import { useData } from '../stores/data';
+import { useNavigate } from 'react-router-dom';
 import { PageHeader, StatCard, EmptyState } from '../components/ui';
 
 function pct(part: number, total: number) {
@@ -6,10 +7,13 @@ function pct(part: number, total: number) {
 }
 
 export function Progress() {
+  const navigate = useNavigate();
   const diseases = useData((s) => s.diseases);
   const medicines = useData((s) => s.medicines);
   const investigations = useData((s) => s.investigations);
   const questions = useData((s) => s.questions);
+  const lessons = useData((s) => s.lessons);
+  const bundles = useData((s) => s.bundles);
   const days = useData((s) => s.days);
 
   const patho = diseases.length ? pct(diseases.filter((d) => d.what && d.why && d.how).length, diseases.length) : 0;
@@ -45,11 +49,13 @@ export function Progress() {
   return (
     <div>
       <PageHeader title="Progress" subtitle="How your clinical learning is building up." />
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-6">
         <StatCard icon="🦠" label="Conditions" value={diseases.length} />
-        <StatCard icon="💊" label="Medicines studied" value={medicines.length} />
+        <StatCard icon="💊" label="Medicines" value={medicines.length} />
         <StatCard icon="🧪" label="Investigations" value={investigations.length} />
         <StatCard icon="📋" label="Clinical days" value={days.length} />
+        <StatCard icon="📦" label="Bundles" value={bundles.length} />
+        <StatCard icon="💡" label="Lessons" value={lessons.length} />
       </div>
 
       <div className="mt-6 grid gap-6 lg:grid-cols-2">
@@ -86,6 +92,39 @@ export function Progress() {
           </div>
         </div>
       </div>
+
+      <div className="mt-6 grid gap-6 lg:grid-cols-2">
+        <div className="card">
+          <h2 className="mb-3 font-semibold">Most encountered conditions</h2>
+          <TopList items={diseases.map((d) => ({ name: d.name, count: d.encounters }))} onClick={() => navigate('/diseases')} />
+        </div>
+        <div className="card">
+          <h2 className="mb-3 font-semibold">Most encountered medicines</h2>
+          <TopList items={medicines.map((m) => ({ name: m.name, count: m.encounters }))} onClick={() => navigate('/medicines')} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function TopList({ items, onClick }: { items: Array<{ name: string; count: number }>; onClick: () => void }) {
+  const top = items.filter((i) => i.name).sort((a, b) => b.count - a.count).slice(0, 8);
+  if (!top.length) return <p className="text-sm text-slate-400">Nothing recorded yet.</p>;
+  const max = Math.max(...top.map((i) => i.count), 1);
+  return (
+    <div className="space-y-2">
+      {top.map((i) => (
+        <div key={i.name} className="flex items-center gap-3 text-sm">
+          <span className="w-1/3 truncate text-slate-600 dark:text-slate-300">{i.name}</span>
+          <div className="h-2 flex-1 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-700">
+            <div className="h-full rounded-full bg-brand-500" style={{ width: `${(i.count / max) * 100}%` }} />
+          </div>
+          <span className="w-8 text-right text-xs text-slate-400">×{i.count}</span>
+        </div>
+      ))}
+      {items.length > 8 && (
+        <button className="btn-ghost !p-0 text-xs" onClick={onClick}>View all →</button>
+      )}
     </div>
   );
 }

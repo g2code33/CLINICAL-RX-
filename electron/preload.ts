@@ -10,6 +10,17 @@ const api = {
   put: (module: string, id: string, data: unknown, createdAt: number, updatedAt: number) =>
     ipcRenderer.invoke('kv:put', module, id, data, createdAt, updatedAt),
   remove: (module: string, id: string) => ipcRenderer.invoke('kv:remove', module, id),
+  update: {
+    getVersion: () => ipcRenderer.invoke('update:getVersion'),
+    check: () => ipcRenderer.invoke('update:check'),
+    download: () => ipcRenderer.invoke('update:download'),
+    install: () => ipcRenderer.invoke('update:install'),
+    onStatus: (cb: (s: any) => void) => {
+      const listener = (_e: any, payload: any) => cb(payload);
+      ipcRenderer.on('update:status', listener);
+      return () => ipcRenderer.removeListener('update:status', listener);
+    },
+  },
 };
 
 contextBridge.exposeInMainWorld('clinicalRx', api);

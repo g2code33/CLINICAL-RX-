@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useData } from '../stores/data';
 import { PageHeader } from '../components/ui';
+import { UpdatePanel } from '../components/UpdatePanel';
 import { AI_MODULES, newSettings } from '../services/defaults';
 import type { AppearanceMode, Settings } from '../types';
 
@@ -253,6 +254,10 @@ export function SettingsPage() {
         <p className="mt-3 text-[11px] text-slate-400">
           🔐 On the desktop app, keys should be stored in the OS secure credential store. This version stores them with your local data — export backups with care.
         </p>
+      </div>
+
+      <div className="mt-6">
+        <UpdatePanel />
       </div>
 
       <div className="mt-6 flex flex-col items-center gap-2 text-center text-xs text-slate-400">

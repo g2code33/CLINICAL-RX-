@@ -3,7 +3,7 @@ import { useData } from '../stores/data';
 import { PageHeader, EmptyState, Pill } from '../components/ui';
 import { Modal } from '../components/Modal';
 import { generateBundle, mergeBundles } from '../services/bundler';
-import { bundleToMarkdown, bundleToJson, downloadText, copyToClipboard } from '../services/export';
+import { bundleToMarkdown, bundleToJson, bundleToPdf, downloadText, copyToClipboard } from '../services/export';
 import { scanForPhi, privacyWarning } from '../services/privacy';
 import { aiChat } from '../services/ai';
 import type { Bundle } from '../types';
@@ -231,6 +231,19 @@ function BundleDetail({ bundle, onClose }: { bundle: Bundle; onClose: () => void
   function exportJson() {
     downloadText(`${bundle.title.replace(/[^a-z0-9]/gi, '_')}.json`, bundleToJson(bundle), 'application/json');
   }
+  async function exportPdf() {
+    const finding = scanForPhi(bundleToMarkdown(bundle));
+    if (finding.length) {
+      alert(`⚠️ Potential patient-identifying info detected (${privacyWarning(finding)}). Please review before exporting.`);
+    }
+    setStatus('Exporting PDF…');
+    const dataUrl = await bundleToPdf(bundle);
+    const a = document.createElement('a');
+    a.href = dataUrl;
+    a.download = `${bundle.title.replace(/[^a-z0-9]/gi, '_')}.pdf`;
+    a.click();
+    setStatus('✓ PDF exported');
+  }
   async function share() {
     const text = bundleToMarkdown(bundle);
     const finding = scanForPhi(text);
@@ -324,8 +337,9 @@ function BundleDetail({ bundle, onClose }: { bundle: Bundle; onClose: () => void
 
         <div className="flex flex-wrap gap-2 border-t border-slate-200 pt-3 dark:border-slate-700">
           <button className="btn-secondary" onClick={askAI} disabled={thinking}>{thinking ? '🤖 Thinking…' : '🤖 Ask AI'}</button>
-          <button className="btn-secondary" onClick={exportMd}>⬇ Export Markdown</button>
-          <button className="btn-secondary" onClick={exportJson}>⬇ Export JSON</button>
+          <button className="btn-secondary" onClick={exportMd}>⬇ Markdown</button>
+          <button className="btn-secondary" onClick={exportPdf}>⬇ PDF</button>
+          <button className="btn-secondary" onClick={exportJson}>⬇ JSON</button>
           <button className="btn-primary" onClick={share}>📤 Share / Copy</button>
         </div>
 

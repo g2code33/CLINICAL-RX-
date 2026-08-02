@@ -2,10 +2,12 @@ import { useEffect } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useData } from './stores/data';
 import { newSettings } from './services/defaults';
+import { useUi } from './stores/ui';
 import { Layout } from './components/Layout';
 import { Onboarding } from './components/Onboarding';
 import { Dashboard } from './pages/Dashboard';
 import { ClinicalDays } from './pages/ClinicalDays';
+import { CalendarPage } from './pages/Calendar';
 import { Diseases } from './pages/Diseases';
 import { Medicines } from './pages/Medicines';
 import { Investigations } from './pages/Investigations';
@@ -46,6 +48,18 @@ export default function App() {
     }
   }, [useData((s) => s.profile)]);
 
+  // Ctrl/Cmd+K opens global search.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        useUi.getState().setSearchOpen(true);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
   if (!ready) {
     return (
       <div className="flex h-screen items-center justify-center bg-slate-900 text-slate-100">
@@ -67,6 +81,7 @@ export default function App() {
       <Routes>
         <Route path="/" element={<Dashboard />} />
         <Route path="/clinical" element={<ClinicalDays />} />
+        <Route path="/calendar" element={<CalendarPage />} />
         <Route path="/diseases" element={<Diseases />} />
         <Route path="/medicines" element={<Medicines />} />
         <Route path="/investigations" element={<Investigations />} />

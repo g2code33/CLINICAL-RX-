@@ -5,7 +5,15 @@ import type { ModuleType, StorageAdapter } from '../types';
 // undefined and we fall back to the localStorage adapter.
 declare global {
   interface Window {
-    clinicalRx?: StorageAdapter;
+    clinicalRx?: StorageAdapter & {
+      update: {
+        getVersion: () => Promise<{ appVersion: string; enabled: boolean; owner: string; repo: string }>;
+        check: () => Promise<{ ok: boolean; reason?: string; message?: string; updateInfo?: any }>;
+        download: () => Promise<{ ok: boolean; reason?: string; message?: string }>;
+        install: () => Promise<{ ok: boolean; reason?: string; message?: string }>;
+        onStatus: (cb: (s: any) => void) => () => void;
+      };
+    };
   }
 }
 

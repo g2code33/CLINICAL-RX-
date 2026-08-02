@@ -1,5 +1,84 @@
 import type { Bundle } from '../types';
 
+export async function bundleToPdf(b: Bundle): Promise<string> {
+  // jsPDF is imported lazily so the web bundle stays lean and it works in both
+  // Electron and the browser.
+  const { jsPDF } = await import('jspdf');
+  const doc = new jsPDF({ unit: 'pt', format: 'a4' });
+  const pageW = doc.internal.pageSize.getWidth();
+  const margin = 50;
+  const maxW = pageW - margin * 2;
+  let y = 60;
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(20);
+  doc.setTextColor(35, 112, 76);
+  doc.text(b.title, margin, y);
+  y += 22;
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(10);
+  doc.setTextColor(100, 100, 100);
+  doc.text(`Type: ${b.type}   ·   Period: ${b.periodStart} → ${b.periodEnd}   ·   Created: ${new Date(b.createdAt).toLocaleString()}`, margin, y);
+  y += 24;
+
+  const line = (text: string) => {
+    const wrapped = doc.splitTextToSize(text, maxW);
+    for (const w of wrapped) {
+      if (y > doc.internal.pageSize.getHeight() - 60) {
+        doc.addPage();
+        y = 60;
+      }
+      doc.text(w, margin, y);
+      y += 14;
+    }
+  };
+
+  doc.setFontSize(12);
+  doc.setTextColor(20, 20, 20);
+  doc.setFont('helvetica', 'bold');
+  doc.text('Summary', margin, y);
+  y += 16;
+  doc.setFont('helvetica', 'normal');
+  line(b.summary || 'No summary.');
+  y += 8;
+
+  const stats = Object.entries(b.stats);
+  if (stats.length) {
+    doc.setFont('helvetica', 'bold');
+    doc.text('Statistics', margin, y);
+    y += 16;
+    doc.setFont('helvetica', 'normal');
+    for (const [k, v] of stats) line(`${k}: ${v}`);
+    y += 8;
+  }
+
+  doc.setFont('helvetica', 'bold');
+  doc.text('Knowledge gaps', margin, y);
+  y += 16;
+  doc.setFont('helvetica', 'normal');
+  if (b.knowledgeGaps.length) b.knowledgeGaps.forEach((g) => line('• ' + g));
+  else line('None identified.');
+  y += 8;
+
+  doc.setFont('helvetica', 'bold');
+  doc.text('Recommended revision', margin, y);
+  y += 16;
+  doc.setFont('helvetica', 'normal');
+  if (b.recommendedRevision.length) b.recommendedRevision.forEach((r) => line('• ' + r));
+  else line('None.');
+  y += 8;
+
+  doc.setFont('helvetica', 'bold');
+  doc.text('Highlights', margin, y);
+  y += 16;
+  doc.setFont('helvetica', 'normal');
+  if (b.highlights.length) b.highlights.forEach((h) => line('• ' + h));
+  else line('None.');
+
+  return doc.output('dataurlstring'); // data:application/pdf;base64,...
+}
+
 export function bundleToMarkdown(b: Bundle): string {
   const lines: string[] = [];
   lines.push(`# ${b.title}`);

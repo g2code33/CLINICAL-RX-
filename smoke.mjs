@@ -34,7 +34,10 @@ g.matchMedia = dom.window.matchMedia;
 g.fetch = async () => { throw new Error('network disabled in smoke test'); };
 
 const fs = await import('node:fs');
-const jsFile = fs.readdirSync('./dist/assets').find((f) => f.endsWith('.js'));
+// Pick the entry bundle referenced by index.html (not a lazy chunk like jspdf/html2canvas).
+const html = fs.readFileSync('./dist/index.html', 'utf-8');
+const m = html.match(/<script[^>]*src="\.\/assets\/([^"]+\.js)"/);
+const jsFile = m ? m[1] : fs.readdirSync('./dist/assets').find((f) => f.endsWith('.js'));
 
 try {
   // Execute the bundled ESM app inside the jsdom environment.
