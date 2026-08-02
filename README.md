@@ -211,7 +211,8 @@ warns if it detects anything identifying.
 - ✅ Bundle Library: auto/manual/merge, vault, lineage, duplicate, follow-ups/versioning, PDF/MD/JSON export + PHI/PII scanner
 - ✅ Automatic daily/weekly bundles + offline AI queue (processed when back online)
 - ✅ Global search, calendar view, progress-over-time chart, sample data
-- ✅ Mobile-responsive web layout + keyboard shortcuts
+- ✅ Command palette (Ctrl+P), keyboard shortcuts + help popup
+- ✅ Mobile-responsive web layout + day/bundle export (MD/PDF)
 - ✅ Online sync backend (Vercel KV) + offline queue
 - ✅ In-app updater (electron-updater, GitHub Releases) + version banner
 
