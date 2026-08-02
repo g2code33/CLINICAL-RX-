@@ -26,7 +26,7 @@ export function CloudSyncPrompt() {
   }
 
   return (
-    <button className="btn-secondary !py-1 text-xs" onClick={() => navigate('/settings')} title="Sign in to sync across devices">
+    <button className="btn-secondary !py-1 text-xs" onClick={() => navigate('/auth')} title="Sign in to sync across devices">
       ☁️ Sign in to sync
     </button>
   );

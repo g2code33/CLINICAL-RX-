@@ -21,6 +21,7 @@ import { Bundles } from './pages/Bundles';
 import { AiChat } from './pages/AiChat';
 import { SettingsPage } from './pages/Settings';
 import { ResetPassword } from './pages/ResetPassword';
+import { AuthPage } from './pages/Auth';
 
 export default function App() {
   const ready = useData((s) => s.ready);
@@ -96,6 +97,7 @@ export default function App() {
         <Route path="/bundles" element={<Bundles />} />
         <Route path="/ai" element={<AiChat />} />
         <Route path="/settings" element={<SettingsPage />} />
+        <Route path="/auth" element={<AuthPage />} />
         <Route path="/reset" element={<ResetPassword />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useData } from '../stores/data';
 import { PageHeader } from '../components/ui';
 import { Modal } from '../components/Modal';
@@ -10,6 +11,7 @@ import { syncNowFull, autoSyncOnLogin, getPendingCount } from '../services/syncE
 import type { AppearanceMode, Settings } from '../types';
 
 export function SettingsPage() {
+  const navigate = useNavigate();
   const settings = useData((s) => s.settings);
   const saveSettings = useData((s) => s.saveSettings);
   const save = useData((s) => s.save);
@@ -259,11 +261,8 @@ export function SettingsPage() {
                 </div>
               </div>
               <div className="flex gap-2">
-                <button className="btn-primary flex-1" disabled={acctBusy || !acctForm.email || !acctForm.password} onClick={() => connect('login')}>
-                  {acctBusy ? '…' : 'Sign in'}
-                </button>
-                <button className="btn-secondary flex-1" disabled={acctBusy || !acctForm.email || !acctForm.password} onClick={() => connect('register')}>
-                  {acctBusy ? '…' : 'Create account'}
+                <button className="btn-primary flex-1" onClick={() => navigate('/auth')}>
+                  Sign in / Create account
                 </button>
               </div>
               <div className="pt-1 text-right">

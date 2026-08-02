@@ -13,7 +13,7 @@ export function SyncIndicator() {
     return (
       <button
         className="btn-ghost !py-1 text-sm"
-        onClick={() => navigate('/settings')}
+        onClick={() => navigate('/auth')}
         title="Sign in to sync across devices"
       >
         ☁️ Sign in
