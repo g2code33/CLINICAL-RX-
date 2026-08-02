@@ -44,13 +44,24 @@ async function requestWithHeaders(
     return { ok: false, error: e?.message || 'Network error. Are you online?' };
   }
   let json: any = null;
+  const contentType = res.headers.get('content-type') || '';
   try {
-    json = await res.json();
+    if (contentType.includes('application/json')) json = await res.json();
   } catch {
     json = null;
   }
   if (!res.ok) {
-    return { ok: false, status: res.status, error: json?.error || `Request failed (${res.status}). Check that the backend is deployed and configured.` };
+    if (json?.error) {
+      return { ok: false, status: res.status, error: json.error };
+    }
+    // Server returned a non-JSON error (e.g. a 500 HTML page from a crashed function).
+    const bodyText = json === null ? await res.text().catch(() => '') : '';
+    return {
+      ok: false,
+      status: res.status,
+      error: `Server error (${res.status}). If it persists, the backend may not be deployed or configured correctly.`,
+      ...(bodyText ? { detail: bodyText.slice(0, 200) } : {}),
+    };
   }
   return { ok: true, data: json, status: res.status };
 }

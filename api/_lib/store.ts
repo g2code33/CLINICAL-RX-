@@ -6,6 +6,8 @@
 //   in-memory store so auth/sync still work for a single process. Data is not
 //   persistent across restarts in fallback mode — a clear warning is logged.
 
+import { Redis } from '@upstash/redis';
+
 interface KV {
   get(key: string): Promise<string | null>;
   set(key: string, value: string): Promise<void>;
@@ -18,7 +20,6 @@ interface KV {
 
 // ---- Upstash Redis implementation ----
 function makeUpstash(): KV {
-  const { Redis } = require('@upstash/redis');
   const redis = Redis.fromEnv();
   return {
     async get(key) {
