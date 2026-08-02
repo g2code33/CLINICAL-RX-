@@ -167,7 +167,11 @@ export async function syncNowFull(): Promise<SyncOutcome> {
 
 /** Called right after a successful login: pulls the latest from the cloud. */
 export async function autoSyncOnLogin(): Promise<SyncOutcome> {
-  return syncNow();
+  const outcome = await syncNow();
+  // Also pull the cloud AI config so multiple devices share the same AI setup.
+  const { pullAiConfig } = await import('./aiConfigSync');
+  try { await pullAiConfig(); } catch { /* non-fatal */ }
+  return outcome;
 }
 
 async function touchLastSynced() {

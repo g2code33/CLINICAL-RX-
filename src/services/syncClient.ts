@@ -86,6 +86,12 @@ export const syncClient = {
     const q = typeof since === 'number' ? `?since=${since}` : '';
     return request(backendUrl, '/api/sync' + q, 'GET', token);
   },
+  getAiConfig(backendUrl: string | undefined, token: string) {
+    return request(backendUrl, '/api/aiConfig', 'GET', token);
+  },
+  saveAiConfig(backendUrl: string | undefined, token: string, aiConfig: unknown) {
+    return request(backendUrl, '/api/aiConfig', 'POST', token, { aiConfig });
+  },
   push(backendUrl: string | undefined, token: string, records: SyncRecord[]) {
     return request(backendUrl, '/api/sync', 'POST', token, { records });
   },

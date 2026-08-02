@@ -461,4 +461,6 @@ function updateAi(draft: Settings, key: string, patch: any, saveSettings: any, s
   const next = { ...draft, ai };
   saveSettings({ ...next, updatedAt: Date.now() });
   setDraft(next);
+  // Push the updated AI config to the cloud so other devices share it.
+  import('../services/aiConfigSync').then((m) => m.pushAiConfig()).catch(() => {});
 }
