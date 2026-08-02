@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import { useData } from '../stores/data';
 import { PageHeader } from '../components/ui';
+import { Modal } from '../components/Modal';
 import { UpdatePanel } from '../components/UpdatePanel';
 import { AI_MODULES, newSettings } from '../services/defaults';
 import { loadSampleData } from '../services/demo';
 import { syncClient } from '../services/syncClient';
-import { syncNow, getPendingCount } from '../services/syncEngine';
+import { syncNowFull, autoSyncOnLogin, getPendingCount } from '../services/syncEngine';
 import type { AppearanceMode, Settings } from '../types';
 
 export function SettingsPage() {
@@ -15,9 +16,10 @@ export function SettingsPage() {
   const setStatus = useData((s) => s.setStatus);
   const [draft, setDraft] = useState<Settings | null>(settings);
   const [showKeys, setShowKeys] = useState<Record<string, boolean>>({});
-  const [acctForm, setAcctForm] = useState({ email: '', password: '', name: '', backendUrl: draft?.onlineAccount?.backendUrl ?? '' });
+  const [acctForm, setAcctForm] = useState({ email: '', password: '', name: '', backendUrl: draft?.onlineAccount?.backendUrl ?? '', securityQuestion: '', securityAnswer: '' });
   const [acctBusy, setAcctBusy] = useState(false);
   const [syncState, setSyncState] = useState<string>('');
+  const [forgotOpen, setForgotOpen] = useState(false);
   const pendingCount = getPendingCount();
 
   if (!draft) return null;
@@ -35,11 +37,11 @@ export function SettingsPage() {
   async function connect(mode: 'login' | 'register') {
     setAcctBusy(true);
     setSyncState('');
-    const { email, password, name, backendUrl } = acctForm;
+    const { email, password, name, backendUrl, securityQuestion, securityAnswer } = acctForm;
     try {
       const res = mode === 'login'
         ? await syncClient.login(backendUrl, email.trim(), password)
-        : await syncClient.register(backendUrl, email.trim(), password, name.trim());
+        : await syncClient.register(backendUrl, email.trim(), password, name.trim(), securityQuestion.trim() || undefined, securityAnswer.trim() || undefined);
       if (!res.ok) {
         setSyncState('⚠️ ' + (res.error || 'Connection failed.'));
         return;
@@ -55,23 +57,48 @@ export function SettingsPage() {
       };
       await persist({ ...draft, onlineAccount: acc } as Settings);
       setSyncState(`✓ Connected as ${res.data.user.email}`);
-      // Immediately pull any cloud data down to this device.
-      const outcome = await syncNow();
-      if (outcome.ok) setSyncState(`✓ Connected · pulled ${outcome.pulled} record(s)`);
+      // AUTO-SYNC on login: pull the latest so this device is up to date.
+      const outcome = await autoSyncOnLogin();
+      if (outcome.ok) setSyncState(`✓ Connected · pulled ${outcome.pulled} record(s) (auto-synced)`);
     } finally {
       setAcctBusy(false);
     }
   }
 
+  // Manual "be sure" sync: pushes pending then pulls everything.
   async function doSyncNow() {
     setAcctBusy(true);
     setSyncState('Syncing…');
-    const outcome = await syncNow();
+    const outcome = await syncNowFull();
     setSyncState(outcome.ok
-      ? `✓ Synced · pushed ${outcome.pushed}, pulled ${outcome.pulled}`
+      ? `✓ Full sync · pushed ${outcome.pushed}, pulled ${outcome.pulled}`
       : '⚠️ ' + (outcome.message || 'Sync failed.'));
     setAcctBusy(false);
   }
+
+  async function doForgotEmail() {
+    setAcctBusy(true);
+    setSyncState('');
+    const res = await syncClient.forgot(acctForm.backendUrl, acctForm.email.trim());
+    setSyncState(res.data?.message || (res.error || 'Reset request sent.'));
+    setAcctBusy(false);
+  }
+
+  async function doResetSecurity() {
+    setAcctBusy(true);
+    setSyncState('');
+    const res = await syncClient.reset(acctForm.backendUrl, {
+      method: 'security',
+      email: acctForm.email.trim(),
+      password: acctForm.password,
+      securityQuestion: acctForm.securityQuestion.trim(),
+      securityAnswer: acctForm.securityAnswer.trim(),
+    });
+    setSyncState(res.data?.message || (res.error || 'Reset failed.'));
+    setAcctBusy(false);
+  }
+
+
 
   async function disconnect() {
     await persist({ ...draft, onlineAccount: { connected: false, backendUrl: acctForm.backendUrl } } as Settings);
@@ -221,12 +248,27 @@ export function SettingsPage() {
                 <label className="label">Password</label>
                 <input className="input" type="password" value={acctForm.password} onChange={(e) => setAcctForm({ ...acctForm, password: e.target.value })} placeholder="At least 6 characters" />
               </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="label">Security question (optional)</label>
+                  <input className="input" value={acctForm.securityQuestion} onChange={(e) => setAcctForm({ ...acctForm, securityQuestion: e.target.value })} placeholder="e.g. Your first school" />
+                </div>
+                <div>
+                  <label className="label">Answer</label>
+                  <input className="input" value={acctForm.securityAnswer} onChange={(e) => setAcctForm({ ...acctForm, securityAnswer: e.target.value })} placeholder="Answer (for reset)" />
+                </div>
+              </div>
               <div className="flex gap-2">
                 <button className="btn-primary flex-1" disabled={acctBusy || !acctForm.email || !acctForm.password} onClick={() => connect('login')}>
                   {acctBusy ? '…' : 'Sign in'}
                 </button>
                 <button className="btn-secondary flex-1" disabled={acctBusy || !acctForm.email || !acctForm.password} onClick={() => connect('register')}>
                   {acctBusy ? '…' : 'Create account'}
+                </button>
+              </div>
+              <div className="pt-1 text-right">
+                <button className="btn-ghost !p-0 text-xs text-brand-600 dark:text-brand-400" onClick={() => setForgotOpen(true)}>
+                  Forgot password?
                 </button>
               </div>
             </div>
@@ -356,6 +398,42 @@ export function SettingsPage() {
       <div className="mt-6">
         <UpdatePanel />
       </div>
+
+      {/* Forgot / reset password modal */}
+      <Modal open={forgotOpen} onClose={() => setForgotOpen(false)} title="🔑 Reset password">
+        <div className="space-y-5 text-sm">
+          <div>
+            <div className="label mb-2">Option 1 — Email reset link</div>
+            <div className="flex gap-2">
+              <input className="input" type="email" value={acctForm.email} onChange={(e) => setAcctForm({ ...acctForm, email: e.target.value })} placeholder="your@email.com" />
+              <button className="btn-secondary shrink-0" disabled={acctBusy || !acctForm.email} onClick={doForgotEmail}>{acctBusy ? '…' : 'Send link'}</button>
+            </div>
+            <p className="mt-1 text-[11px] text-slate-400">Requires the server to have a mail service (Resend) configured.</p>
+          </div>
+
+          <div className="border-t border-slate-200 pt-4 dark:border-slate-700">
+            <div className="label mb-2">Option 2 — Security question</div>
+            <div className="space-y-2">
+              <input className="input" type="email" value={acctForm.email} onChange={(e) => setAcctForm({ ...acctForm, email: e.target.value })} placeholder="your@email.com" />
+              <input className="input" value={acctForm.securityQuestion} onChange={(e) => setAcctForm({ ...acctForm, securityQuestion: e.target.value })} placeholder="Your security question" />
+              <input className="input" value={acctForm.securityAnswer} onChange={(e) => setAcctForm({ ...acctForm, securityAnswer: e.target.value })} placeholder="Your answer" />
+              <input className="input" type="password" value={acctForm.password} onChange={(e) => setAcctForm({ ...acctForm, password: e.target.value })} placeholder="New password" />
+              <button className="btn-primary w-full" disabled={acctBusy || !acctForm.email || !acctForm.password || !acctForm.securityQuestion || !acctForm.securityAnswer} onClick={doResetSecurity}>
+                {acctBusy ? '…' : 'Reset with security question'}
+              </button>
+            </div>
+          </div>
+
+          <div className="border-t border-slate-200 pt-4 dark:border-slate-700">
+            <div className="label mb-1">Option 3 — Email reset link</div>
+            <p className="text-xs text-slate-400">
+              If you requested a reset by email (Option 1) and it was delivered, the link in that email takes you to a page where you can set a new password. The link expires in 30 minutes.
+            </p>
+          </div>
+
+          {syncState && <div className="rounded-lg bg-slate-50 p-3 text-sm text-slate-600 dark:bg-slate-700 dark:text-slate-200">{syncState}</div>}
+        </div>
+      </Modal>
 
       <div className="mt-6 flex flex-col items-center gap-2 text-center text-xs text-slate-400">
         <img src="./v1.PNG" alt="CLINICAL Rx logo" className="h-10 w-10 rounded-lg object-cover" />

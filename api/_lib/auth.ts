@@ -9,6 +9,9 @@ export interface User {
   name: string;
   email: string;
   password: string; // stored hash
+  securityQuestion?: string;
+  securityAnswer?: string; // stored hash
+  createdAt: number;
 }
 
 // ---- Password hashing (Node crypto, no external deps) ----
@@ -19,10 +22,15 @@ export function hashPassword(password: string): string {
 }
 
 export function verifyPassword(password: string, stored: string): boolean {
+  return verifyHash(password, stored);
+}
+
+/** Shared hash verifier (works for passwords and security answers). */
+export function verifyHash(value: string, stored: string): boolean {
   const parts = stored.split(':');
   if (parts.length !== 2) return false;
   const [salt, hash] = parts;
-  const test = crypto.scryptSync(password, salt, 32);
+  const test = crypto.scryptSync(value, salt, 32);
   const expected = Buffer.from(hash, 'hex');
   return test.length === expected.length && crypto.timingSafeEqual(test, expected);
 }

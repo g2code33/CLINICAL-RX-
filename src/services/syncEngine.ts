@@ -111,9 +111,12 @@ export async function syncNow(): Promise<SyncOutcome> {
 
   const toSend = [...upserts, ...deletes];
 
-  // If nothing pending, still pull (to get changes from other devices).
+  // If nothing pending, still pull incrementally (to get changes from other
+  // devices since the last sync — keeps Redis command usage low).
   if (toSend.length === 0) {
-    const pull = await syncClient.pull(backendUrl(), token);
+    const lastSynced = useData.getState().settings?.onlineAccount?.lastSynced;
+    const since = typeof lastSynced === 'number' ? lastSynced : undefined;
+    const pull = await syncClient.pull(backendUrl(), token, since);
     if (!pull.ok) return { ok: false, pushed: 0, pulled: 0, message: pull.error };
     await applyServerRecords(pull.data.records);
     await touchLastSynced();
@@ -127,6 +130,44 @@ export async function syncNow(): Promise<SyncOutcome> {
   await applyServerRecords(push.data.records);
   await touchLastSynced();
   return { ok: true, pushed: toSend.length, pulled: push.data.records.length };
+}
+
+/** Full sync (manual button / "be sure"): pushes pending then pulls everything. */
+export async function syncNowFull(): Promise<SyncOutcome> {
+  const token = settingsToken();
+  if (!token) return { ok: false, pushed: 0, pulled: 0, message: 'No online account connected.' };
+  const st = useData.getState();
+
+  const pending = loadPending();
+  const upserts = pending.filter((p) => p.op === 'upsert').map((p) => ({
+    module: p.module, id: p.id, data: p.data ?? {}, createdAt: p.createdAt ?? Date.now(), updatedAt: p.updatedAt ?? Date.now(),
+  })) as SyncRecord[];
+  const deletes = pending.filter((p) => p.op === 'delete')
+    .map((p) => ({ module: p.module, id: p.id, data: {}, createdAt: Date.now(), updatedAt: Date.now(), deleted: true })) as SyncRecord[];
+  const toSend = [...upserts, ...deletes];
+
+  // Always do a full pull after pushing, to be certain all devices match.
+  if (toSend.length === 0) {
+    const pull = await syncClient.pull(backendUrl(), token);
+    if (!pull.ok) return { ok: false, pushed: 0, pulled: 0, message: pull.error };
+    await applyServerRecords(pull.data.records);
+    await touchLastSynced();
+    return { ok: true, pushed: 0, pulled: pull.data.records.length };
+  }
+
+  const push = await syncClient.push(backendUrl(), token, toSend);
+  if (!push.ok) return { ok: false, pushed: 0, pulled: 0, message: push.error };
+  savePending([]);
+  const pull = await syncClient.pull(backendUrl(), token);
+  if (!pull.ok) return { ok: false, pushed: toSend.length, pulled: 0, message: pull.error };
+  await applyServerRecords(pull.data.records);
+  await touchLastSynced();
+  return { ok: true, pushed: toSend.length, pulled: pull.data.records.length };
+}
+
+/** Called right after a successful login: pulls the latest from the cloud. */
+export async function autoSyncOnLogin(): Promise<SyncOutcome> {
+  return syncNow();
 }
 
 async function touchLastSynced() {

@@ -25,11 +25,14 @@ export async function putRecords(userId: string, records: SyncRecord[]): Promise
   return getAll(userId);
 }
 
-/** Fetch every record for a user. Tombstones are included so clients can drop local rows. */
-export async function getAll(userId: string): Promise<SyncRecord[]> {
+/**
+ * Fetch records for a user. If `since` is provided, only records changed after
+ * that timestamp are returned (incremental pull) — this keeps command usage low.
+ */
+export async function getAll(userId: string, since?: number): Promise<SyncRecord[]> {
   const map = await redis.hgetall(key(userId));
   if (!map) return [];
-  return Object.values(map)
+  const records = Object.values(map)
     .filter((v) => typeof v === 'string')
     .map((v) => {
       try {
@@ -39,4 +42,8 @@ export async function getAll(userId: string): Promise<SyncRecord[]> {
       }
     })
     .filter((v): v is SyncRecord => !!v);
+  if (typeof since === 'number') {
+    return records.filter((r) => r.updatedAt > since);
+  }
+  return records;
 }

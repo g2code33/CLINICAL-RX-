@@ -159,18 +159,32 @@ by **Vercel KV (Upstash Redis)**.
 1. **Create a Vercel KV store** in your project (Vercel → Storage → KV → create). It
    injects `KV_REST_API_URL` and `KV_REST_API_TOKEN` automatically.
 2. Add a `SESSION_SECRET` env var (any long random string) for signing session tokens.
-3. Deploy — the `/api/auth/*` and `/api/sync` routes deploy automatically.
-4. In the app, open **Settings → Online Account**, leave **Backend URL** blank on the web
+3. **(Optional) Email reset** — add `RESEND_API_KEY` (free [Resend](https://resend.com)
+   account) and set `APP_URL` to your deployed URL. Without these, the email-reset
+   option still generates a reset token (returned for dev) and the **security-question**
+   and **admin** reset paths still work.
+4. **(Optional) Admin reset** — set `ADMIN_RESET_TOKEN` if you want a manual admin reset
+   endpoint (used with the `x-admin-token` header).
+5. Deploy — the `/api/auth/*`, `/api/sync`, and `/api/auth/reset` routes deploy
+   automatically.
+6. In the app, open **Settings → Online Account**, leave **Backend URL** blank on the web
    version (same origin) or set it to `https://your-app.vercel.app` in the desktop app.
-   Then **Create account** or **Sign in**.
-5. Press **Sync now** (or use the header **☁️** indicator) to push local changes and pull
-   cloud data. Changes made offline are queued and synced the next time you connect.
+   Then **Create account** or **Sign in**. Optionally set a **security question/answer**
+   at signup so you can reset your password without email.
+7. **Auto-sync:** the app pulls the latest cloud data automatically right after login, so
+   new devices are up to date. For certainty, press **🔄 Sync now** (full sync) or use the
+   header **☁️** indicator. Changes made offline are queued and synced the next time you
+   connect.
 
 **Sync design:** every record keeps `createdAt`/`updatedAt`; a persistent offline queue
 records changes (upserts + deletes/tombstones) and flushes them in a batch. The server
 returns the canonical record set, which the client merges (latest `updatedAt` wins) and
-applies locally. This supports the offline-first requirement — recording and bundles work
-with zero internet, and the same data syncs across PCs and the web.
+applies locally. Incremental sync (only records changed since the last sync) keeps Redis
+command usage low. This supports the offline-first requirement — recording and bundles
+work with zero internet, and the same data syncs across PCs and the web.
+
+**Password reset:** three options — (1) emailed link via Resend, (2) security question
+set at signup, and (3) a manual admin reset (requires `ADMIN_RESET_TOKEN`).
 
 ---
 

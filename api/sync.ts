@@ -7,10 +7,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const userId = token ? verifyToken(token) : null;
   if (!userId) return res.status(401).json({ error: 'Not authenticated' });
 
-  // GET -> pull all records
+  // GET -> pull records (optionally incremental via ?since=<ms>)
   if (req.method === 'GET') {
-    const records = await getAll(userId);
-    return res.status(200).json({ records });
+    const sinceParam = typeof req.query.since === 'string' ? Number(req.query.since) : NaN;
+    const since = Number.isFinite(sinceParam) ? sinceParam : undefined;
+    const records = await getAll(userId, since);
+    return res.status(200).json({ records, serverTime: Date.now() });
   }
 
   // POST -> push changes, get canonical set back
