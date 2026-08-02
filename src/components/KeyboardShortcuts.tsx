@@ -57,6 +57,11 @@ export function KeyboardShortcuts() {
 
       // g <key> leader navigation (when not typing)
       if (!mod) {
+        if (e.key === '?') {
+          e.preventDefault();
+          useUi.getState().setHelpOpen(true);
+          return;
+        }
         if (e.key.toLowerCase() === 'g') {
           leader = true;
           if (leaderTimer) clearTimeout(leaderTimer);

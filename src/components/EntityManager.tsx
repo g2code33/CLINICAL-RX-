@@ -25,9 +25,10 @@ interface Props {
   renderCard: (rec: any) => React.ReactNode;
   searchKeys?: string[];
   explainKind?: 'disease' | 'medicine' | 'investigation';
+  emptyActions?: React.ReactNode;
 }
 
-export function EntityManager({ module, title, subtitle, icon, emptyText, emptyHint, fields, factory, renderCard, searchKeys, explainKind }: Props) {
+export function EntityManager({ module, title, subtitle, icon, emptyText, emptyHint, fields, factory, renderCard, searchKeys, explainKind, emptyActions }: Props) {
   const all = useData((s) => s.all(module));
   const save = useData((s) => s.save);
   const remove = useData((s) => s.remove);
@@ -67,7 +68,7 @@ export function EntityManager({ module, title, subtitle, icon, emptyText, emptyH
       <input className="input mb-4 max-w-sm" placeholder="🔍 Search…" value={query} onChange={(e) => setQuery(e.target.value)} />
 
       {filtered.length === 0 ? (
-        <EmptyState icon={icon} title={emptyText} hint={emptyHint} />
+        <EmptyState icon={icon} title={emptyText} hint={emptyHint} actions={emptyActions} />
       ) : (
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {filtered.map((rec) => (

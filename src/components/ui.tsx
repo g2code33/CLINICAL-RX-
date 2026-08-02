@@ -26,12 +26,13 @@ export function StatCard({ icon, label, value, accent }: { icon: string; label: 
   );
 }
 
-export function EmptyState({ icon, title, hint }: { icon: string; title: string; hint?: string }) {
+export function EmptyState({ icon, title, hint, actions }: { icon: string; title: string; hint?: string; actions?: ReactNode }) {
   return (
     <div className="card flex flex-col items-center justify-center py-12 text-center">
       <div className="text-4xl">{icon}</div>
       <div className="mt-2 font-semibold text-slate-600 dark:text-slate-300">{title}</div>
       {hint && <div className="mt-1 max-w-sm text-sm text-slate-400">{hint}</div>}
+      {actions && <div className="mt-4 flex flex-wrap items-center justify-center gap-2">{actions}</div>}
     </div>
   );
 }

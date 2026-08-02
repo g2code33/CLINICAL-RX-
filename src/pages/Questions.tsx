@@ -1,13 +1,19 @@
 import { EntityManager } from '../components/EntityManager';
 import { Pill } from '../components/ui';
 import { newQuestion } from '../services/defaults';
+import { loadSampleData } from '../services/demo';
+import { useData } from '../stores/data';
 
 const CATEGORIES = ['pharmacology', 'pathology', 'microbiology', 'therapeutics', 'clinical-pharmacy', 'other'];
 const PRIORITIES = ['high', 'medium', 'low'];
 
 export function Questions() {
+  const setStatus = useData((s) => s.setStatus);
   return (
     <EntityManager
+      emptyActions={
+        <button className="btn-primary" onClick={async () => { if (await loadSampleData()) setStatus('✓ Sample data loaded'); }}>🧪 Load sample data</button>
+      }
       module="question"
       title="Questions Vault"
       subtitle="Capture questions to research later."

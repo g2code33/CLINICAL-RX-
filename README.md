@@ -200,6 +200,31 @@ warns if it detects anything identifying.
 
 ---
 
+## 🗺️ Roadmap & Changelog
+
+**Current status:** v1.0.0 — core + AI + bundles + sync + desktop/web builds all functional.
+
+### Already built
+- ✅ Full offline-first core (Clinical Days, Diseases, Medicines, Investigations, Questions, Revision, Progress)
+- ✅ All 7 AI modules wired (Tutor, Analyzer, Note Organizer, Question Generator, Revision Coach, Chat, Bundler) + NVIDIA/OpenAI/Anthropic/OpenRouter providers
+- ✅ Natural-language capture + per-module AI config
+- ✅ Bundle Library: auto/manual/merge, vault, lineage, duplicate, follow-ups/versioning, PDF/MD/JSON export + PHI/PII scanner
+- ✅ Automatic daily/weekly bundles + offline AI queue (processed when back online)
+- ✅ Global search, calendar view, progress-over-time chart, sample data
+- ✅ Mobile-responsive web layout + keyboard shortcuts
+- ✅ Online sync backend (Vercel KV) + offline queue
+- ✅ In-app updater (electron-updater, GitHub Releases) + version banner
+
+### Planned / ideas
+- ☐ Multi-device conflict resolution UI refinements
+- ☐ Export to PDF from more places
+- ☐ More keyboard shortcuts / app-wide command palette
+- ☐ Additional statistics & insights
+
+> Suggestions are welcome — open an issue or a PR.
+
+---
+
 ## 📄 License
 
 MIT

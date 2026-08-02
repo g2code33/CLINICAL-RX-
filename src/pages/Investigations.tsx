@@ -1,10 +1,16 @@
 import { EntityManager } from '../components/EntityManager';
 import { Pill } from '../components/ui';
 import { newInvestigation } from '../services/defaults';
+import { loadSampleData } from '../services/demo';
+import { useData } from '../stores/data';
 
 export function Investigations() {
+  const setStatus = useData((s) => s.setStatus);
   return (
     <EntityManager
+      emptyActions={
+        <button className="btn-primary" onClick={async () => { if (await loadSampleData()) setStatus('✓ Sample data loaded'); }}>🧪 Load sample data</button>
+      }
       module="investigation"
       explainKind="investigation"
       title="Investigations / Labs"
