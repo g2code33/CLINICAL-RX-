@@ -1,12 +1,10 @@
-// Unified storage layer for the API.
+// Unified storage layer for the API — uses Upstash KV's REST API directly via
+// fetch, so there is NO package dependency to fail at module load on Vercel.
 //
-// - If Vercel KV env vars are set (KV_REST_API_URL + KV_REST_API_TOKEN), it uses
-//   Upstash Redis (the deployed backend).
-// - If not (e.g. local testing without KV configured), it falls back to an
-//   in-memory store so auth/sync still work for a single process. Data is not
-//   persistent across restarts in fallback mode — a clear warning is logged.
-
-import { Redis } from '@upstash/redis';
+// - If KV env vars are set (KV_REST_API_URL + KV_REST_API_TOKEN), it calls the
+//   Upstash REST API.
+// - If not, it falls back to an in-memory store so auth/sync still work for a
+//   single process (data not persisted across restarts).
 
 interface KV {
   get(key: string): Promise<string | null>;
@@ -18,40 +16,83 @@ interface KV {
   pipeline(): { hset(hash: string, map: Record<string, string>): void; exec(): Promise<void> };
 }
 
-// ---- Upstash Redis implementation ----
+// ---- Upstash REST implementation (pure fetch, no package) ----
 function makeUpstash(): KV {
-  const redis = Redis.fromEnv();
+  const url = (process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL || '').replace(/\/$/, '');
+  const token = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN || '';
+
+  // Run a single REST command. `args` is a JSON array of arguments.
+  async function cmd(...parts: unknown[]): Promise<any> {
+    const res = await fetch(`${url}/${parts[0]}`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(parts.slice(1)),
+    });
+    if (!res.ok) throw new Error(`KV REST error ${res.status}: ${await res.text()}`);
+    const data: any = await res.json();
+    if (data && data.error) throw new Error('KV error: ' + data.error);
+    return data?.result;
+  }
+
+  // Upstash REST returns raw Redis replies; translate for our helpers.
   return {
     async get(key) {
-      return (await redis.get(key)) ?? null;
+      const v = await cmd('GET', key);
+      return v ?? null;
     },
     async set(key, value) {
-      await redis.set(key, value);
+      await cmd('SET', key, value);
     },
     async hget(hash, field) {
-      return (await redis.hget(hash, field)) ?? null;
+      const v = await cmd('HGET', hash, field);
+      return v ?? null;
     },
     async hset(hash, map) {
-      await redis.hset(hash, map);
+      const args: unknown[] = [hash];
+      for (const [k, v] of Object.entries(map)) args.push(k, v);
+      await cmd('HSET', ...args);
     },
     async hgetall(hash) {
-      return (await redis.hgetall(hash)) ?? null;
+      const v = await cmd('HGETALL', hash);
+      if (!v) return null;
+      // Redis HGETALL returns a flat array [k1,v1,k2,v2,...]
+      if (Array.isArray(v)) {
+        const out: Record<string, string> = {};
+        for (let i = 0; i < v.length; i += 2) out[String(v[i])] = String(v[i + 1]);
+        return out;
+      }
+      return null;
     },
     async hdel(hash, ...fields) {
-      await redis.hdel(hash, ...fields);
+      if (fields.length) await cmd('HDEL', hash, ...fields);
     },
     pipeline() {
-      const p = redis.pipeline();
+      // Upstash supports pipelining via a single body with an array, but for
+      // simplicity we just queue and execute sequentially here.
+      const pending: Array<() => Promise<void>> = [];
       return {
         hset(hash, map) {
-          p.hset(hash, map);
+          pending.push(() => makeUpstashHset(hash, map));
         },
         async exec() {
-          await p.exec();
+          for (const p of pending) await p();
         },
       };
     },
   };
+}
+
+async function makeUpstashHset(hash: string, map: Record<string, string>): Promise<void> {
+  const url = (process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL || '').replace(/\/$/, '');
+  const token = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN || '';
+  const args: unknown[] = [hash];
+  for (const [k, v] of Object.entries(map)) args.push(k, v);
+  const res = await fetch(`${url}/HSET`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(args),
+  });
+  if (!res.ok) throw new Error(`KV REST error ${res.status}: ${await res.text()}`);
 }
 
 // ---- In-memory fallback (for local/dev without KV) ----

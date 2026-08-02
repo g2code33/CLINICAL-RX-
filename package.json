@@ -90,7 +90,6 @@
     }
   },
   "dependencies": {
-    "@upstash/redis": "^1.38.1",
     "@vercel/node": "^5.9.3",
     "better-sqlite3": "^11.3.0",
     "drizzle-orm": "^0.33.0",
