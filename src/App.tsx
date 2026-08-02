@@ -3,6 +3,7 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import { useData } from './stores/data';
 import { newSettings } from './services/defaults';
 import { setupAutoAndReconnect } from './services/autoBundle';
+import { KeyboardShortcuts } from './components/KeyboardShortcuts';
 import { useUi } from './stores/ui';
 import { Layout } from './components/Layout';
 import { Onboarding } from './components/Onboarding';
@@ -58,17 +59,7 @@ export default function App() {
     }
   }, [useData((s) => s.profile)]);
 
-  // Ctrl/Cmd+K opens global search.
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
-        e.preventDefault();
-        useUi.getState().setSearchOpen(true);
-      }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, []);
+
 
   if (!ready) {
     return (
@@ -88,6 +79,7 @@ export default function App() {
 
   return (
     <Layout>
+      <KeyboardShortcuts />
       <Routes>
         <Route path="/" element={<Dashboard />} />
         <Route path="/clinical" element={<ClinicalDays />} />

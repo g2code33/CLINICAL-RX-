@@ -196,7 +196,13 @@ export function Bundles() {
       </Modal>
 
       {/* Bundle detail */}
-      {viewing && <BundleDetail bundle={viewing} onClose={() => { setViewing(null); setAiReply(null); }} />}
+      {viewing && (
+        <BundleDetail
+          bundle={viewing}
+          onClose={() => { setViewing(null); setAiReply(null); }}
+          onOpenBundle={(b) => { setViewing(b); setAiReply(null); }}
+        />
+      )}
     </div>
   );
 }
@@ -235,13 +241,40 @@ function ManualCreate({ onCreate }: { onCreate: (type: 'manual-day' | 'manual-we
   );
 }
 
-function BundleDetail({ bundle, onClose }: { bundle: Bundle; onClose: () => void }) {
+function BundleDetail({ bundle, onClose, onOpenBundle }: { bundle: Bundle; onClose: () => void; onOpenBundle?: (b: Bundle) => void }) {
   const setStatus = useData((s) => s.setStatus);
+  const save = useData((s) => s.save);
+  const allBundles = useData((s) => s.bundles);
   const [followUp, setFollowUp] = useState('');
+  const [followUpText, setFollowUpText] = useState('');
   const [thinking, setThinking] = useState(false);
 
   const settings = useData((s) => s.settings);
   const chatCfg = settings?.ai?.['chat'];
+
+  async function duplicate() {
+    const copy: Bundle = {
+      ...bundle,
+      id: crypto.randomUUID ? crypto.randomUUID() : 'b' + Date.now(),
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      title: `${bundle.title} (copy)`,
+      version: 1,
+      followUps: [],
+      aiPending: bundle.aiPending,
+    };
+    await save('bundle', copy);
+    setStatus('✓ Bundle duplicated');
+  }
+
+  async function addFollowUp() {
+    const text = followUpText.trim();
+    if (!text) return;
+    const followUp: Bundle['followUps'][number] = { id: crypto.randomUUID ? crypto.randomUUID() : 'f' + Date.now(), createdAt: Date.now(), content: text };
+    await save('bundle', { ...bundle, version: bundle.version + 1, followUps: [...(bundle.followUps ?? []), followUp] });
+    setFollowUpText('');
+    setStatus('✓ Follow-up saved (v' + (bundle.version + 1) + ')');
+  }
 
   function exportMd() {
     const finding = scanForPhi(bundleToMarkdown(bundle));
@@ -302,6 +335,7 @@ function BundleDetail({ bundle, onClose }: { bundle: Bundle; onClose: () => void
       <div className="space-y-5 text-sm">
         <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
           <Pill color="slate">{TYPE_LABEL[bundle.type]}</Pill>
+          <Pill color="slate">v{bundle.version}</Pill>
           <span>{bundle.periodStart} → {bundle.periodEnd}</span>
           {bundle.aiModel && <Pill color="brand">AI: {bundle.aiModel}</Pill>}
         </div>
@@ -357,13 +391,51 @@ function BundleDetail({ bundle, onClose }: { bundle: Bundle; onClose: () => void
         {bundle.sourceBundleIds.length > 0 && (
           <div>
             <h3 className="label">Lineage (merged from)</h3>
-            <div className="space-y-1 text-slate-500">
-              {bundle.sourceBundleIds.map((id) => <div key={id}>→ {id}</div>)}
+            <div className="space-y-1">
+              {bundle.sourceBundleIds.map((id) => {
+                const src = allBundles.find((b) => b.id === id);
+                return (
+                  <button
+                    key={id}
+                    className="flex w-full items-center gap-2 rounded-lg bg-slate-50 px-3 py-2 text-left hover:bg-brand-50 dark:bg-slate-700 dark:hover:bg-brand-900"
+                    onClick={() => src && onOpenBundle?.(src)}
+                  >
+                    <span>→</span>
+                    <div className="min-w-0">
+                      <div className="truncate text-xs font-semibold text-slate-700 dark:text-slate-200">{src?.title ?? id}</div>
+                      <div className="text-[11px] text-slate-400">{src ? `${TYPE_LABEL[src.type]} · ${src.periodStart} → ${src.periodEnd}` : 'Source bundle'}</div>
+                    </div>
+                  </button>
+                );
+              })}
             </div>
           </div>
         )}
 
+        {(bundle.followUps?.length ?? 0) > 0 && (
+          <div>
+            <h3 className="label">Follow-ups</h3>
+            <div className="space-y-2">
+              {bundle.followUps!.map((f) => (
+                <div key={f.id} className="rounded-lg border border-slate-200 p-2 dark:border-slate-700">
+                  <div className="text-[11px] text-slate-400">{new Date(f.createdAt).toLocaleString()}</div>
+                  <div className="whitespace-pre-wrap text-slate-600 dark:text-slate-300">{f.content}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-700">
+          <label className="label">Add a follow-up (bumps version)</label>
+          <div className="flex gap-2">
+            <input className="input" value={followUpText} placeholder="e.g. Ask AI to explain this better, or add a note…" onChange={(e) => setFollowUpText(e.target.value)} />
+            <button className="btn-secondary shrink-0" onClick={addFollowUp}>+ Follow-up</button>
+          </div>
+        </div>
+
         <div className="flex flex-wrap gap-2 border-t border-slate-200 pt-3 dark:border-slate-700">
+          <button className="btn-secondary" onClick={duplicate}>📋 Duplicate</button>
           <button className="btn-secondary" onClick={askAI} disabled={thinking}>{thinking ? '🤖 Thinking…' : '🤖 Ask AI'}</button>
           <button className="btn-secondary" onClick={exportMd}>⬇ Markdown</button>
           <button className="btn-secondary" onClick={exportPdf}>⬇ PDF</button>

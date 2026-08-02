@@ -20,6 +20,15 @@ const NAV = [
   { to: '/settings', icon: '⚙️', label: 'Settings' },
 ];
 
+// Shown in the mobile bottom bar (keep it short).
+const MOBILE_NAV = [
+  { to: '/', icon: '🏠', label: 'Home' },
+  { to: '/clinical', icon: '📋', label: 'Days' },
+  { to: '/medicines', icon: '💊', label: 'Medicines' },
+  { to: '/bundles', icon: '📦', label: 'Bundles' },
+  { to: '/ai', icon: '🤖', label: 'AI' },
+];
+
 export function Layout({ children }: { children: ReactNode }) {
   const status = useData((s) => s.status);
   const profile = useData((s) => s.profile);
@@ -27,8 +36,9 @@ export function Layout({ children }: { children: ReactNode }) {
   const setSearchOpen = useUi((s) => s.setSearchOpen);
 
   return (
-    <div className="flex h-screen bg-slate-50 text-slate-800 dark:bg-slate-900 dark:text-slate-100">
-      <aside className="flex w-56 shrink-0 flex-col border-r border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-800">
+    <div className="flex h-screen flex-col bg-slate-50 text-slate-800 dark:bg-slate-900 dark:text-slate-100 lg:flex-row">
+      {/* Desktop sidebar */}
+      <aside className="hidden w-56 shrink-0 flex-col border-r border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-800 lg:flex">
         <div className="flex items-center gap-2.5 border-b border-slate-200 px-4 py-4 dark:border-slate-700">
           <img src="./icon-512.png" alt="CLINICAL Rx" className="h-9 w-9 rounded-lg object-cover" />
           <div>
@@ -63,30 +73,52 @@ export function Layout({ children }: { children: ReactNode }) {
         </div>
       </aside>
 
-      <main className="flex min-w-0 flex-1 flex-col">
-        <div className="flex items-center justify-between gap-3 border-b border-slate-200 bg-white px-6 py-3 dark:border-slate-700 dark:bg-slate-800">
-          <div className="text-sm font-medium text-slate-500 dark:text-slate-300">
-            🟢 {status}
-            <span className="ml-2 rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-semibold text-slate-500 dark:bg-slate-700 dark:text-slate-300">
-              v{__APP_VERSION__}
-            </span>
+      <main className="flex min-h-0 flex-1 flex-col">
+        {/* Top bar */}
+        <div className="flex items-center justify-between gap-2 border-b border-slate-200 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-800 lg:px-6 lg:py-3">
+          <div className="flex min-w-0 items-center gap-2">
+            <img src="./icon-512.png" alt="CLINICAL Rx" className="h-7 w-7 rounded-lg object-cover lg:hidden" />
+            <div className="truncate text-sm font-medium text-slate-500 dark:text-slate-300">
+              🟢 <span className="hidden sm:inline">{status}</span>
+              <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-semibold text-slate-500 dark:bg-slate-700 dark:text-slate-300">
+                v{__APP_VERSION__}
+              </span>
+            </div>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex shrink-0 items-center gap-2 lg:gap-3">
             <SyncIndicator />
-            <button
-              className="btn-ghost !py-1 text-sm"
-              onClick={() => setSearchOpen(true)}
-              title="Global search (Ctrl/⌘+K)"
-            >
-              🔍 Search
+            <button className="btn-ghost !py-1 text-sm" onClick={() => setSearchOpen(true)} title="Global search (Ctrl/⌘+K)">
+              🔍
             </button>
-            <div className="text-xs text-slate-400">
+            <div className="hidden text-xs text-slate-400 lg:block">
               Clinical Day {profile?.clinicalDay ?? 1} · {profile?.site}
             </div>
           </div>
         </div>
-        <div className="flex-1 overflow-y-auto p-6">{children}</div>
+
+        {/* Content */}
+        <div className="flex-1 overflow-y-auto p-3 lg:p-6">{children}</div>
       </main>
+
+      {/* Mobile bottom nav */}
+      <nav className="flex shrink-0 items-stretch justify-around border-t border-slate-200 bg-white pb-[env(safe-area-inset-bottom)] dark:border-slate-700 dark:bg-slate-800 lg:hidden">
+        {MOBILE_NAV.map((n) => (
+          <NavLink
+            key={n.to}
+            to={n.to}
+            end={n.to === '/'}
+            className={({ isActive }) =>
+              `flex flex-1 flex-col items-center gap-0.5 py-2 text-[10px] font-medium ${
+                isActive ? 'text-brand-600 dark:text-brand-300' : 'text-slate-500 dark:text-slate-400'
+              }`
+            }
+          >
+            <span className="text-lg leading-none">{n.icon}</span>
+            {n.label}
+          </NavLink>
+        ))}
+      </nav>
+
       <SearchModal open={searchOpen} onClose={() => setSearchOpen(false)} />
     </div>
   );
