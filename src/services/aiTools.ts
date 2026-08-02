@@ -149,3 +149,69 @@ export function revisionCoach(): Promise<AiResult> {
     `Recommend a revision plan. I've seen these conditions recently, some with incomplete revision coverage: ${incomplete.join(', ') || 'none yet'}. My open questions: ${gaps.join('; ') || 'none'}. Give a prioritized, realistic revision list with reasons.`
   );
 }
+
+// ---- Quiz generator ----
+export interface QuizQuestion {
+  question: string;
+  options: string[];
+  answer: number; // index of correct option
+  explanation: string;
+}
+
+export interface Quiz {
+  title: string;
+  questions: QuizQuestion[];
+}
+
+/** Extract a Quiz from AI text that contains a JSON block. */
+function parseQuiz(text: string): Quiz | null {
+  try {
+    const start = text.indexOf('{');
+    const end = text.lastIndexOf('}');
+    if (start < 0 || end <= start) return null;
+    const parsed = JSON.parse(text.slice(start, end + 1));
+    const questions = Array.isArray(parsed.questions) ? parsed.questions : [];
+    if (!questions.length) return null;
+    const normalized: QuizQuestion[] = questions
+      .filter((q: any) => q && typeof q.question === 'string' && Array.isArray(q.options) && q.options.length >= 2)
+      .map((q: any) => ({
+        question: q.question,
+        options: q.options.map((o: any) => String(o)),
+        answer: typeof q.answer === 'number' ? q.answer : Number(q.answer) || 0,
+        explanation: typeof q.explanation === 'string' ? q.explanation : '',
+      }));
+    if (!normalized.length) return null;
+    return { title: typeof parsed.title === 'string' ? parsed.title : 'CLINICAL Rx Quiz', questions: normalized };
+  } catch {
+    return null;
+  }
+}
+
+/** Build a quiz from recent clinical exposure + optionally a focus topic. */
+export async function generateQuiz(focus?: string, count = 10): Promise<Quiz | null> {
+  const s = useData.getState();
+  const context = focus?.trim()
+    ? focus.trim()
+    : [
+        ...s.days.flatMap((d) => d.conditions),
+        ...s.days.flatMap((d) => d.medicines),
+        ...s.diseases.map((d) => d.name),
+        ...s.medicines.map((m) => m.name),
+        ...s.questions.map((q) => q.text),
+      ]
+        .filter(Boolean)
+        .slice(0, 15)
+        .join(', ');
+
+  const prompt = [
+    `Create a ${count}-question multiple-choice quiz based on my clinical exposure.`,
+    `Focus areas: ${context || 'general clinical pharmacy'}.`,
+    `Return ONLY valid JSON in EXACTLY this shape (no commentary, no markdown):`,
+    `{"title":"A short quiz title","questions":[{"question":"...","options":["A text","B text","C text","D text"],"answer":0,"explanation":"1-line explanation"}]}`,
+    `answer is the 0-based index of the correct option. Make options plausible and at my learning level.`,
+  ].join('\n');
+
+  const res = await runAiModule('questionGen', prompt, 'Return strictly valid JSON only.');
+  if (!res.ok) return null;
+  return parseQuiz(res.text);
+}

@@ -15,6 +15,7 @@ import { Medicines } from './pages/Medicines';
 import { Investigations } from './pages/Investigations';
 import { Questions } from './pages/Questions';
 import { Revision } from './pages/Revision';
+import { Quiz } from './pages/Quiz';
 import { Progress } from './pages/Progress';
 import { Bundles } from './pages/Bundles';
 import { AiChat } from './pages/AiChat';
@@ -90,6 +91,7 @@ export default function App() {
         <Route path="/investigations" element={<Investigations />} />
         <Route path="/questions" element={<Questions />} />
         <Route path="/revision" element={<Revision />} />
+        <Route path="/quiz" element={<Quiz />} />
         <Route path="/progress" element={<Progress />} />
         <Route path="/bundles" element={<Bundles />} />
         <Route path="/ai" element={<AiChat />} />

@@ -17,6 +17,7 @@ const NAV = [
   { to: '/investigations', icon: '🧪', label: 'Investigations' },
   { to: '/questions', icon: '❓', label: 'Questions' },
   { to: '/revision', icon: '📚', label: 'Revision' },
+  { to: '/quiz', icon: '📝', label: 'Quiz' },
   { to: '/bundles', icon: '📦', label: 'Bundles' },
   { to: '/progress', icon: '📊', label: 'Progress' },
   { to: '/ai', icon: '🤖', label: 'AI' },
@@ -118,7 +119,7 @@ export function Layout({ children }: { children: ReactNode }) {
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto p-3 lg:p-6">{children}</div>
+        <div className="flex-1 overflow-y-auto p-4 lg:p-8">{children}</div>
       </main>
 
       {/* Mobile bottom nav */}
