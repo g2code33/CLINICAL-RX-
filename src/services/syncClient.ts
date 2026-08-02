@@ -50,7 +50,7 @@ async function requestWithHeaders(
     json = null;
   }
   if (!res.ok) {
-    return { ok: false, status: res.status, error: json?.error || `Server error (${res.status})` };
+    return { ok: false, status: res.status, error: json?.error || `Request failed (${res.status}). Check that the backend is deployed and configured.` };
   }
   return { ok: true, data: json, status: res.status };
 }

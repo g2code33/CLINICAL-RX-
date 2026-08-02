@@ -157,7 +157,9 @@ deployment. It provides account registration/login and a push/pull sync endpoint
 by **Vercel KV (Upstash Redis)**.
 
 1. **Create a Vercel KV store** in your project (Vercel → Storage → KV → create). It
-   injects `KV_REST_API_URL` and `KV_REST_API_TOKEN` automatically.
+   injects `KV_REST_API_URL` and `KV_REST_API_TOKEN` automatically. If these are not set
+   (e.g. local testing), the API falls back to in-memory storage so auth/sync still work
+   for a single process (data is not persisted across restarts).
 2. Add a `SESSION_SECRET` env var (any long random string) for signing session tokens.
 3. **(Optional) Email reset** — add `RESEND_API_KEY` (free [Resend](https://resend.com)
    account) and set `APP_URL` to your deployed URL. Without these, the email-reset

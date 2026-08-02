@@ -1,18 +1,19 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { extractToken, verifyToken } from './_lib/auth';
 import { getAll, putRecords, type SyncRecord } from './_lib/records';
+import { guard, fail, ok } from './_lib/errors';
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+async function handler(req: VercelRequest, res: VercelResponse) {
   const token = extractToken(req);
   const userId = token ? verifyToken(token) : null;
-  if (!userId) return res.status(401).json({ error: 'Not authenticated' });
+  if (!userId) return fail(res, 401, 'Not authenticated');
 
   // GET -> pull records (optionally incremental via ?since=<ms>)
   if (req.method === 'GET') {
     const sinceParam = typeof req.query.since === 'string' ? Number(req.query.since) : NaN;
     const since = Number.isFinite(sinceParam) ? sinceParam : undefined;
     const records = await getAll(userId, since);
-    return res.status(200).json({ records, serverTime: Date.now() });
+    return ok(res, 200, { records, serverTime: Date.now() });
   }
 
   // POST -> push changes, get canonical set back
@@ -30,8 +31,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         deleted: r.deleted ? true : undefined,
       }));
     const records = await putRecords(userId, sanitized);
-    return res.status(200).json({ records });
+    return ok(res, 200, { records });
   }
 
-  return res.status(405).json({ error: 'Method not allowed' });
+  return fail(res, 405, 'Method not allowed');
 }
+
+export default guard(handler);

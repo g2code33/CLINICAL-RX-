@@ -1,15 +1,15 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { redis } from '../_lib/redis';
 import { extractToken, verifyToken } from '../_lib/auth';
+import { guard, fail, ok } from '../_lib/errors';
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
-  if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
+async function handler(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'GET') return fail(res, 405, 'Method not allowed');
 
   const token = extractToken(req);
   const userId = token ? verifyToken(token) : null;
-  if (!userId) return res.status(401).json({ error: 'Not authenticated' });
+  if (!userId) return fail(res, 401, 'Not authenticated');
 
-  // Find the user by scanning (fine for a personal app's scale).
   const users = await redis.hgetall('users');
   let user = null;
   if (users) {
@@ -21,6 +21,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
     }
   }
-  if (!user) return res.status(404).json({ error: 'User not found' });
-  return res.status(200).json({ user });
+  if (!user) return fail(res, 404, 'User not found');
+  return ok(res, 200, { user });
 }
+
+export default guard(handler);
