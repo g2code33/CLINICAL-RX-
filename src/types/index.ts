@@ -49,6 +49,11 @@ export interface Settings extends BaseRecord {
   onlineAccount: {
     connected: boolean;
     email?: string;
+    name?: string;
+    token?: string;
+    backendUrl?: string; // '' or '/' = same origin (/api); else e.g. https://you.vercel.app
+    lastSynced?: number;
+    syncing?: boolean;
   };
 }
 
@@ -158,6 +163,24 @@ export interface BundleFollowUp {
 }
 
 // ---- Storage adapter contract (localStorage on web, SQLite via IPC on Electron) ----
+
+export interface SyncRecord {
+  module: string;
+  id: string;
+  data: unknown;
+  createdAt: number;
+  updatedAt: number;
+  deleted?: boolean;
+}
+
+export interface PendingOp {
+  op: 'upsert' | 'delete';
+  module: ModuleType;
+  id: string;
+  data?: unknown;
+  createdAt?: number;
+  updatedAt?: number;
+}
 
 export interface KVItem {
   id: string;

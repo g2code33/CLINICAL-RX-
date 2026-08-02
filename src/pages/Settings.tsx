@@ -3,6 +3,8 @@ import { useData } from '../stores/data';
 import { PageHeader } from '../components/ui';
 import { UpdatePanel } from '../components/UpdatePanel';
 import { AI_MODULES, newSettings } from '../services/defaults';
+import { syncClient } from '../services/syncClient';
+import { syncNow, getPendingCount } from '../services/syncEngine';
 import type { AppearanceMode, Settings } from '../types';
 
 export function SettingsPage() {
@@ -12,6 +14,10 @@ export function SettingsPage() {
   const setStatus = useData((s) => s.setStatus);
   const [draft, setDraft] = useState<Settings | null>(settings);
   const [showKeys, setShowKeys] = useState<Record<string, boolean>>({});
+  const [acctForm, setAcctForm] = useState({ email: '', password: '', name: '', backendUrl: draft?.onlineAccount?.backendUrl ?? '' });
+  const [acctBusy, setAcctBusy] = useState(false);
+  const [syncState, setSyncState] = useState<string>('');
+  const pendingCount = getPendingCount();
 
   if (!draft) return null;
 
@@ -23,6 +29,52 @@ export function SettingsPage() {
 
   function set(key: string, value: any) {
     persist({ ...draft, [key]: value } as Settings);
+  }
+
+  async function connect(mode: 'login' | 'register') {
+    setAcctBusy(true);
+    setSyncState('');
+    const { email, password, name, backendUrl } = acctForm;
+    try {
+      const res = mode === 'login'
+        ? await syncClient.login(backendUrl, email.trim(), password)
+        : await syncClient.register(backendUrl, email.trim(), password, name.trim());
+      if (!res.ok) {
+        setSyncState('⚠️ ' + (res.error || 'Connection failed.'));
+        return;
+      }
+      const acc = {
+        connected: true,
+        email: res.data.user.email,
+        name: res.data.user.name,
+        token: res.data.token,
+        backendUrl,
+        lastSynced: undefined,
+        syncing: false,
+      };
+      await persist({ ...draft, onlineAccount: acc } as Settings);
+      setSyncState(`✓ Connected as ${res.data.user.email}`);
+      // Immediately pull any cloud data down to this device.
+      const outcome = await syncNow();
+      if (outcome.ok) setSyncState(`✓ Connected · pulled ${outcome.pulled} record(s)`);
+    } finally {
+      setAcctBusy(false);
+    }
+  }
+
+  async function doSyncNow() {
+    setAcctBusy(true);
+    setSyncState('Syncing…');
+    const outcome = await syncNow();
+    setSyncState(outcome.ok
+      ? `✓ Synced · pushed ${outcome.pushed}, pulled ${outcome.pulled}`
+      : '⚠️ ' + (outcome.message || 'Sync failed.'));
+    setAcctBusy(false);
+  }
+
+  async function disconnect() {
+    await persist({ ...draft, onlineAccount: { connected: false, backendUrl: acctForm.backendUrl } } as Settings);
+    setSyncState('Disconnected. Local data is kept.');
   }
 
   async function backup() {
@@ -121,24 +173,65 @@ export function SettingsPage() {
 
         {/* Online account */}
         <div className="card">
-          <h2 className="mb-1 font-semibold">☁️ Online Account</h2>
-          <p className="mb-3 text-xs text-slate-400">Optional &amp; secondary. The app works fully offline without an account — this only enables cloud sync/backup and web access.</p>
+          <h2 className="mb-1 font-semibold">☁️ Online Account &amp; Sync</h2>
+          <p className="mb-3 text-xs text-slate-400">Optional &amp; secondary. The app works fully offline without an account; connecting enables multi-device cloud sync &amp; backup.</p>
+
           {draft.onlineAccount?.connected ? (
-            <div className="rounded-lg bg-green-50 p-3 text-sm text-green-700 dark:bg-green-900 dark:text-green-200">
-              ✓ Connected · {draft.onlineAccount.email}
+            <div className="space-y-3">
+              <div className="rounded-lg bg-green-50 p-3 text-sm text-green-700 dark:bg-green-900 dark:text-green-200">
+                ✓ Connected · {draft.onlineAccount.email}
+                {draft.onlineAccount.lastSynced && (
+                  <div className="mt-1 text-xs text-green-600 dark:text-green-300">
+                    Last synced {new Date(draft.onlineAccount.lastSynced).toLocaleString()}
+                  </div>
+                )}
+              </div>
+              <div className="flex items-center justify-between text-xs text-slate-500">
+                <span>Pending local changes</span>
+                <span className="font-semibold">{pendingCount}</span>
+              </div>
+              <button className="btn-primary w-full" disabled={acctBusy} onClick={doSyncNow}>
+                {acctBusy ? 'Syncing…' : '🔄 Sync now'}
+              </button>
+              <button className="btn-secondary w-full" onClick={disconnect}>Disconnect account</button>
             </div>
           ) : (
-            <div className="text-sm text-slate-400">Not connected.</div>
+            <div className="space-y-3">
+              <div>
+                <label className="label">Backend URL</label>
+                <input
+                  className="input"
+                  placeholder="https://your-app.vercel.app (blank = same site)"
+                  value={acctForm.backendUrl}
+                  onChange={(e) => setAcctForm({ ...acctForm, backendUrl: e.target.value })}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="label">Name</label>
+                  <input className="input" value={acctForm.name} onChange={(e) => setAcctForm({ ...acctForm, name: e.target.value })} placeholder="Your name" />
+                </div>
+                <div>
+                  <label className="label">Email</label>
+                  <input className="input" type="email" value={acctForm.email} onChange={(e) => setAcctForm({ ...acctForm, email: e.target.value })} placeholder="you@example.com" />
+                </div>
+              </div>
+              <div>
+                <label className="label">Password</label>
+                <input className="input" type="password" value={acctForm.password} onChange={(e) => setAcctForm({ ...acctForm, password: e.target.value })} placeholder="At least 6 characters" />
+              </div>
+              <div className="flex gap-2">
+                <button className="btn-primary flex-1" disabled={acctBusy || !acctForm.email || !acctForm.password} onClick={() => connect('login')}>
+                  {acctBusy ? '…' : 'Sign in'}
+                </button>
+                <button className="btn-secondary flex-1" disabled={acctBusy || !acctForm.email || !acctForm.password} onClick={() => connect('register')}>
+                  {acctBusy ? '…' : 'Create account'}
+                </button>
+              </div>
+            </div>
           )}
-          <button
-            className="btn-primary mt-3 w-full"
-            onClick={() => set('onlineAccount', draft.onlineAccount?.connected ? { connected: false } : { connected: true, email: 'you@example.com' })}
-          >
-            {draft.onlineAccount?.connected ? 'Disconnect' : 'Connect Account'}
-          </button>
-          <p className="mt-2 text-[11px] text-slate-400">
-            On Vercel the web app runs fully in your browser. A production online account would connect to a real sync backend — see README.
-          </p>
+
+          {syncState && <div className="mt-3 text-sm text-slate-500 dark:text-slate-300">{syncState}</div>}
         </div>
 
         {/* Learning profile */}
@@ -262,7 +355,7 @@ export function SettingsPage() {
 
       <div className="mt-6 flex flex-col items-center gap-2 text-center text-xs text-slate-400">
         <img src="./icon-512.png" alt="CLINICAL Rx logo" className="h-10 w-10 rounded-lg object-cover" />
-        <div>CLINICAL Rx v1.0.0 · Built with React + Electron + SQLite · Web via Vercel</div>
+        <div>CLINICAL Rx v{__APP_VERSION__} · Built with React + Electron + SQLite · Web via Vercel</div>
       </div>
     </div>
   );

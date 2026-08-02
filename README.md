@@ -145,11 +145,32 @@ online account.
 
 **How online works here:** the desktop app stores everything in SQLite locally. The
 Vercel web build uses the identical UI with browser storage. The "Online Account" in
-Settings is the optional secondary layer. For real multi-device sync you'd add a sync
-backend (the `StorageAdapter` and bundle export are designed so this can be wired in
-without touching the UI). Bundles can be exported/shared as Markdown or JSON so you can
-bring your clinical learning pack anywhere — e.g. to ask another AI or a supervisor to
-explain it.
+Settings is the optional secondary layer that enables **real multi-device cloud sync**
+via the bundled serverless backend in `api/`. Bundles can also be exported/shared as
+Markdown, JSON, or PDF so you can bring your clinical learning pack anywhere — e.g. to
+ask another AI or a supervisor to explain it.
+
+### ☁️ Online sync backend (setup)
+
+The repo ships a serverless sync backend under `api/` that runs on the same Vercel
+deployment. It provides account registration/login and a push/pull sync endpoint backed
+by **Vercel KV (Upstash Redis)**.
+
+1. **Create a Vercel KV store** in your project (Vercel → Storage → KV → create). It
+   injects `KV_REST_API_URL` and `KV_REST_API_TOKEN` automatically.
+2. Add a `SESSION_SECRET` env var (any long random string) for signing session tokens.
+3. Deploy — the `/api/auth/*` and `/api/sync` routes deploy automatically.
+4. In the app, open **Settings → Online Account**, leave **Backend URL** blank on the web
+   version (same origin) or set it to `https://your-app.vercel.app` in the desktop app.
+   Then **Create account** or **Sign in**.
+5. Press **Sync now** (or use the header **☁️** indicator) to push local changes and pull
+   cloud data. Changes made offline are queued and synced the next time you connect.
+
+**Sync design:** every record keeps `createdAt`/`updatedAt`; a persistent offline queue
+records changes (upserts + deletes/tombstones) and flushes them in a batch. The server
+returns the canonical record set, which the client merges (latest `updatedAt` wins) and
+applies locally. This supports the offline-first requirement — recording and bundles work
+with zero internet, and the same data syncs across PCs and the web.
 
 ---
 

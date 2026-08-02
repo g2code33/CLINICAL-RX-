@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import { useData } from '../stores/data';
 import { useUi } from '../stores/ui';
 import { SearchModal } from './SearchModal';
+import { SyncIndicator } from './SyncIndicator';
 
 const NAV = [
   { to: '/', icon: '🏠', label: 'Home' },
@@ -64,8 +65,14 @@ export function Layout({ children }: { children: ReactNode }) {
 
       <main className="flex min-w-0 flex-1 flex-col">
         <div className="flex items-center justify-between gap-3 border-b border-slate-200 bg-white px-6 py-3 dark:border-slate-700 dark:bg-slate-800">
-          <div className="text-sm font-medium text-slate-500 dark:text-slate-300">🟢 {status}</div>
+          <div className="text-sm font-medium text-slate-500 dark:text-slate-300">
+            🟢 {status}
+            <span className="ml-2 rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-semibold text-slate-500 dark:bg-slate-700 dark:text-slate-300">
+              v{__APP_VERSION__}
+            </span>
+          </div>
           <div className="flex items-center gap-3">
+            <SyncIndicator />
             <button
               className="btn-ghost !py-1 text-sm"
               onClick={() => setSearchOpen(true)}

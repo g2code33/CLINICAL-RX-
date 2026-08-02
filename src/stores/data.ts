@@ -17,6 +17,7 @@ import type {
 import { LocalStorageAdapter } from '../db/localStorageAdapter';
 import { ElectronAdapter } from '../db/electronAdapter';
 import { hasElectronBridge } from '../db/adapter';
+import { enqueue, backendConfigured } from '../services/syncEngine';
 
 export interface DataStore {
   ready: boolean;
@@ -158,6 +159,7 @@ export const useData = create<DataStore>((set, get) => ({
     const now = Date.now();
     const rec = { ...record, updatedAt: now };
     await adapter.put(module, rec.id, rec, rec.createdAt, rec.updatedAt);
+    if (backendConfigured()) enqueue({ op: 'upsert', module, id: rec.id, data: rec, createdAt: rec.createdAt, updatedAt: now });
     set((s) => {
       const key = module + 's';
       const listKey = (key in s ? key : module) as keyof DataStore;
@@ -172,6 +174,7 @@ export const useData = create<DataStore>((set, get) => ({
   remove: async (module, id) => {
     const adapter = get().adapter;
     await adapter.remove(module, id);
+    if (backendConfigured()) enqueue({ op: 'delete', module, id });
     set((s) => {
       const listKey = (module + 's' in s ? module + 's' : module) as keyof DataStore;
       const existing = (s[listKey] as BaseRecord[]) || [];
