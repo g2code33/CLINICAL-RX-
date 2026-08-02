@@ -47,10 +47,10 @@ export function Dashboard() {
       </div>
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <StatCard icon="📋" label="Clinical days" value={days.length} accent="bg-sky-100 dark:bg-sky-900" />
-        <StatCard icon="🦠" label="Conditions" value={diseases.length} />
-        <StatCard icon="💊" label="Medicines" value={medicines.length} />
-        <StatCard icon="🧪" label="Investigations" value={investigations.length} />
+        <StatCard icon="📋" label="Clinical days" value={days.length} accent="bg-sky-100 dark:bg-sky-900" to="/clinical" />
+        <StatCard icon="🦠" label="Conditions" value={diseases.length} to="/diseases" />
+        <StatCard icon="💊" label="Medicines" value={medicines.length} to="/medicines" />
+        <StatCard icon="🧪" label="Investigations" value={investigations.length} to="/investigations" />
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">

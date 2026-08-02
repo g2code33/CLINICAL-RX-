@@ -5,6 +5,7 @@ import { Modal } from '../components/Modal';
 import { generateQuiz, type Quiz as QuizType } from '../services/aiTools';
 import { aiReady } from '../services/aiTools';
 import { copyToClipboard } from '../services/export';
+import { loadBank } from '../services/questionBank';
 
 export function Quiz() {
   const setStatus = useData((s) => s.setStatus);
@@ -18,7 +19,10 @@ export function Quiz() {
   const [reviewOpen, setReviewOpen] = useState(false);
   const [timeLeft, setTimeLeft] = useState(0);
   const [setupOpen, setSetupOpen] = useState(false);
+  const [bankMode, setBankMode] = useState(false);
+  const [bankCount, setBankCount] = useState(10);
   const timerRef = useRef<any>(null);
+  const bank = loadBank();
 
   useEffect(() => {
     if (!submitted && quiz && timeLeft > 0) {
@@ -57,6 +61,25 @@ export function Quiz() {
     setAnswers(new Array(q.questions.length).fill(-1));
     setTimeLeft(q.questions.length * 60); // 60s per question
     setStatus(`✓ Quiz ready — ${q.questions.length} questions`);
+  }
+
+  function startFromBank() {
+    if (!bank.length) {
+      setStatus('⚠️ Your question bank is empty. Add questions in Question Bank first.');
+      return;
+    }
+    const shuffled = [...bank].sort(() => Math.random() - 0.5).slice(0, Math.min(bankCount, bank.length));
+    const q: QuizType = {
+      title: 'Question Bank Quiz',
+      questions: shuffled.map((b) => ({ question: b.question, options: b.options, answer: b.answer, explanation: b.explanation })),
+    };
+    setQuiz(q);
+    setAnswers(new Array(q.questions.length).fill(-1));
+    setSubmitted(false);
+    setCurrent(0);
+    setTimeLeft(q.questions.length * 60);
+    setSetupOpen(false);
+    setStatus(`✓ Quiz ready from bank — ${q.questions.length} questions`);
   }
 
   const score = quiz ? quiz.questions.filter((_, i) => answers[i] === quiz.questions[i].answer).length : 0;
@@ -203,25 +226,48 @@ export function Quiz() {
       ) : null}
 
       {/* Setup modal */}
-      <Modal open={setupOpen} onClose={() => setSetupOpen(false)} title="Create AI Quiz">
-        <div className="space-y-3">
-          <div>
-            <label className="label">Focus topic (optional)</label>
-            <input className="input" placeholder="e.g. antihypertensives, or leave blank for everything" value={focus} onChange={(e) => setFocus(e.target.value)} />
-          </div>
-          <div>
-            <label className="label">Number of questions</label>
-            <select className="input" value={count} onChange={(e) => setCount(Number(e.target.value))}>
-              {[5, 10, 15, 20].map((n) => <option key={n} value={n}>{n} questions</option>)}
-            </select>
-          </div>
-          <div className="flex justify-end gap-2">
-            <button className="btn-secondary" onClick={() => setSetupOpen(false)}>Cancel</button>
-            <button className="btn-primary" disabled={loading} onClick={() => { setSetupOpen(false); start(); }}>
-              {loading ? 'Generating…' : 'Start Quiz'}
-            </button>
-          </div>
+      <Modal open={setupOpen} onClose={() => setSetupOpen(false)} title="Create Quiz">
+        <div className="mb-4 grid grid-cols-2 gap-2">
+          <button className={`btn ${!bankMode ? 'bg-brand-600 text-white' : 'bg-slate-200 dark:bg-slate-700'}`} onClick={() => setBankMode(false)}>🤖 AI-generated</button>
+          <button className={`btn ${bankMode ? 'bg-brand-600 text-white' : 'bg-slate-200 dark:bg-slate-700'}`} onClick={() => setBankMode(true)}>🗂 From question bank</button>
         </div>
+
+        {!bankMode ? (
+          <div className="space-y-3">
+            <div>
+              <label className="label">Focus topic (optional)</label>
+              <input className="input" placeholder="e.g. antihypertensives, or leave blank for everything" value={focus} onChange={(e) => setFocus(e.target.value)} />
+            </div>
+            <div>
+              <label className="label">Number of questions</label>
+              <select className="input" value={count} onChange={(e) => setCount(Number(e.target.value))}>
+                {[5, 10, 15, 20].map((n) => <option key={n} value={n}>{n} questions</option>)}
+              </select>
+            </div>
+            <div className="flex justify-end gap-2">
+              <button className="btn-secondary" onClick={() => setSetupOpen(false)}>Cancel</button>
+              <button className="btn-primary" disabled={loading} onClick={() => { setSetupOpen(false); start(); }}>
+                {loading ? 'Generating…' : 'Start Quiz'}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <div className="rounded-lg bg-slate-50 p-3 text-xs text-slate-500 dark:bg-slate-700 dark:text-slate-300">
+              Start a quiz using <strong>{bank.length}</strong> question(s) from your bank (randomly selected, no AI needed).
+            </div>
+            <div>
+              <label className="label">Number of questions</label>
+              <select className="input" value={bankCount} onChange={(e) => setBankCount(Number(e.target.value))}>
+                {[5, 10, 15, Math.min(20, bank.length)].filter((n, i, a) => a.indexOf(n) === i).map((n) => <option key={n} value={n}>{Math.min(n, bank.length)} questions</option>)}
+              </select>
+            </div>
+            <div className="flex justify-end gap-2">
+              <button className="btn-secondary" onClick={() => setSetupOpen(false)}>Cancel</button>
+              <button className="btn-primary" onClick={startFromBank}>Start from bank</button>
+            </div>
+          </div>
+        )}
       </Modal>
 
       {/* Review-all modal */}

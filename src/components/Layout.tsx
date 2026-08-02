@@ -18,6 +18,7 @@ const NAV = [
   { to: '/questions', icon: '❓', label: 'Questions' },
   { to: '/revision', icon: '📚', label: 'Revision' },
   { to: '/quiz', icon: '📝', label: 'Quiz' },
+  { to: '/question-bank', icon: '🗂', label: 'Question Bank' },
   { to: '/bundles', icon: '📦', label: 'Bundles' },
   { to: '/progress', icon: '📊', label: 'Progress' },
   { to: '/ai', icon: '🤖', label: 'AI' },

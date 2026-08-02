@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { Link } from 'react-router-dom';
 
 export function PageHeader({ title, subtitle, action }: { title: string; subtitle?: string; action?: ReactNode }) {
   return (
@@ -12,8 +13,8 @@ export function PageHeader({ title, subtitle, action }: { title: string; subtitl
   );
 }
 
-export function StatCard({ icon, label, value, accent }: { icon: string; label: string; value: ReactNode; accent?: string }) {
-  return (
+export function StatCard({ icon, label, value, accent, to }: { icon: string; label: string; value: ReactNode; accent?: string; to?: string }) {
+  const inner = (
     <div className="card flex items-center gap-3">
       <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-xl ${accent ?? 'bg-brand-100 dark:bg-brand-900'}`}>
         {icon}
@@ -24,6 +25,10 @@ export function StatCard({ icon, label, value, accent }: { icon: string; label: 
       </div>
     </div>
   );
+  if (to) {
+    return <Link to={to} className="block transition-opacity hover:opacity-80">{inner}</Link>;
+  }
+  return inner;
 }
 
 export function EmptyState({ icon, title, hint, actions }: { icon: string; title: string; hint?: string; actions?: ReactNode }) {
