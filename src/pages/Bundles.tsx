@@ -353,7 +353,7 @@ function BundleDetail({ bundle, onClose, onOpenBundle }: { bundle: Bundle; onClo
         {Object.keys(bundle.stats).length > 0 && (
           <div>
             <h3 className="label">Statistics</h3>
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
               {Object.entries(bundle.stats).map(([k, v]) => (
                 <div key={k} className="rounded-lg bg-brand-50 p-2 text-center dark:bg-brand-900">
                   <div className="text-lg font-bold text-brand-700 dark:text-brand-300">{v}</div>

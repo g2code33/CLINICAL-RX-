@@ -5,6 +5,8 @@ interface UiState {
   setSearchOpen: (open: boolean) => void;
   helpOpen: boolean;
   setHelpOpen: (open: boolean) => void;
+  paletteOpen: boolean;
+  setPaletteOpen: (open: boolean) => void;
 }
 
 export const useUi = create<UiState>((set) => ({
@@ -12,4 +14,6 @@ export const useUi = create<UiState>((set) => ({
   setSearchOpen: (open) => set({ searchOpen: open }),
   helpOpen: false,
   setHelpOpen: (open) => set({ helpOpen: open }),
+  paletteOpen: false,
+  setPaletteOpen: (open) => set({ paletteOpen: open }),
 }));

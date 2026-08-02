@@ -5,6 +5,7 @@ import { useUi } from '../stores/ui';
 import { SearchModal } from './SearchModal';
 import { SyncIndicator } from './SyncIndicator';
 import { ShortcutHelp } from './ShortcutHelp';
+import { CommandPalette } from './CommandPalette';
 
 const NAV = [
   { to: '/', icon: '🏠', label: 'Home' },
@@ -36,6 +37,7 @@ export function Layout({ children }: { children: ReactNode }) {
   const searchOpen = useUi((s) => s.searchOpen);
   const setSearchOpen = useUi((s) => s.setSearchOpen);
   const setHelpOpen = useUi((s) => s.setHelpOpen);
+  const setPaletteOpen = useUi((s) => s.setPaletteOpen);
 
   return (
     <div className="flex h-screen flex-col bg-slate-50 text-slate-800 dark:bg-slate-900 dark:text-slate-100 lg:flex-row">
@@ -95,6 +97,9 @@ export function Layout({ children }: { children: ReactNode }) {
             <button className="btn-ghost !px-2 !py-1 text-sm" onClick={() => setHelpOpen(true)} title="Keyboard shortcuts (?)">
               ?
             </button>
+            <button className="btn-ghost !px-2 !py-1 text-sm lg:hidden" onClick={() => setPaletteOpen(true)} title="Command palette (Ctrl+P)">
+              ⌘
+            </button>
             <div className="hidden text-xs text-slate-400 lg:block">
               Clinical Day {profile?.clinicalDay ?? 1} · {profile?.site}
             </div>
@@ -126,6 +131,7 @@ export function Layout({ children }: { children: ReactNode }) {
 
       <SearchModal open={searchOpen} onClose={() => setSearchOpen(false)} />
       <ShortcutHelp />
+      <CommandPalette />
     </div>
   );
 }

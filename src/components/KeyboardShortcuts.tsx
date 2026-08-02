@@ -55,6 +55,13 @@ export function KeyboardShortcuts() {
         return;
       }
 
+      // Ctrl/Cmd+P -> command palette
+      if (mod && e.key.toLowerCase() === 'p') {
+        e.preventDefault();
+        useUi.getState().setPaletteOpen(true);
+        return;
+      }
+
       // g <key> leader navigation (when not typing)
       if (!mod) {
         if (e.key === '?') {

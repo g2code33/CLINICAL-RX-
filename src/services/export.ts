@@ -1,8 +1,6 @@
-import type { Bundle } from '../types';
+import type { Bundle, ClinicalDay } from '../types';
 
-export async function bundleToPdf(b: Bundle): Promise<string> {
-  // jsPDF is imported lazily so the web bundle stays lean and it works in both
-  // Electron and the browser.
+async function makePdf(title: string, subtitle: string, sections: Array<{ heading: string; lines: string[] }>): Promise<string> {
   const { jsPDF } = await import('jspdf');
   const doc = new jsPDF({ unit: 'pt', format: 'a4' });
   const pageW = doc.internal.pageSize.getWidth();
@@ -13,13 +11,13 @@ export async function bundleToPdf(b: Bundle): Promise<string> {
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(20);
   doc.setTextColor(35, 112, 76);
-  doc.text(b.title, margin, y);
+  doc.text(title, margin, y);
   y += 22;
 
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(10);
   doc.setTextColor(100, 100, 100);
-  doc.text(`Type: ${b.type}   ·   Period: ${b.periodStart} → ${b.periodEnd}   ·   Created: ${new Date(b.createdAt).toLocaleString()}`, margin, y);
+  doc.text(subtitle, margin, y);
   y += 24;
 
   const line = (text: string) => {
@@ -34,49 +32,68 @@ export async function bundleToPdf(b: Bundle): Promise<string> {
     }
   };
 
-  doc.setFontSize(12);
-  doc.setTextColor(20, 20, 20);
-  doc.setFont('helvetica', 'bold');
-  doc.text('Summary', margin, y);
-  y += 16;
-  doc.setFont('helvetica', 'normal');
-  line(b.summary || 'No summary.');
-  y += 8;
-
-  const stats = Object.entries(b.stats);
-  if (stats.length) {
+  for (const section of sections) {
+    doc.setFontSize(12);
+    doc.setTextColor(20, 20, 20);
     doc.setFont('helvetica', 'bold');
-    doc.text('Statistics', margin, y);
+    doc.text(section.heading, margin, y);
     y += 16;
     doc.setFont('helvetica', 'normal');
-    for (const [k, v] of stats) line(`${k}: ${v}`);
+    if (section.lines.length) section.lines.forEach((l) => line('• ' + l));
+    else line('None.');
     y += 8;
   }
 
-  doc.setFont('helvetica', 'bold');
-  doc.text('Knowledge gaps', margin, y);
-  y += 16;
-  doc.setFont('helvetica', 'normal');
-  if (b.knowledgeGaps.length) b.knowledgeGaps.forEach((g) => line('• ' + g));
-  else line('None identified.');
-  y += 8;
+  return doc.output('dataurlstring');
+}
 
-  doc.setFont('helvetica', 'bold');
-  doc.text('Recommended revision', margin, y);
-  y += 16;
-  doc.setFont('helvetica', 'normal');
-  if (b.recommendedRevision.length) b.recommendedRevision.forEach((r) => line('• ' + r));
-  else line('None.');
-  y += 8;
+export async function bundleToPdf(b: Bundle): Promise<string> {
+  const stats = Object.entries(b.stats).map(([k, v]) => `${k}: ${v}`);
+  return makePdf(b.title, `Type: ${b.type}   ·   Period: ${b.periodStart} → ${b.periodEnd}   ·   Created: ${new Date(b.createdAt).toLocaleString()}`, [
+    { heading: 'Summary', lines: b.summary ? b.summary.split('\n') : ['No summary.'] },
+    { heading: 'Statistics', lines: stats },
+    { heading: 'Knowledge gaps', lines: b.knowledgeGaps },
+    { heading: 'Recommended revision', lines: b.recommendedRevision },
+    { heading: 'Highlights', lines: b.highlights },
+  ]);
+}
 
-  doc.setFont('helvetica', 'bold');
-  doc.text('Highlights', margin, y);
-  y += 16;
-  doc.setFont('helvetica', 'normal');
-  if (b.highlights.length) b.highlights.forEach((h) => line('• ' + h));
-  else line('None.');
+export async function dayToPdf(d: ClinicalDay): Promise<string> {
+  const sections = [
+    { heading: 'Conditions', lines: d.conditions },
+    { heading: 'Medicines', lines: d.medicines },
+    { heading: 'Investigations', lines: d.investigations },
+    { heading: 'Observations', lines: d.observations },
+    { heading: 'What I learned', lines: d.lessons },
+    { heading: 'Uncertainties', lines: d.uncertainties },
+    { heading: 'Topics to research', lines: d.topicsToResearch },
+  ];
+  return makePdf(`Clinical Day ${d.dayNumber} — ${d.site}`, `Date: ${d.date}`, sections);
+}
 
-  return doc.output('dataurlstring'); // data:application/pdf;base64,...
+export function dayToMarkdown(d: ClinicalDay): string {
+  const lines: string[] = [];
+  lines.push(`# Clinical Day ${d.dayNumber} — ${d.site}`);
+  lines.push('');
+  lines.push(`**Date:** ${d.date}`);
+  lines.push('');
+  const sections: Array<[string, string[]]> = [
+    ['Conditions', d.conditions],
+    ['Medicines', d.medicines],
+    ['Investigations', d.investigations],
+    ['Observations', d.observations],
+    ['What I learned', d.lessons],
+    ['Uncertainties', d.uncertainties],
+    ['Topics to research', d.topicsToResearch],
+  ];
+  for (const [title, items] of sections) {
+    lines.push(`## ${title}`);
+    lines.push('');
+    if (items.length) items.forEach((it) => lines.push(`- ${it}`));
+    else lines.push('_None._');
+    lines.push('');
+  }
+  return lines.join('\n');
 }
 
 export function bundleToMarkdown(b: Bundle): string {

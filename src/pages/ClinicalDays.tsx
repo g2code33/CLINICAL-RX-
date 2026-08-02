@@ -3,6 +3,8 @@ import { useData } from '../stores/data';
 import { PageHeader, EmptyState } from '../components/ui';
 import { TagInput } from '../components/Modal';
 import { newDay, todayIso } from '../services/defaults';
+import { dayToMarkdown, dayToPdf, downloadText } from '../services/export';
+import { scanForPhi, privacyWarning } from '../services/privacy';
 
 const SECTIONS: Array<{ key: 'conditions' | 'medicines' | 'investigations' | 'observations' | 'lessons' | 'uncertainties' | 'topicsToResearch'; label: string; icon: string }> = [
   { key: 'conditions', label: 'Conditions encountered', icon: '🦠' },
@@ -37,6 +39,26 @@ export function ClinicalDays() {
     await save('day', { ...day, [key]: value });
   }
 
+  async function exportDay(kind: 'md' | 'pdf') {
+    if (!day) return;
+    const text = dayToMarkdown(day);
+    const finding = scanForPhi(text);
+    if (finding.length) {
+      alert(`⚠️ Potential patient-identifying info detected (${privacyWarning(finding)}). Review before sharing.`);
+    }
+    const base = `clinical-day-${day.dayNumber}`;
+    if (kind === 'md') {
+      downloadText(`${base}.md`, text);
+    } else {
+      const dataUrl = await dayToPdf(day);
+      const a = document.createElement('a');
+      a.href = dataUrl;
+      a.download = `${base}.pdf`;
+      a.click();
+    }
+    useData.getState().setStatus(`✓ Exported ${kind.toUpperCase()}`);
+  }
+
   return (
     <div>
       <PageHeader
@@ -66,9 +88,13 @@ export function ClinicalDays() {
 
           {day && (
             <div className="card space-y-5">
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between gap-2">
                 <h2 className="text-lg font-bold">Clinical Day {day.dayNumber} — {day.site}</h2>
-                <div className="text-xs text-slate-400">{day.date}</div>
+                <div className="flex shrink-0 items-center gap-1.5">
+                  <button className="btn-ghost !py-0.5 text-xs" onClick={() => exportDay('md')} title="Export as Markdown">⬇ MD</button>
+                  <button className="btn-ghost !py-0.5 text-xs" onClick={() => exportDay('pdf')} title="Export as PDF">⬇ PDF</button>
+                  <div className="text-xs text-slate-400">{day.date}</div>
+                </div>
               </div>
               {SECTIONS.map((s) => (
                 <div key={s.key}>

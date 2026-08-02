@@ -6,6 +6,18 @@ function pct(part: number, total: number) {
   return total === 0 ? 0 : Math.round((part / total) * 100);
 }
 
+function Insight({ icon, label, value, color }: { icon: string; label: string; value: string | number; color: string }) {
+  return (
+    <div className="card flex items-center gap-3">
+      <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-xl ${color}`}>{icon}</div>
+      <div>
+        <div className="text-xs font-medium uppercase tracking-wide text-slate-400">{label}</div>
+        <div className="text-2xl font-extrabold text-slate-800 dark:text-slate-100">{value}</div>
+      </div>
+    </div>
+  );
+}
+
 export function Progress() {
   const navigate = useNavigate();
   const diseases = useData((s) => s.diseases);
@@ -14,6 +26,7 @@ export function Progress() {
   const questions = useData((s) => s.questions);
   const lessons = useData((s) => s.lessons);
   const bundles = useData((s) => s.bundles);
+  const revisions = useData((s) => s.revisions);
   const days = useData((s) => s.days);
 
   const patho = diseases.length ? pct(diseases.filter((d) => d.what && d.why && d.how).length, diseases.length) : 0;
@@ -56,6 +69,12 @@ export function Progress() {
         <StatCard icon="📋" label="Clinical days" value={days.length} />
         <StatCard icon="📦" label="Bundles" value={bundles.length} />
         <StatCard icon="💡" label="Lessons" value={lessons.length} />
+      </div>
+
+      <div className="mt-6 grid gap-4 md:grid-cols-3">
+        <Insight label="Revision due" value={revisions.filter((r) => r.due).length} icon="📚" color="bg-amber-100 dark:bg-amber-900" />
+        <Insight label="Open questions" value={questions.filter((q) => q.status === 'open').length} icon="❓" color="bg-red-100 dark:bg-red-900" />
+        <Insight label="Overall learning" value={`${overall}%`} icon="🎯" color="bg-brand-100 dark:bg-brand-900" />
       </div>
 
       <div className="mt-6 grid gap-6 lg:grid-cols-2">
