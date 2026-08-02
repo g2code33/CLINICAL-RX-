@@ -20,7 +20,7 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "smoke": "node smoke.mjs",
-    "vercel-build": "vite build"
+    "vercel-build": "vite build && tsc -p tsconfig.api.json"
   },
   "build": {
     "appId": "com.g2code33.clinicalrx",
