@@ -7,6 +7,8 @@ interface UiState {
   setHelpOpen: (open: boolean) => void;
   paletteOpen: boolean;
   setPaletteOpen: (open: boolean) => void;
+  sidebarOpen: boolean;
+  setSidebarOpen: (open: boolean) => void;
 }
 
 export const useUi = create<UiState>((set) => ({
@@ -16,4 +18,6 @@ export const useUi = create<UiState>((set) => ({
   setHelpOpen: (open) => set({ helpOpen: open }),
   paletteOpen: false,
   setPaletteOpen: (open) => set({ paletteOpen: open }),
+  sidebarOpen: true,
+  setSidebarOpen: (open) => set({ sidebarOpen: open }),
 }));

@@ -3,6 +3,7 @@ import { useData } from '../stores/data';
 import { PageHeader, EmptyState } from '../components/ui';
 import { TagInput } from '../components/Modal';
 import { newDay, todayIso } from '../services/defaults';
+import { CloudSyncPrompt } from '../components/CloudSyncPrompt';
 import { dayToMarkdown, dayToPdf, downloadText } from '../services/export';
 import { scanForPhi, privacyWarning } from '../services/privacy';
 
@@ -64,7 +65,12 @@ export function ClinicalDays() {
       <PageHeader
         title="Clinical Days"
         subtitle="Record what you see and learn each day — no patient-identifying information."
-        action={<button className="btn-primary" onClick={addDay}>＋ New Clinical Day</button>}
+        action={
+          <div className="flex flex-wrap items-center gap-2">
+            <CloudSyncPrompt />
+            <button className="btn-primary" onClick={addDay}>＋ New Clinical Day</button>
+          </div>
+        }
       />
 
       {days.length === 0 ? (

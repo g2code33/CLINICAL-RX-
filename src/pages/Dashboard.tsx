@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useData } from '../stores/data';
 import { StatCard, EmptyState } from '../components/ui';
 import { QuickAdd } from '../components/QuickAdd';
+import { CloudSyncPrompt } from '../components/CloudSyncPrompt';
 import { newDay, todayIso } from '../services/defaults';
 
 export function Dashboard() {
@@ -39,7 +40,10 @@ export function Dashboard() {
           <h1 className="text-2xl font-bold">{greet}, {profile.username} 👋</h1>
           <p className="text-sm text-slate-500 dark:text-slate-400">Clinical Day {profile.clinicalDay} · {profile.site}</p>
         </div>
-        <button className="btn-primary" onClick={() => setQuick(true)}>＋ Quick Capture</button>
+        <div className="flex items-center gap-2">
+          <CloudSyncPrompt />
+          <button className="btn-primary" onClick={() => setQuick(true)}>＋ Quick Capture</button>
+        </div>
       </div>
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">

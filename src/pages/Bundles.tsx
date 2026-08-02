@@ -6,6 +6,7 @@ import { generateBundle, mergeBundles, processAiQueue, getPendingAiCount, aiAvai
 import { bundleToMarkdown, bundleToJson, bundleToPdf, downloadText, copyToClipboard } from '../services/export';
 import { scanForPhi, privacyWarning } from '../services/privacy';
 import { aiChat } from '../services/ai';
+import { CloudSyncPrompt } from '../components/CloudSyncPrompt';
 import type { Bundle } from '../types';
 
 type Filter = 'all' | 'auto' | 'manual' | 'merged';
@@ -123,6 +124,7 @@ export function Bundles() {
         subtitle="Automatic, manual and merged bundles — each stored independently and permanently."
         action={
           <div className="flex flex-wrap gap-2">
+            <CloudSyncPrompt />
             {pendingAiCount > 0 && (
               <button className="btn-secondary border-amber-300 text-amber-700 dark:border-amber-700 dark:text-amber-300" onClick={processPendingAi} title="Process bundles awaiting AI with the AI Bundler">
                 🤖 {pendingAiCount} AI pending

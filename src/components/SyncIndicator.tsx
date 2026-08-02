@@ -1,12 +1,25 @@
+import { useNavigate } from 'react-router-dom';
 import { useData } from '../stores/data';
 import { getPendingCount } from '../services/syncEngine';
 
 export function SyncIndicator() {
+  const navigate = useNavigate();
   const connected = useData((s) => s.settings?.onlineAccount?.connected);
   const syncing = useData((s) => s.settings?.onlineAccount?.syncing);
   const pending = getPendingCount();
 
-  if (!connected) return null;
+  // Not connected: offer a "sign in to sync" shortcut that goes to Settings.
+  if (!connected) {
+    return (
+      <button
+        className="btn-ghost !py-1 text-sm"
+        onClick={() => navigate('/settings')}
+        title="Sign in to sync across devices"
+      >
+        ☁️ Sign in
+      </button>
+    );
+  }
 
   return (
     <button
