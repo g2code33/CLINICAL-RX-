@@ -3,6 +3,7 @@ import { useData } from '../stores/data';
 import { PageHeader } from '../components/ui';
 import { UpdatePanel } from '../components/UpdatePanel';
 import { AI_MODULES, newSettings } from '../services/defaults';
+import { loadSampleData } from '../services/demo';
 import { syncClient } from '../services/syncClient';
 import { syncNow, getPendingCount } from '../services/syncEngine';
 import type { AppearanceMode, Settings } from '../types';
@@ -274,6 +275,9 @@ export function SettingsPage() {
               ⬆ Import backup
               <input type="file" accept="application/json" className="hidden" onChange={(e) => e.target.files?.[0] && importBackup(e.target.files[0])} />
             </label>
+            <button className="btn-secondary w-full" onClick={async () => { if (await loadSampleData()) setStatus('✓ Sample data loaded'); }}>
+              🧪 Load sample data
+            </button>
             <button className="btn-secondary w-full !text-red-600" onClick={clearAll}>🗑 Clear all data</button>
           </div>
           <p className="mt-3 text-[11px] text-slate-400">

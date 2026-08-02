@@ -93,6 +93,11 @@ export function Progress() {
         </div>
       </div>
 
+      <div className="mt-6 card">
+        <h2 className="mb-3 font-semibold">📈 Clinical encounters over time</h2>
+        <EncountersChart days={days} medicines={medicines} diseases={diseases} />
+      </div>
+
       <div className="mt-6 grid gap-6 lg:grid-cols-2">
         <div className="card">
           <h2 className="mb-3 font-semibold">Most encountered conditions</h2>
@@ -126,5 +131,43 @@ function TopList({ items, onClick }: { items: Array<{ name: string; count: numbe
         <button className="btn-ghost !p-0 text-xs" onClick={onClick}>View all →</button>
       )}
     </div>
+  );
+}
+
+function EncountersChart({ days, medicines, diseases }: { days: any[]; medicines: any[]; diseases: any[] }) {
+  const sorted = [...days].sort((a, b) => a.date.localeCompare(b.date));
+  if (sorted.length < 2) {
+    return <p className="text-sm text-slate-400">Add at least two clinical days to see your progress over time.</p>;
+  }
+  const points = sorted.map((d, i) => {
+    const meds = d.medicines?.length ?? 0;
+    const conds = d.conditions?.length ?? 0;
+    return { label: `Day ${d.dayNumber}`, date: d.date, value: meds + conds };
+  });
+  const max = Math.max(...points.map((p) => p.value), 1);
+  const W = 560, H = 180, pad = 30;
+  const stepX = (W - pad * 2) / Math.max(points.length - 1, 1);
+  const coord = (p: { value: number }, i: number) => [pad + i * stepX, H - pad - (p.value / max) * (H - pad * 2)] as const;
+  const line = points.map((p, i) => coord(p, i));
+  const area = [...line.map(([x, y]) => `${x},${y}`), `${W - pad},${H - pad}`, `${pad},${H - pad}`].join(' ');
+  const dots = line.map(([x, y], i) => ({ x, y, label: points[i].label, value: points[i].value, date: points[i].date }));
+
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} className="w-full">
+      {[0.25, 0.5, 0.75, 1].map((f) => (
+        <line key={f} x1={pad} x2={W - pad} y1={H - pad - f * (H - pad * 2)} y2={H - pad - f * (H - pad * 2)} stroke="currentColor" strokeOpacity="0.08" strokeWidth="1" />
+      ))}
+      <polygon points={area} fill="#2f8d60" fillOpacity="0.15" />
+      <polyline points={line.map((p) => p.join(',')).join(' ')} fill="none" stroke="#2f8d60" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+      {dots.map((d, i) => (
+        <g key={i}>
+          <circle cx={d.x} cy={d.y} r="4" fill="#23704c" stroke="#fff" strokeWidth="1.5" />
+          <title>{`${d.label} (${d.date}): ${d.value} encounter(s)`}</title>
+        </g>
+      ))}
+      {dots.map((d, i) => (
+        <text key={'t' + i} x={d.x} y={H - 6} textAnchor="middle" fontSize="11" fill="currentColor" fillOpacity="0.6">{d.label}</text>
+      ))}
+    </svg>
   );
 }

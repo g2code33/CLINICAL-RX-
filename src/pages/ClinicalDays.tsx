@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useData } from '../stores/data';
 import { PageHeader, EmptyState } from '../components/ui';
 import { TagInput } from '../components/Modal';
-import { newDay } from '../services/defaults';
+import { newDay, todayIso } from '../services/defaults';
 
 const SECTIONS: Array<{ key: 'conditions' | 'medicines' | 'investigations' | 'observations' | 'lessons' | 'uncertainties' | 'topicsToResearch'; label: string; icon: string }> = [
   { key: 'conditions', label: 'Conditions encountered', icon: '🦠' },
@@ -18,7 +18,11 @@ export function ClinicalDays() {
   const days = useData((s) => s.days);
   const profile = useData((s) => s.profile)!;
   const save = useData((s) => s.save);
-  const [selected, setSelected] = useState<string | null>(days[0]?.id ?? null);
+  const [selected, setSelected] = useState<string | null>(() => {
+    // Prefer today's log if it exists, else the most recent day.
+    const today = days.find((d) => d.date === todayIso());
+    return (today?.id ?? days[0]?.id ?? null);
+  });
   const day = days.find((d) => d.id === selected) ?? null;
 
   async function addDay() {

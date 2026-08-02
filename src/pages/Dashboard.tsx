@@ -23,11 +23,12 @@ export function Dashboard() {
   const greet = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
 
   async function startToday() {
-    if (today) return;
-    const next = newDay((profile.clinicalDay || 1) + (days.length ? 0 : 1), profile.site);
-    await save('day', next);
-    const p = { ...profile, clinicalDay: next.dayNumber };
-    await useData.getState().saveProfile(p);
+    if (!today) {
+      const next = newDay((profile.clinicalDay || 1) + (days.length ? 0 : 1), profile.site);
+      await save('day', next);
+      const p = { ...profile, clinicalDay: next.dayNumber };
+      await useData.getState().saveProfile(p);
+    }
     navigate('/clinical');
   }
 
@@ -68,9 +69,9 @@ export function Dashboard() {
           ) : (
             <EmptyState icon="📋" title="No log for today yet" hint="Start today's clinical log to begin capturing what you see and learn." />
           )}
-          {!today && (
-            <button className="btn-primary mt-4 w-full" onClick={startToday}>＋ Start Today's Log</button>
-          )}
+          <button className="btn-primary mt-4 w-full" onClick={startToday}>
+            {today ? "✏️ Continue today's log" : "＋ Start Today's Log"}
+          </button>
         </div>
 
         <div className="space-y-3">
