@@ -1,0 +1,113 @@
+name: Build & Release Desktop App
+
+# HOW TO USE
+# ----------
+# 1. Copy this file to:  .github/workflows/build-desktop.yml
+# 2. Commit + push. From then on, EVERY push to `main`:
+#      - builds Windows (NSIS .exe + latest.yml) and Linux (.deb + AppImage
+#        + latest-linux.yml)
+#      - publishes them to a real GitHub Release (not a draft/pre-release),
+#        which is what the in-app 🔄 Update button reads
+#    No tags, no manual steps.
+# 3. To make existing users see an update, bump "version" in package.json
+#    (e.g. 1.0.0 -> 1.0.1) and push. The release's latest.yml carries the new
+#    version, so the app shows "🔄 Update available".
+
+on:
+  push:
+    branches: [main, arena/*]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build ${{ matrix.os }}
+    # PRs and non-main branches: build only, upload artifacts (no release).
+    if: github.ref != 'refs/heads/main'
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type-check
+        run: npm run typecheck
+
+      - name: Build renderer (web build)
+        run: npm run build:web
+
+      - name: Build Electron main process
+        run: npm run build:electron
+
+      - name: Package Electron app
+        run: npm run dist -- --publish never
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: clinical-rx-${{ matrix.os }}
+          path: |
+            release/*.AppImage
+            release/*.deb
+            release/*.exe
+            release/*.yml
+          if-no-files-found: warn
+
+  release:
+    name: Release ${{ matrix.os }}
+    # Push to main: build AND publish a GitHub Release automatically.
+    # Bump "version" in package.json to make the in-app update button fire.
+    if: github.ref == 'refs/heads/main'
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type-check
+        run: npm run typecheck
+
+      - name: Build renderer (web build)
+        run: npm run build:web
+
+      - name: Build Electron main process
+        run: npm run build:electron
+
+      - name: Build & publish desktop app to GitHub Releases
+        run: npm run dist -- --publish always
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Always (re)publish assets for this version, even if the release
+          # was created more than 2 hours ago by an earlier push.
+          EP_GH_IGNORE_TIME: 'true'
