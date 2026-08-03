@@ -65,7 +65,7 @@ module.exports = guard(async function handler(req, res) {
     if (found.data.id === userId) return fail(res, 400, 'Cannot delete your own account here.');
     await redis.hdel('users', found.email);
     try { await redis.hdel('sync:' + found.data.id); } catch {}
-    try { await redis.set('aiConfig:' + found.data.id, ''); } catch {}
+    try { await redis.del('aiConfig:' + found.data.id); } catch {}
     return ok(res, 200, { message: `User ${found.email} deleted` });
   }
 

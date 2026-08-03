@@ -7,7 +7,8 @@ import { UpdatePanel } from '../components/UpdatePanel';
 import { AI_MODULES, newSettings } from '../services/defaults';
 import { loadSampleData } from '../services/demo';
 import { syncClient } from '../services/syncClient';
-import { syncNowFull, autoSyncOnLogin, getPendingCount } from '../services/syncEngine';
+import { syncNowFull, autoSyncOnLogin, getPendingCount, savePending } from '../services/syncEngine';
+import { saveBank } from '../services/questionBank';
 import type { AppearanceMode, Settings } from '../types';
 
 export function SettingsPage() {
@@ -154,6 +155,10 @@ export function SettingsPage() {
     const st = useData.getState();
     const modules: any[] = ['day', 'disease', 'medicine', 'investigation', 'question', 'lesson', 'revision', 'bundle', 'profile', 'settings'];
     for (const m of modules) { const items = await st.adapter.list(m); for (const it of items) await st.adapter.remove(m, it.id); }
+    // Also drop the offline sync queue and the question bank so no stale
+    // operations or questions survive a full reset.
+    savePending([]);
+    saveBank([]);
     const fresh = newSettings(); await saveSettings(fresh);
     const p = useData.getState().profile;
     if (p) { const np = { ...p, id: 'profile-' + Date.now(), createdAt: Date.now() }; await useData.getState().saveProfile(np); }

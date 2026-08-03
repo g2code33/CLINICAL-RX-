@@ -30,7 +30,7 @@ module.exports = guard(async function handler(req, res) {
 
   await redis.hdel('users', userEmail);
   try { await redis.hdel('sync:' + userId); } catch {}
-  try { await redis.set('aiConfig:' + userId, ''); } catch {}
+  try { await redis.del('aiConfig:' + userId); } catch {}
 
   return ok(res, 200, { message: 'Account deleted successfully.' });
 });

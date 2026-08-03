@@ -11,7 +11,9 @@ async function handler(req, res) {
 
   if (req.method === 'GET') {
     const config = await redis.get(`aiConfig:${userId}`);
-    return ok(res, 200, { aiConfig: config ? JSON.parse(config) : null });
+    let parsed = null;
+    if (config) { try { parsed = JSON.parse(config); } catch { parsed = null; } }
+    return ok(res, 200, { aiConfig: parsed });
   }
 
   if (req.method === 'POST') {

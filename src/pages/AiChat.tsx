@@ -92,7 +92,15 @@ export function AiChat() {
     if (!parsedRecords) return;
     const state = useData.getState();
     const save = state.save;
-    const day = state.days.find((d) => d.date === todayIso());
+    // Copy the day record so we never mutate the store's object in place.
+    const existing = state.days.find((d) => d.date === todayIso());
+    const day = existing ? {
+      ...existing,
+      conditions: [...existing.conditions],
+      medicines: [...existing.medicines],
+      investigations: [...existing.investigations],
+      lessons: [...existing.lessons],
+    } : null;
     const saved: string[] = [];
 
     for (const name of parsedRecords.diseases) {
@@ -132,7 +140,7 @@ export function AiChat() {
     }
     if (day && (parsedRecords.diseases.length || parsedRecords.medicines.length || parsedRecords.investigations.length || parsedRecords.lessons.length)) {
       day.updatedAt = Date.now();
-      await save('day', { ...day });
+      await save('day', day);
     }
     setParsedRecords(null);
     setMsgs((m) => [...m, { role: 'ai', text: saved.length ? `✓ Saved ${saved.length} record(s):\n${saved.join('\n')}` : 'Nothing to save.' }]);

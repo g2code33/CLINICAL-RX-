@@ -43,8 +43,8 @@ export interface DataStore {
 
   all: (module: ModuleType) => Array<BaseRecord & Record<string, any>>;
   getById: (module: ModuleType, id: string) => any | null;
-  save: <T extends BaseRecord>(module: ModuleType, record: T) => Promise<void>;
-  remove: (module: ModuleType, id: string) => Promise<void>;
+  save: <T extends BaseRecord>(module: ModuleType, record: T, opts?: { fromSync?: boolean }) => Promise<void>;
+  remove: (module: ModuleType, id: string, opts?: { fromSync?: boolean }) => Promise<void>;
 
   setStatus: (s: string) => void;
 }
@@ -154,12 +154,16 @@ export const useData = create<DataStore>((set, get) => ({
     return get().all(module).find((r) => r.id === id) ?? null;
   },
 
-  save: async (module, record) => {
+  save: async (module, record, opts) => {
     const adapter = get().adapter;
+    const fromSync = opts?.fromSync === true;
     const now = Date.now();
-    const rec = { ...record, updatedAt: now };
+    // Records applied from a sync must keep the server's updatedAt and must
+    // NOT be re-enqueued, otherwise every pull pushes everything back up and
+    // the sync never converges.
+    const rec = fromSync ? { ...record } : { ...record, updatedAt: now };
     await adapter.put(module, rec.id, rec, rec.createdAt, rec.updatedAt);
-    if (backendConfigured()) enqueue({ op: 'upsert', module, id: rec.id, data: rec, createdAt: rec.createdAt, updatedAt: now });
+    if (!fromSync && backendConfigured()) enqueue({ op: 'upsert', module, id: rec.id, data: rec, createdAt: rec.createdAt, updatedAt: rec.updatedAt });
     set((s) => {
       const key = module + 's';
       const listKey = (key in s ? key : module) as keyof DataStore;
@@ -171,14 +175,15 @@ export const useData = create<DataStore>((set, get) => ({
     });
   },
 
-  remove: async (module, id) => {
+  remove: async (module, id, opts) => {
     const adapter = get().adapter;
+    const fromSync = opts?.fromSync === true;
     await adapter.remove(module, id);
-    if (backendConfigured()) enqueue({ op: 'delete', module, id });
+    if (!fromSync && backendConfigured()) enqueue({ op: 'delete', module, id });
     set((s) => {
       const listKey = (module + 's' in s ? module + 's' : module) as keyof DataStore;
       const existing = (s[listKey] as BaseRecord[]) || [];
-      return { [listKey]: existing.filter((r) => r.id !== id), status: '✓ Deleted' } as any;
+      return { [listKey]: existing.filter((r) => r.id !== id), status: fromSync ? '✓ Synced' : '✓ Deleted' } as any;
     });
   },
 

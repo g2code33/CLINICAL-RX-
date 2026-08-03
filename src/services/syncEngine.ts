@@ -61,23 +61,31 @@ function applyServerRecords(records: SyncRecord[]) {
   const tasks: Promise<void>[] = [];
   for (const m of modules) {
     for (const local of st.all(m)) {
-      const server = byKey.get(`${m}:${local.id}`);
+      const key = `${m}:${local.id}`;
+      const server = byKey.get(key);
       if (!server) continue;
       if (server.deleted) {
-        tasks.push(st.remove(m, local.id));
-        byKey.delete(`${m}:${local.id}`);
+        // Server says the record is deleted. Remove locally without
+        // re-enqueueing a delete (it's already deleted server-side).
+        tasks.push(st.remove(m, local.id, { fromSync: true }));
+        byKey.delete(key);
         continue;
       }
-      if (server.updatedAt >= local.updatedAt) {
-        tasks.push(st.save(m, { ...local, ...(server.data as any), updatedAt: server.updatedAt, createdAt: server.createdAt }));
-        byKey.delete(`${m}:${local.id}`);
+      if (server.updatedAt > local.updatedAt) {
+        // Server is newer: adopt it verbatim (keep its updatedAt, don't enqueue).
+        tasks.push(st.save(m, { ...local, ...(server.data as any), updatedAt: server.updatedAt, createdAt: server.createdAt }, { fromSync: true }));
+        byKey.delete(key);
+      } else {
+        // Local is newer or equal: keep local; drop the server copy so the
+        // "not present locally" pass below cannot overwrite our newer data.
+        byKey.delete(key);
       }
     }
     // Add records present on server but not locally.
     for (const [key, rec] of Array.from(byKey.entries())) {
       if (!key.startsWith(m + ':')) continue;
       if (rec.deleted) continue;
-      tasks.push(st.save(m, { id: rec.id, createdAt: rec.createdAt, updatedAt: rec.updatedAt, ...(rec.data as any) } as any));
+      tasks.push(st.save(m, { id: rec.id, createdAt: rec.createdAt, updatedAt: rec.updatedAt, ...(rec.data as any) } as any, { fromSync: true }));
       byKey.delete(key);
     }
   }

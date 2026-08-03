@@ -32,7 +32,9 @@ async function handler(req, res) {
     const user = JSON.parse(userRaw);
     user.password = hashPassword(password);
     await redis.hset('users', { [e]: JSON.stringify(user) });
-    await redis.hdel(`reset:${token}`);
+    // Tokens are stored as plain scalar keys (redis.set), so delete the key —
+    // hdel only works on hashes and would silently leave the token reusable.
+    await redis.del(`reset:${token}`);
     return ok(res, 200, { message: 'Password reset successfully.' });
   }
 

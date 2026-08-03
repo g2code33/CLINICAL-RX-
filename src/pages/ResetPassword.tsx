@@ -11,25 +11,27 @@ export function ResetPassword() {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState('');
 
-  // Read token from the hash, e.g. #/reset?token=abc
-  const token = new URLSearchParams(window.location.hash.split('?')[1] || '').get('token') || '';
+  // Read token/email from the hash, e.g. #/reset?token=abc&email=you@x.com
+  const params = new URLSearchParams(window.location.hash.split('?')[1] || '');
+  const token = params.get('token') || '';
+  const email = params.get('email') || '';
 
   async function submit() {
     if (!password) return;
     setBusy(true);
     setMsg('');
-    const res = await syncClient.reset(backendUrl, { method: 'token', token, password });
+    const res = await syncClient.reset(backendUrl, { method: 'token', email, token, password });
     setMsg(res.data?.message || res.error || 'Reset failed.');
     setBusy(false);
     if (res.ok) setStatus('✓ Password reset — you can now sign in.');
   }
 
-  if (!token) {
+  if (!token || !email) {
     return (
       <div className="flex h-full items-center justify-center">
         <div className="card max-w-md text-center">
           <h2 className="mb-2 text-lg font-bold">Invalid reset link</h2>
-          <p className="text-sm text-slate-400">This link is missing a reset token. Request a new one from Settings → Forgot password.</p>
+          <p className="text-sm text-slate-400">This link is incomplete. Request a fresh one from Settings → Forgot password (each link works only once and expires after 30 minutes).</p>
         </div>
       </div>
     );

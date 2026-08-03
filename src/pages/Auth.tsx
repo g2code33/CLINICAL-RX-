@@ -45,6 +45,8 @@ export function AuthPage() {
       const outcome = await autoSyncOnLogin();
       if (outcome.ok) setMsg(`✓ Signed in · pulled ${outcome.pulled} record(s)`);
       setTimeout(() => navigate('/'), 1200);
+    } catch (e: any) {
+      setMsg('⚠️ ' + (e?.message || 'Something went wrong. Please try again.'));
     } finally {
       setBusy(false);
     }

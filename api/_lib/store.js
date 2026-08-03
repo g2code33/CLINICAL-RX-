@@ -29,6 +29,10 @@ function makeUpstash() {
       try { await cmd('SET', key, value); }
       catch (e) { throw new Error('KV storage connection failed: ' + e.message); }
     },
+    async del(key) {
+      try { await cmd('DEL', key); }
+      catch (e) { throw new Error('KV storage connection failed: ' + e.message); }
+    },
     async hget(hash, field) {
       try { return (await cmd('HGET', hash, field)) ?? null; }
       catch (e) { throw new Error('KV storage connection failed: ' + e.message); }
@@ -68,10 +72,17 @@ function makeMemory() {
   return {
     async get(key) { return scalars.get(key) ?? null; },
     async set(key, value) { warn(); scalars.set(key, value); },
+    async del(key) { scalars.delete(key); },
     async hget(hash, field) { return hashes.get(hash)?.[field] ?? null; },
     async hset(hash, map) { warn(); const cur = hashes.get(hash) ?? {}; Object.assign(cur, map); hashes.set(hash, cur); },
     async hgetall(hash) { return hashes.get(hash) ?? null; },
-    async hdel(hash, ...fields) { const cur = hashes.get(hash); if (cur) for (const f of fields) delete cur[f]; },
+    async hdel(hash, ...fields) {
+      const cur = hashes.get(hash);
+      if (!cur) return;
+      for (const f of fields) delete cur[f];
+      // Match Upstash: a hash with no fields left reads back as null.
+      if (Object.keys(cur).length === 0) hashes.delete(hash);
+    },
   };
 }
 

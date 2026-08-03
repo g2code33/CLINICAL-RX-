@@ -22,7 +22,11 @@ export function QuickAdd({ open, onClose }: { open: boolean; onClose: () => void
     const text = value.trim();
     if (!text) return;
     const state = useData.getState();
-    const day = state.days.find((d) => d.date === todayIso());
+    const existing = state.days.find((d) => d.date === todayIso());
+    // Copy the day so we never mutate the store's object in place.
+    const day = existing
+      ? { ...existing, conditions: [...existing.conditions], medicines: [...existing.medicines], investigations: [...existing.investigations], lessons: [...existing.lessons] }
+      : null;
 
     if (kind === 'disease') {
       const d = newDisease(text);
@@ -30,7 +34,7 @@ export function QuickAdd({ open, onClose }: { open: boolean; onClose: () => void
       if (day) {
         if (!day.conditions.includes(text)) day.conditions.push(text);
         day.updatedAt = Date.now();
-        await save('day', { ...day });
+        await save('day', day);
       }
     } else if (kind === 'medicine') {
       const m = newMedicine(text);
@@ -38,7 +42,7 @@ export function QuickAdd({ open, onClose }: { open: boolean; onClose: () => void
       if (day) {
         if (!day.medicines.includes(text)) day.medicines.push(text);
         day.updatedAt = Date.now();
-        await save('day', { ...day });
+        await save('day', day);
       }
     } else if (kind === 'investigation') {
       const i = newInvestigation(text);
@@ -46,7 +50,7 @@ export function QuickAdd({ open, onClose }: { open: boolean; onClose: () => void
       if (day) {
         if (!day.investigations.includes(text)) day.investigations.push(text);
         day.updatedAt = Date.now();
-        await save('day', { ...day });
+        await save('day', day);
       }
     } else if (kind === 'question') {
       await save('question', newQuestion(text));
@@ -58,7 +62,7 @@ export function QuickAdd({ open, onClose }: { open: boolean; onClose: () => void
       if (day) {
         if (!day.lessons.includes(text)) day.lessons.push(text);
         day.updatedAt = Date.now();
-        await save('day', { ...day });
+        await save('day', day);
       }
     }
     setValue('');
