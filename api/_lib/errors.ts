@@ -19,8 +19,8 @@ export function guard(fn: (req: any, res: VercelResponse) => Promise<any>) {
       console.error('[clinical-rx] API error:', e);
       const message = e?.message || 'Unexpected server error.';
       // Distinguish storage-not-configured from real errors for friendlier UX.
-      if (/KV_REST_API|in-memory|storage|redis/i.test(message)) {
-        return fail(res, 503, 'Cloud storage is not configured. Please set KV_REST_API_URL and KV_REST_API_TOKEN (or deploy to Vercel with a KV store).');
+      if (/KV_REST_API|KV error|KV REST|in-memory|storage|redis|UPSTASH/i.test(message)) {
+        return fail(res, 503, 'Cloud storage is not configured. Please set KV_REST_API_URL and KV_REST_API_TOKEN in Vercel (Storage → KV → create).');
       }
       return fail(res, 500, message);
     }

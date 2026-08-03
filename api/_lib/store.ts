@@ -37,34 +37,58 @@ function makeUpstash(): KV {
   // Upstash REST returns raw Redis replies; translate for our helpers.
   return {
     async get(key) {
-      const v = await cmd('GET', key);
-      return v ?? null;
+      try {
+        const v = await cmd('GET', key);
+        return v ?? null;
+      } catch (e: any) {
+        throw new Error('KV storage connection failed: ' + (e?.message || 'unknown error') + '. Check KV_REST_API_URL and KV_REST_API_TOKEN in Vercel env vars.');
+      }
     },
     async set(key, value) {
-      await cmd('SET', key, value);
+      try {
+        await cmd('SET', key, value);
+      } catch (e: any) {
+        throw new Error('KV storage connection failed: ' + (e?.message || 'unknown error') + '. Check KV_REST_API_URL and KV_REST_API_TOKEN in Vercel env vars.');
+      }
     },
     async hget(hash, field) {
-      const v = await cmd('HGET', hash, field);
-      return v ?? null;
+      try {
+        const v = await cmd('HGET', hash, field);
+        return v ?? null;
+      } catch (e: any) {
+        throw new Error('KV storage connection failed: ' + (e?.message || 'unknown error') + '. Check KV_REST_API_URL and KV_REST_API_TOKEN in Vercel env vars.');
+      }
     },
     async hset(hash, map) {
-      const args: unknown[] = [hash];
-      for (const [k, v] of Object.entries(map)) args.push(k, v);
-      await cmd('HSET', ...args);
+      try {
+        const args: unknown[] = [hash];
+        for (const [k, v] of Object.entries(map)) args.push(k, v);
+        await cmd('HSET', ...args);
+      } catch (e: any) {
+        throw new Error('KV storage connection failed: ' + (e?.message || 'unknown error') + '. Check KV_REST_API_URL and KV_REST_API_TOKEN in Vercel env vars.');
+      }
     },
     async hgetall(hash) {
-      const v = await cmd('HGETALL', hash);
-      if (!v) return null;
-      // Redis HGETALL returns a flat array [k1,v1,k2,v2,...]
-      if (Array.isArray(v)) {
-        const out: Record<string, string> = {};
-        for (let i = 0; i < v.length; i += 2) out[String(v[i])] = String(v[i + 1]);
-        return out;
+      try {
+        const v = await cmd('HGETALL', hash);
+        if (!v) return null;
+        // Redis HGETALL returns a flat array [k1,v1,k2,v2,...]
+        if (Array.isArray(v)) {
+          const out: Record<string, string> = {};
+          for (let i = 0; i < v.length; i += 2) out[String(v[i])] = String(v[i + 1]);
+          return out;
+        }
+        return null;
+      } catch (e: any) {
+        throw new Error('KV storage connection failed: ' + (e?.message || 'unknown error') + '. Check KV_REST_API_URL and KV_REST_API_TOKEN in Vercel env vars.');
       }
-      return null;
     },
     async hdel(hash, ...fields) {
-      if (fields.length) await cmd('HDEL', hash, ...fields);
+      try {
+        if (fields.length) await cmd('HDEL', hash, ...fields);
+      } catch (e: any) {
+        throw new Error('KV storage connection failed: ' + (e?.message || 'unknown error') + '. Check KV_REST_API_URL and KV_REST_API_TOKEN in Vercel env vars.');
+      }
     },
     pipeline() {
       // Upstash supports pipelining via a single body with an array, but for
@@ -92,7 +116,7 @@ async function makeUpstashHset(hash: string, map: Record<string, string>): Promi
     headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
     body: JSON.stringify(args),
   });
-  if (!res.ok) throw new Error(`KV REST error ${res.status}: ${await res.text()}`);
+  if (!res.ok) throw new Error('KV storage connection failed (HSET): ' + (await res.text()) + '. Check KV_REST_API_URL and KV_REST_API_TOKEN in Vercel env vars.');
 }
 
 // ---- In-memory fallback (for local/dev without KV) ----

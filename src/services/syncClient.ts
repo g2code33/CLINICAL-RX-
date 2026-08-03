@@ -56,10 +56,14 @@ async function requestWithHeaders(
     }
     // Server returned a non-JSON error (e.g. a 500 HTML page from a crashed function).
     const bodyText = json === null ? await res.text().catch(() => '') : '';
+    let hint = 'Server error';
+    if (res.status === 503) hint = '☁️ Cloud storage is not set up';
+    else if (res.status === 404) hint = ' API endpoint not found';
+    else if (res.status === 0 || res.status === undefined) hint = '🌐 Network error — are you online?';
     return {
       ok: false,
       status: res.status,
-      error: `Server error (${res.status}). If it persists, the backend may not be deployed or configured correctly.`,
+      error: `${hint} (${res.status || 'network'}). ${res.status === 503 ? 'In Vercel: go to Storage → KV → create a store, then redeploy.' : 'If it persists, the backend may not be deployed or configured correctly.'}`,
       ...(bodyText ? { detail: bodyText.slice(0, 200) } : {}),
     };
   }
