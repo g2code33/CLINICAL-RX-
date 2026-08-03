@@ -1,4 +1,4 @@
-import { redis } from './redis';
+import { redis } from './redis.js';
 
 // A record that is pushed to / pulled from the cloud. `deleted` marks a tombstone.
 export interface SyncRecord {

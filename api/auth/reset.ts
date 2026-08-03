@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { redis } from '../_lib/redis';
-import { hashPassword, verifyHash } from '../_lib/auth';
-import { guard, fail, ok } from '../_lib/errors';
+import { redis } from '../_lib/redis.js';
+import { hashPassword, verifyHash } from '../_lib/auth.js';
+import { guard, fail, ok } from '../_lib/errors.js';
 
 async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') return fail(res, 405, 'Method not allowed');

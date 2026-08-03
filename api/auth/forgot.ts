@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import crypto from 'crypto';
-import { redis } from '../_lib/redis';
-import { guard, fail, ok } from '../_lib/errors';
+import { redis } from '../_lib/redis.js';
+import { guard, fail, ok } from '../_lib/errors.js';
 
 const RESEND_API_KEY = process.env.RESEND_API_KEY || '';
 const FROM_EMAIL = process.env.FROM_EMAIL || 'CLINICAL Rx <onboarding@resend.dev>';

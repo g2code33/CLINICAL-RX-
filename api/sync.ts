@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { extractToken, verifyToken } from './_lib/auth';
-import { getAll, putRecords, type SyncRecord } from './_lib/records';
-import { guard, fail, ok } from './_lib/errors';
+import { extractToken, verifyToken } from './_lib/auth.js';
+import { getAll, putRecords, type SyncRecord } from './_lib/records.js';
+import { guard, fail, ok } from './_lib/errors.js';
 
 async function handler(req: VercelRequest, res: VercelResponse) {
   const token = extractToken(req);
