@@ -3,7 +3,8 @@ function makeUpstash() {
   const token = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN || '';
 
   async function cmd(...parts) {
-    const res = await fetch(`${url}/${parts[0]}`, {
+    const command = parts[0].toLowerCase();
+    const res = await fetch(`${url}/${command}`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
       body: JSON.stringify(parts.slice(1)),
