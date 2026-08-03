@@ -17,6 +17,7 @@
     "typecheck": "tsc -b",
     "preview": "vite preview",
     "vercel-build": "vite build",
+    "postinstall": "node scripts/rebuild-electron-sqlite.mjs",
     "dist": "npm run build:web && npm run build:electron && electron-builder",
     "dist:win": "npm run build:web && npm run build:electron && electron-builder --win",
     "dist:linux": "npm run build:web && npm run build:electron && electron-builder --linux",
@@ -56,6 +57,7 @@
     "directories": {
       "output": "release"
     },
+    "npmRebuild": false,
     "files": [
       "dist/**/*",
       "dist-electron/**/*",
