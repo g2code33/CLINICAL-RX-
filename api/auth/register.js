@@ -1,10 +1,9 @@
-import type { VercelRequest, VercelResponse } from '@vercel/node';
-import crypto from 'crypto';
-import { redis } from '../_lib/redis.js';
-import { hashPassword, signToken, uuid } from '../_lib/auth.js';
-import { guard, fail, ok } from '../_lib/errors.js';
+const crypto = require('crypto');
+const { redis } = require('../_lib/redis.js');
+const { hashPassword, signToken, uuid } = require('../_lib/auth.js');
+const { guard, fail, ok } = require('../_lib/errors.js');
 
-async function handler(req: VercelRequest, res: VercelResponse) {
+async function handler(req, res) {
   if (req.method !== 'POST') return fail(res, 405, 'Method not allowed');
 
   const { email, password, name, securityQuestion, securityAnswer } = req.body || {};
@@ -32,4 +31,4 @@ async function handler(req: VercelRequest, res: VercelResponse) {
   return ok(res, 201, { token, user: { id, name: user.name, email: e } });
 }
 
-export default guard(handler);
+module.exports = guard(handler);
