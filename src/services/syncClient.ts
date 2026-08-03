@@ -60,14 +60,12 @@ export const syncClient = {
   // Admin endpoints
   listUsers(backendUrl: string | undefined, token: string) {
     return request(backendUrl, "/api/admin?action=list", "GET", token);
-  },,
+  },
   adminResetPassword(backendUrl: string | undefined, token: string, email: string, newPassword: string) {
     return request(backendUrl, "/api/admin", "POST", token, { action: "reset", email, newPassword });
-  },);
   },
   adminDeleteUser(backendUrl: string | undefined, token: string, email: string) {
     return request(backendUrl, "/api/admin", "POST", token, { action: "delete", email });
-  },);
   },
   forgot(backendUrl: string | undefined, email: string) { return request(backendUrl, '/api/auth/forgot', 'POST', undefined, { email }); },
   reset(backendUrl: string | undefined, payload: { method: string; email?: string; password?: string; token?: string; securityQuestion?: string; securityAnswer?: string; adminToken?: string }) {

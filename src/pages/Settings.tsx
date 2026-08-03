@@ -20,7 +20,7 @@ export function SettingsPage() {
   const setStatus = useData((s) => s.setStatus);
   const [draft, setDraft] = useState<Settings | null>(settings);
   const [showKeys, setShowKeys] = useState<Record<string, boolean>>({});
-  const [acctForm, setAcctForm] = useState({ email: '', password: '', name: draft?.onlineAccount?.name ?? profile?.name ?? '', backendUrl: draft?.onlineAccount?.backendUrl ?? '', securityQuestion: '', securityAnswer: '' });
+  const [acctForm, setAcctForm] = useState({ email: '', password: '', name: draft?.onlineAccount?.name ?? profile?.username ?? '', backendUrl: draft?.onlineAccount?.backendUrl ?? '', securityQuestion: '', securityAnswer: '' });
   const [acctBusy, setAcctBusy] = useState(false);
   const [syncState, setSyncState] = useState<string>('');
   const [forgotOpen, setForgotOpen] = useState(false);
@@ -42,8 +42,8 @@ export function SettingsPage() {
     persist({ ...draft, [key]: value } as Settings);
   }
 
-  function token(): string { return draft.onlineAccount?.token ?? ''; }
-  function bUrl(): string { return draft.onlineAccount?.backendUrl ?? ''; }
+  function token(): string { return draft?.onlineAccount?.token ?? ''; }
+  function bUrl(): string { return draft?.onlineAccount?.backendUrl ?? ''; }
 
   async function connect(mode: 'login' | 'register') {
     setAcctBusy(true);
@@ -79,9 +79,9 @@ export function SettingsPage() {
     try {
       const res = await syncClient.updateProfile(bUrl(), token(), { name: acctForm.name.trim(), securityQuestion: acctForm.securityQuestion.trim() || undefined, securityAnswer: acctForm.securityAnswer.trim() || undefined });
       if (!res.ok) { setSyncState('⚠️ ' + (res.error || 'Update failed.')); return; }
-      const acc = { ...draft.onlineAccount!, name: res.data.user.name };
+      const acc = { ...draft!.onlineAccount!, name: res.data.user.name };
       await persist({ ...draft, onlineAccount: acc } as Settings);
-      if (profile && acctForm.name.trim()) { await saveProfile({ ...profile, name: acctForm.name.trim() }); }
+      if (profile && acctForm.name.trim()) { await saveProfile({ ...profile, username: acctForm.name.trim() }); }
       setSyncState('✓ Profile updated');
     } catch (e: any) { setSyncState('⚠️ ' + (e?.message || 'Failed')); } finally { setAcctBusy(false); }
   }

@@ -23,7 +23,7 @@ const NAV = [
   { to: '/progress', icon: '📊', label: 'Progress' },
   { to: '/ai', icon: '🤖', label: 'AI' },
   { to: '/settings', icon: '⚙️', label: 'Settings' },
-        <Link to="/admin" className={navCls("/admin")} title="Admin Panel">️<span className="hidden md:inline ml-1">Admin</span></Link>
+  { to: '/admin', icon: '🛡️', label: 'Admin' },
 ];
 
 // Shown in the mobile bottom bar (keep it short).
