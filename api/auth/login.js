@@ -1,10 +1,8 @@
-import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { redis } from '../_lib/redis.js';
-import { verifyPassword, signToken } from '../_lib/auth.js';
-import type { User } from '../_lib/auth.js';
-import { guard, fail, ok } from '../_lib/errors.js';
+const { redis } = require('../_lib/redis.js');
+const { verifyPassword, signToken } = require('../_lib/auth.js');
+const { guard, fail, ok } = require('../_lib/errors.js');
 
-async function handler(req: VercelRequest, res: VercelResponse) {
+async function handler(req, res) {
   if (req.method !== 'POST') return fail(res, 405, 'Method not allowed');
 
   const { email, password } = req.body || {};
@@ -14,7 +12,7 @@ async function handler(req: VercelRequest, res: VercelResponse) {
   const raw = await redis.hget('users', e);
   if (!raw) return fail(res, 401, 'Invalid email or password.');
 
-  const user = JSON.parse(raw as string) as User;
+  const user = JSON.parse(raw);
   if (!verifyPassword(String(password), user.password)) {
     return fail(res, 401, 'Invalid email or password.');
   }
@@ -23,4 +21,4 @@ async function handler(req: VercelRequest, res: VercelResponse) {
   return ok(res, 200, { token, user: { id: user.id, name: user.name, email: e } });
 }
 
-export default guard(handler);
+module.exports = guard(handler);
