@@ -2,26 +2,62 @@ function makeUpstash() {
   const url = (process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL || '').replace(/\/$/, '');
   const token = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN || '';
 
-  async function cmd(...parts) {
-    const command = parts[0].toLowerCase();
-    const res = await fetch(`${url}/${command}`, {
+  async function cmd(command, ...args) {
+    const encodedArgs = args.map(a => encodeURIComponent(String(a)));
+    const path = encodedArgs.length > 0
+      ? `${command.toUpperCase()}/${encodedArgs.join('/')}`
+      : command.toUpperCase();
+    const res = await fetch(`${url}/${path}`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify(parts.slice(1)),
     });
-    if (!res.ok) throw new Error(`KV REST error ${res.status}: ${await res.text()}`);
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      throw new Error(`KV REST error ${res.status}: ${text}`);
+    }
     const data = await res.json();
     if (data && data.error) throw new Error('KV error: ' + data.error);
     return data?.result;
   }
 
   return {
-    async get(key) { try { return (await cmd('GET', key)) ?? null; } catch (e) { throw new Error('KV storage connection failed: ' + e.message); } },
-    async set(key, value) { try { await cmd('SET', key, value); } catch (e) { throw new Error('KV storage connection failed: ' + e.message); } },
-    async hget(hash, field) { try { return (await cmd('HGET', hash, field)) ?? null; } catch (e) { throw new Error('KV storage connection failed: ' + e.message); } },
-    async hset(hash, map) { try { const args = [hash]; for (const [k, v] of Object.entries(map)) args.push(k, v); await cmd('HSET', ...args); } catch (e) { throw new Error('KV storage connection failed: ' + e.message); } },
-    async hgetall(hash) { try { const v = await cmd('HGETALL', hash); if (!v) return null; if (Array.isArray(v)) { const out = {}; for (let i = 0; i < v.length; i += 2) out[String(v[i])] = String(v[i + 1]); return out; } return null; } catch (e) { throw new Error('KV storage connection failed: ' + e.message); } },
-    async hdel(hash, ...fields) { try { if (fields.length) await cmd('HDEL', hash, ...fields); } catch (e) { throw new Error('KV storage connection failed: ' + e.message); } },
+    async get(key) {
+      try { return (await cmd('GET', key)) ?? null; }
+      catch (e) { throw new Error('KV storage connection failed: ' + e.message); }
+    },
+    async set(key, value) {
+      try { await cmd('SET', key, value); }
+      catch (e) { throw new Error('KV storage connection failed: ' + e.message); }
+    },
+    async hget(hash, field) {
+      try { return (await cmd('HGET', hash, field)) ?? null; }
+      catch (e) { throw new Error('KV storage connection failed: ' + e.message); }
+    },
+    async hset(hash, map) {
+      try {
+        const args = [hash];
+        for (const [k, v] of Object.entries(map)) args.push(k, v);
+        await cmd('HSET', ...args);
+      }
+      catch (e) { throw new Error('KV storage connection failed: ' + e.message); }
+    },
+    async hgetall(hash) {
+      try {
+        const v = await cmd('HGETALL', hash);
+        if (!v) return null;
+        if (Array.isArray(v)) {
+          const out = {};
+          for (let i = 0; i < v.length; i += 2) out[String(v[i])] = String(v[i + 1]);
+          return out;
+        }
+        return null;
+      }
+      catch (e) { throw new Error('KV storage connection failed: ' + e.message); }
+    },
+    async hdel(hash, ...fields) {
+      try { if (fields.length) await cmd('HDEL', hash, ...fields); }
+      catch (e) { throw new Error('KV storage connection failed: ' + e.message); }
+    },
   };
 }
 
@@ -42,7 +78,7 @@ function makeMemory() {
 function storage() {
   const hasUrl = !!(process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL);
   const hasToken = !!(process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN);
-  if (hasUrl && hasToken) { try { return makeUpstash(); } catch (e) { console.warn('[clinical-rx] Upstash init failed, falling back to in-memory: ' + e.message); } }
+  if (hasUrl && hasToken) { try { return makeUpstash(); } catch (e) { console.warn('[clinical-rx] Upstash init failed: ' + e.message); } }
   return makeMemory();
 }
 
