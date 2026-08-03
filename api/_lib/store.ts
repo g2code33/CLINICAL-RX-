@@ -161,4 +161,11 @@ export function storage(): KV {
   return makeMemory();
 }
 
-export const store = storage();
+// Lazy store: resolve on first access so there's no module-load side effect.
+let _store: KV | null = null;
+export const store: KV = new Proxy({} as KV, {
+  get(_t, prop: string) {
+    if (!_store) _store = storage();
+    return (_store as any)[prop];
+  },
+});

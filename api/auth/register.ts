@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import crypto from 'crypto';
 import { redis } from '../_lib/redis';
-import { hashPassword, signToken } from '../_lib/auth';
+import { hashPassword, signToken, uuid } from '../_lib/auth';
 import { guard, fail, ok } from '../_lib/errors';
 
 async function handler(req: VercelRequest, res: VercelResponse) {
@@ -17,7 +17,7 @@ async function handler(req: VercelRequest, res: VercelResponse) {
   const existing = await redis.hget('users', e);
   if (existing) return fail(res, 409, 'An account with this email already exists. Try signing in instead.');
 
-  const id = crypto.randomUUID();
+  const id = uuid();
   const user = {
     id,
     name: (name || e.split('@')[0]).trim(),

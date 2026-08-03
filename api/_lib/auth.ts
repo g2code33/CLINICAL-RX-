@@ -1,8 +1,15 @@
-import crypto from 'crypto';
+import * as crypto from 'crypto';
 
 // Secret used to sign session tokens. Set SESSION_SECRET in Vercel env vars.
 const SESSION_SECRET = process.env.SESSION_SECRET || 'dev-secret-change-me';
 const TOKEN_TTL_SECONDS = 60 * 60 * 24 * 30; // 30 days
+
+// Manual UUID (crypto.randomUUID may be absent in some bundled runtimes).
+export function uuid(): string {
+  if (typeof crypto.randomUUID === 'function') return crypto.randomUUID();
+  const h = crypto.randomBytes(16).toString('hex');
+  return `${h.slice(0, 8)}-${h.slice(8, 12)}-4${h.slice(13, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
+}
 
 export interface User {
   id: string;
