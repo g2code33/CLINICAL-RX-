@@ -8,6 +8,7 @@ import { AI_MODULES, newSettings } from '../services/defaults';
 import { loadSampleData } from '../services/demo';
 import { syncClient } from '../services/syncClient';
 import { syncNowFull, autoSyncOnLogin, getPendingCount, savePending } from '../services/syncEngine';
+import { syncAiConfig, queuePushAiConfig } from '../services/aiConfigSync';
 import { saveBank } from '../services/questionBank';
 import type { AppearanceMode, Settings } from '../types';
 
@@ -58,14 +59,30 @@ export function SettingsPage() {
       const acc = { connected: true, email: res.data.user.email, name: res.data.user.name, token: res.data.token, backendUrl, lastSynced: undefined, syncing: false };
       await persist({ ...draft, onlineAccount: acc } as Settings);
       setSyncState(`✓ Connected as ${res.data.user.email}`);
-      try { const outcome = await autoSyncOnLogin(); if (outcome.ok) setSyncState(`✓ Connected · pulled ${outcome.pulled} record(s) (auto-synced)`); else setSyncState(`✓ Connected · sync will retry when online`); } catch { setSyncState(`✓ Connected · (sync unavailable right now)`); }
+      try {
+        const outcome = await autoSyncOnLogin();
+        // autoSyncOnLogin also pulls the cloud AI config (keys included).
+        const latest = useData.getState().settings;
+        if (latest) setDraft(latest); // reflect pulled AI keys in the form
+        if (outcome.ok) setSyncState(`✓ Connected · pulled ${outcome.pulled} record(s) (auto-synced)`);
+        else setSyncState(`✓ Connected · sync will retry when online`);
+      } catch { setSyncState(`✓ Connected · (sync unavailable right now)`); }
     } catch (e: any) { setSyncState('⚠️ ' + (e?.message || 'Something went wrong.')); } finally { setAcctBusy(false); }
   }
 
   async function doSyncNow() {
     setAcctBusy(true); setSyncState('Syncing…');
     const outcome = await syncNowFull();
-    setSyncState(outcome.ok ? `✓ Full sync · pushed ${outcome.pushed}, pulled ${outcome.pulled}` : '⚠️ ' + (outcome.message || 'Sync failed.'));
+    let extra = '';
+    if (outcome.ok) {
+      // Also sync the AI config (pull cloud -> local, or seed cloud if empty).
+      const ai = await syncAiConfig();
+      if (ai.pulled) extra = ' · AI config pulled';
+      else if (ai.pushed) extra = ' · AI config backed up';
+      const latest = useData.getState().settings;
+      if (latest) setDraft(latest);
+    }
+    setSyncState(outcome.ok ? `✓ Full sync · pushed ${outcome.pushed}, pulled ${outcome.pulled}${extra}` : '⚠️ ' + (outcome.message || 'Sync failed.'));
     setAcctBusy(false);
   }
 
@@ -357,10 +374,13 @@ function modelPlaceholder(provider: string): string {
   switch (provider) { case 'nvidia': return 'meta/llama-3.3-70b-instruct'; case 'anthropic': return 'claude-3-5-sonnet-latest'; case 'openrouter': return 'openai/gpt-4o-mini'; default: return 'gpt-4o-mini'; }
 }
 
-function updateAi(draft: Settings, key: string, patch: any, saveSettings: any, setDraft: any) {
+async function updateAi(draft: Settings, key: string, patch: any, saveSettings: any, setDraft: any) {
   const ai = { ...draft.ai, [key]: { ...draft.ai[key], ...patch } };
   const next = { ...draft, ai };
-  saveSettings({ ...next, updatedAt: Date.now() });
+  // Await the local save first so the cloud push reads the latest config
+  // (previously it could push a stale copy missing the newest keystroke).
+  await saveSettings({ ...next, updatedAt: Date.now() });
   setDraft(next);
-  import('../services/aiConfigSync').then((m) => m.pushAiConfig()).catch(() => {});
+  // Debounced push — rapid edits collapse into one request, last edit wins.
+  queuePushAiConfig();
 }

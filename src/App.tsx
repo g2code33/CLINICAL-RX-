@@ -36,6 +36,16 @@ export default function App() {
     if (ready) { const cleanup = setupAutoAndReconnect(); return cleanup; }
   }, [ready]);
 
+  // When a cloud account is connected, refresh the AI config (API keys
+  // included) at startup so a login on another device shows up here too.
+  useEffect(() => {
+    if (!ready) return;
+    const acct = useData.getState().settings?.onlineAccount;
+    if (acct?.connected && acct.token) {
+      import('./services/aiConfigSync').then((m) => m.syncAiConfig()).catch(() => {});
+    }
+  }, [ready]);
+
   const settings = useData((s) => s.settings);
   useEffect(() => {
     const root = document.documentElement;

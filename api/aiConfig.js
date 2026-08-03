@@ -18,6 +18,9 @@ async function handler(req, res) {
 
   if (req.method === 'POST') {
     const { aiConfig } = req.body || {};
+    if (!aiConfig || typeof aiConfig !== 'object' || Array.isArray(aiConfig)) {
+      return fail(res, 400, 'aiConfig must be an object');
+    }
     await redis.set(`aiConfig:${userId}`, JSON.stringify(aiConfig));
     return ok(res, 200, { message: 'AI config saved' });
   }
