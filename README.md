@@ -131,6 +131,38 @@ On every push to `main` (and PRs) the workflow `.github/workflows/build-desktop.
 Push the repo to GitHub and open **Actions** → the run will compile everything and the
 artifacts will contain the `.exe`, `.AppImage`, and `.deb` installers.
 
+### 🚀 Shipping an update (how existing users get new versions)
+
+The desktop app checks **GitHub Releases** of `g2code33/CLINICAL-RX-` and offers new
+versions via the **🔄 update button** in the header (and under Settings → Updates). The
+badge auto-checks once on startup, so users don't even have to click.
+
+To ship a new version to existing users:
+
+1. Bump the version: `npm version patch` (or edit `version` in `package.json` — it must
+   be **higher** than what users have installed, or the app reports "up to date").
+2. Commit and push, then tag the release and push the tag:
+
+   ```bash
+   git commit -am "release: v1.0.1"
+   git push origin main
+   git tag v1.0.1
+   git push origin v1.0.1
+   ```
+
+3. GitHub Actions (the `release` job) builds Windows + Linux and publishes the
+   installers plus `latest.yml` / `latest-linux.yml` to a **GitHub Release**.
+4. Users open the app → the header badge shows **🔄 Update available** → they click it
+   to download and install (Windows: NSIS installer; Linux: AppImage swap).
+
+Notes:
+- Release tags must look like **`v1.0.1`** (semver with `v` prefix) — the updater
+  resolves releases via `…/releases/latest`, which **ignores drafts and pre-releases**.
+- Don't reuse the tag name `latest` and don't mark release builds as pre-releases,
+  otherwise the in-app update button cannot see them.
+- Old/broken releases (like the original `latest` pre-release) should be deleted so
+  they never shadow a real release.
+
 ---
 
 ## 🌐 Deploy to Vercel (online account)
