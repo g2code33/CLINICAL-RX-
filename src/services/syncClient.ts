@@ -13,33 +13,15 @@ function baseUrl(backendUrl?: string): string {
   return b.replace(/\/$/, '');
 }
 
-async function request(
-  backendUrl: string | undefined,
-  path: string,
-  method: 'GET' | 'POST' | 'DELETE',
-  token: string | undefined,
-  body?: unknown
-): Promise<ApiResult<any>> {
+async function request(backendUrl: string | undefined, path: string, method: 'GET' | 'POST' | 'DELETE', token: string | undefined, body?: unknown): Promise<ApiResult<any>> {
   return requestWithHeaders(backendUrl, path, method, token ? { Authorization: `Bearer ${token}` } : {}, body);
 }
 
-async function requestWithHeaders(
-  backendUrl: string | undefined,
-  path: string,
-  method: 'GET' | 'POST' | 'DELETE',
-  headers: Record<string, string>,
-  body?: unknown
-): Promise<ApiResult<any>> {
+async function requestWithHeaders(backendUrl: string | undefined, path: string, method: 'GET' | 'POST' | 'DELETE', headers: Record<string, string>, body?: unknown): Promise<ApiResult<any>> {
   let res: Response;
   try {
-    res = await fetch(`${baseUrl(backendUrl)}${path}`, {
-      method,
-      headers: { 'Content-Type': 'application/json', ...headers },
-      body: body ? JSON.stringify(body) : undefined,
-    });
-  } catch (e: any) {
-    return { ok: false, error: e?.message || 'Network error. Are you online?' };
-  }
+    res = await fetch(`${baseUrl(backendUrl)}${path}`, { method, headers: { 'Content-Type': 'application/json', ...headers }, body: body ? JSON.stringify(body) : undefined });
+  } catch (e: any) { return { ok: false, error: e?.message || 'Network error. Are you online?' }; }
   let json: any = null;
   const contentType = res.headers.get('content-type') || '';
   try { if (contentType.includes('application/json')) json = await res.json(); } catch { json = null; }
@@ -49,7 +31,8 @@ async function requestWithHeaders(
     let hint = 'Server error';
     if (res.status === 503) hint = 'Cloud storage is not set up';
     else if (res.status === 404) hint = 'API endpoint not found';
-    return { ok: false, status: res.status, error: `${hint} (${res.status || 'network'}). ${res.status === 503 ? 'In Vercel: go to Storage → KV → create a store, then redeploy.' : 'If it persists, the backend may not be deployed or configured correctly.'}`, ...(bodyText ? { detail: bodyText.slice(0, 200) } : {}) };
+    else if (res.status === 403) hint = 'Access denied';
+    return { ok: false, status: res.status, error: `${hint} (${res.status}). ${res.status === 503 ? 'In Vercel: go to Storage → KV → create a store.' : (json?.error || 'Request failed.')}`, ...(bodyText ? { detail: bodyText.slice(0, 200) } : {}) };
   }
   return { ok: true, data: json, status: res.status };
 }
@@ -64,9 +47,7 @@ export const syncClient = {
   login(backendUrl: string | undefined, email: string, password: string) {
     return request(backendUrl, '/api/auth/login', 'POST', undefined, { email, password });
   },
-  me(backendUrl: string | undefined, token: string) {
-    return request(backendUrl, '/api/auth/me', 'GET', token);
-  },
+  me(backendUrl: string | undefined, token: string) { return request(backendUrl, '/api/auth/me', 'GET', token); },
   updateProfile(backendUrl: string | undefined, token: string, body: { name?: string; securityQuestion?: string; securityAnswer?: string }) {
     return request(backendUrl, '/api/auth/update', 'POST', token, body);
   },
@@ -76,31 +57,27 @@ export const syncClient = {
   deleteAccount(backendUrl: string | undefined, token: string, password: string) {
     return request(backendUrl, '/api/auth/delete-account', 'DELETE', token, { password });
   },
-  forgot(backendUrl: string | undefined, email: string) {
-    return request(backendUrl, '/api/auth/forgot', 'POST', undefined, { email });
+  // Admin endpoints
+  listUsers(backendUrl: string | undefined, token: string) {
+    return request(backendUrl, '/api/admin/users', 'GET', token);
   },
-  reset(backendUrl: string | undefined, payload: { method: 'token' | 'security' | 'admin'; email?: string; password?: string; token?: string; securityQuestion?: string; securityAnswer?: string; adminToken?: string }) {
+  adminResetPassword(backendUrl: string | undefined, token: string, email: string, newPassword: string) {
+    return request(backendUrl, '/api/admin/reset-user', 'POST', token, { email, newPassword });
+  },
+  adminDeleteUser(backendUrl: string | undefined, token: string, email: string) {
+    return request(backendUrl, '/api/admin/delete-user', 'DELETE', token, { email });
+  },
+  forgot(backendUrl: string | undefined, email: string) { return request(backendUrl, '/api/auth/forgot', 'POST', undefined, { email }); },
+  reset(backendUrl: string | undefined, payload: { method: string; email?: string; password?: string; token?: string; securityQuestion?: string; securityAnswer?: string; adminToken?: string }) {
     const headers: Record<string, string> = {};
     if (payload.adminToken) headers['x-admin-token'] = payload.adminToken;
-    const body: any = { method: payload.method };
-    if (payload.email) body.email = payload.email;
-    if (payload.password) body.password = payload.password;
-    if (payload.token) body.token = payload.token;
-    if (payload.securityQuestion) body.securityQuestion = payload.securityQuestion;
-    if (payload.securityAnswer) body.securityAnswer = payload.securityAnswer;
-    return requestWithHeaders(backendUrl, '/api/auth/reset', 'POST', headers, body);
+    return requestWithHeaders(backendUrl, '/api/auth/reset', 'POST', headers, payload);
   },
   pull(backendUrl: string | undefined, token: string, since?: number) {
     const q = typeof since === 'number' ? `?since=${since}` : '';
     return request(backendUrl, '/api/sync' + q, 'GET', token);
   },
-  getAiConfig(backendUrl: string | undefined, token: string) {
-    return request(backendUrl, '/api/aiConfig', 'GET', token);
-  },
-  saveAiConfig(backendUrl: string | undefined, token: string, aiConfig: unknown) {
-    return request(backendUrl, '/api/aiConfig', 'POST', token, { aiConfig });
-  },
-  push(backendUrl: string | undefined, token: string, records: SyncRecord[]) {
-    return request(backendUrl, '/api/sync', 'POST', token, { records });
-  },
+  getAiConfig(backendUrl: string | undefined, token: string) { return request(backendUrl, '/api/aiConfig', 'GET', token); },
+  saveAiConfig(backendUrl: string | undefined, token: string, aiConfig: unknown) { return request(backendUrl, '/api/aiConfig', 'POST', token, { aiConfig }); },
+  push(backendUrl: string | undefined, token: string, records: SyncRecord[]) { return request(backendUrl, '/api/sync', 'POST', token, { records }); },
 };

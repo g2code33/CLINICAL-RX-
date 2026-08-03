@@ -23,63 +23,33 @@ import { AiChat } from './pages/AiChat';
 import { SettingsPage } from './pages/Settings';
 import { ResetPassword } from './pages/ResetPassword';
 import { AuthPage } from './pages/Auth';
+import { AdminPage } from './pages/Admin';
 
 export default function App() {
   const ready = useData((s) => s.ready);
   const init = useData((s) => s.init);
   const profile = useData((s) => s.profile);
 
-  useEffect(() => {
-    init();
-  }, [init]);
+  useEffect(() => { init(); }, [init]);
 
-  // Once data is loaded, trigger automatic bundles for completed days/weeks and
-  // process any pending-AI bundles when the user is back online.
   useEffect(() => {
-    if (ready) {
-      const cleanup = setupAutoAndReconnect();
-      return cleanup;
-    }
+    if (ready) { const cleanup = setupAutoAndReconnect(); return cleanup; }
   }, [ready]);
 
   const settings = useData((s) => s.settings);
   useEffect(() => {
     const root = document.documentElement;
     const mq = window.matchMedia('(prefers-color-scheme: dark)');
-    const apply = () => {
-      const mode = settings?.appearance ?? 'system';
-      const dark = mode === 'dark' || (mode === 'system' && mq.matches);
-      root.classList.toggle('dark', dark);
-    };
-    apply();
-    mq.addEventListener('change', apply);
-    return () => mq.removeEventListener('change', apply);
+    const apply = () => { const mode = settings?.appearance ?? 'system'; const dark = mode === 'dark' || (mode === 'system' && mq.matches); root.classList.toggle('dark', dark); };
+    apply(); mq.addEventListener('change', apply); return () => mq.removeEventListener('change', apply);
   }, [settings]);
 
-  // Ensure settings exist once a profile is created.
-  useEffect(() => {
-    if (useData.getState().profile && !useData.getState().settings) {
-      useData.getState().saveSettings(newSettings());
-    }
-  }, [useData((s) => s.profile)]);
-
-
+  useEffect(() => { if (useData.getState().profile && !useData.getState().settings) { useData.getState().saveSettings(newSettings()); } }, [useData((s) => s.profile)]);
 
   if (!ready) {
-    return (
-      <div className="flex h-screen items-center justify-center bg-slate-900 text-slate-100">
-        <div className="text-center">
-          <img src="./v1.PNG" alt="CLINICAL Rx logo" className="mx-auto mb-3 h-16 w-16 rounded-2xl object-cover" />
-          <div className="animate-pulse text-lg font-semibold">CLINICAL Rx</div>
-          <div className="text-sm text-slate-400">Starting your clinical companion…</div>
-        </div>
-      </div>
-    );
+    return (<div className="flex h-screen items-center justify-center bg-slate-900 text-slate-100"><div className="text-center"><img src="./v1.PNG" alt="CLINICAL Rx logo" className="mx-auto mb-3 h-16 w-16 rounded-2xl object-cover" /><div className="animate-pulse text-lg font-semibold">CLINICAL Rx</div><div className="text-sm text-slate-400">Starting your clinical companion…</div></div></div>);
   }
-
-  if (!profile) {
-    return <Onboarding />;
-  }
+  if (!profile) { return <Onboarding />; }
 
   return (
     <Layout>
@@ -99,6 +69,7 @@ export default function App() {
         <Route path="/bundles" element={<Bundles />} />
         <Route path="/ai" element={<AiChat />} />
         <Route path="/settings" element={<SettingsPage />} />
+        <Route path="/admin" element={<AdminPage />} />
         <Route path="/auth" element={<AuthPage />} />
         <Route path="/reset" element={<ResetPassword />} />
         <Route path="*" element={<Navigate to="/" replace />} />
