@@ -11,12 +11,12 @@ export function AuthPage() {
   const setStatus = useData((s) => s.setStatus);
   const persist = useData((s) => s.saveSettings);
   const [mode, setMode] = useState<Mode>('signin');
-  const [form, setForm] = useState({ email: '', password: '', name: '', securityQuestion: '', securityAnswer: '', backendUrl: '' });
+  const savedBackendUrl = useData((s) => s.settings?.onlineAccount?.backendUrl ?? '');
+  const [form, setForm] = useState({ email: '', password: '', name: '', securityQuestion: '', securityAnswer: '', backendUrl: savedBackendUrl });
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState('');
 
-  const backendUrl = useData((s) => s.settings?.onlineAccount?.backendUrl ?? '');
-  const effectiveUrl = form.backendUrl || backendUrl;
+  const effectiveUrl = form.backendUrl || savedBackendUrl;
 
   async function submit() {
     setBusy(true);
@@ -39,12 +39,22 @@ export function AuthPage() {
         syncing: false,
       };
       const current = useData.getState().settings;
-      if (!current) throw new Error('Settings not loaded');
+      if (!current) {
+        setMsg('⚠️ Settings not loaded yet. Please go back and try again.');
+        return;
+      }
       await persist({ ...current, updatedAt: Date.now(), onlineAccount: acc });
       setStatus(`✓ Connected as ${res.data.user.email}`);
-      const outcome = await autoSyncOnLogin();
-      if (outcome.ok) setMsg(`✓ Signed in · pulled ${outcome.pulled} record(s)`);
+      try {
+        const outcome = await autoSyncOnLogin();
+        if (outcome.ok) setMsg(`✓ ${mode === 'signup' ? 'Account created' : 'Signed in'} · pulled ${outcome.pulled} record(s)`);
+        else setMsg(`✓ ${mode === 'signup' ? 'Account created' : 'Signed in'} · sync will retry later`);
+      } catch {
+        setMsg(`✓ ${mode === 'signup' ? 'Account created' : 'Signed in'} · (sync unavailable right now)`);
+      }
       setTimeout(() => navigate('/'), 1200);
+    } catch (e: any) {
+      setMsg('⚠️ ' + (e?.message || 'Something went wrong. Please try again.'));
     } finally {
       setBusy(false);
     }
@@ -66,6 +76,10 @@ export function AuthPage() {
         </div>
 
         <div className="space-y-3">
+          <div>
+            <label className="label">Backend URL <span className="text-slate-400 font-normal">(blank = same site)</span></label>
+            <input className={input} value={form.backendUrl} onChange={(e) => setForm({ ...form, backendUrl: e.target.value })} placeholder="https://your-app.vercel.app (leave blank if using the web version)" />
+          </div>
           {mode === 'signup' && (
             <div>
               <label className="label">Name</label>

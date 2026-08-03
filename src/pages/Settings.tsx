@@ -60,8 +60,15 @@ export function SettingsPage() {
       await persist({ ...draft, onlineAccount: acc } as Settings);
       setSyncState(`✓ Connected as ${res.data.user.email}`);
       // AUTO-SYNC on login: pull the latest so this device is up to date.
-      const outcome = await autoSyncOnLogin();
-      if (outcome.ok) setSyncState(`✓ Connected · pulled ${outcome.pulled} record(s) (auto-synced)`);
+      try {
+        const outcome = await autoSyncOnLogin();
+        if (outcome.ok) setSyncState(`✓ Connected · pulled ${outcome.pulled} record(s) (auto-synced)`);
+        else setSyncState(`✓ Connected · sync will retry when online`);
+      } catch {
+        setSyncState(`✓ Connected · (sync unavailable right now)`);
+      }
+    } catch (e: any) {
+      setSyncState('⚠️ ' + (e?.message || 'Something went wrong. Please try again.'));
     } finally {
       setAcctBusy(false);
     }
@@ -261,8 +268,11 @@ export function SettingsPage() {
                 </div>
               </div>
               <div className="flex gap-2">
-                <button className="btn-primary flex-1" onClick={() => navigate('/auth')}>
-                  Sign in / Create account
+                <button className="btn-primary flex-1" disabled={acctBusy || !acctForm.email || !acctForm.password} onClick={() => connect('login')}>
+                  {acctBusy ? 'Signing in…' : '🔑 Sign in'}
+                </button>
+                <button className="btn-secondary flex-1" disabled={acctBusy || !acctForm.email || !acctForm.password} onClick={() => connect('register')}>
+                  {acctBusy ? 'Creating…' : '✨ Create account'}
                 </button>
               </div>
               <div className="pt-1 text-right">
