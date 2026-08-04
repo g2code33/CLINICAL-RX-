@@ -110,6 +110,17 @@ function initIpc() {
     return { ok: true };
   });
   ipcMain.handle('app:platform', () => process.platform);
+  ipcMain.handle('app:installType', () => {
+    // 'deb' installs can't auto-update (electron-updater only supports
+    // AppImage on Linux); expose it so the UI can offer a download instead.
+    if (process.platform !== 'linux') return 'nsis';
+    try {
+      const { readFileSync, existsSync } = require('node:fs');
+      const p = path.join(process.resourcesPath, 'package-type');
+      if (existsSync(p)) return readFileSync(p, 'utf8').trim(); // 'deb' or 'AppImage'
+    } catch { /* ignore */ }
+    return 'AppImage';
+  });
 
   // ---- Updater IPC ----
   ipcMain.handle('update:getVersion', () => ({
@@ -149,7 +160,7 @@ function initIpc() {
       // Wait a beat for the IPC response to flush, then quit & install.
       // isForceRunAfter=true relaunches the app automatically after the
       // installer finishes — the user shouldn't have to open it manually.
-      setTimeout(() => autoUpdater.quitAndInstall(false, true), 500);
+      setTimeout(() => autoUpdater.quitAndInstall(false, true), 1000);
       return { ok: true };
     } catch (e: any) {
       return { ok: false, reason: 'error', message: e?.message || 'Install failed' };

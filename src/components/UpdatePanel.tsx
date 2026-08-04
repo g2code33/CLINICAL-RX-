@@ -17,9 +17,12 @@ export function useUpdateState() {
   const [phase, setPhase] = useState<Phase>({ state: 'idle' });
   const isElectron = hasElectronBridge();
 
+  const [installType, setInstallType] = useState<string>('nsis');
+
   useEffect(() => {
     if (!isElectron) return;
     window.clinicalRx!.update.getVersion().then(setMeta);
+    window.clinicalRx!.installType?.().then((t) => setInstallType(t || 'nsis')).catch(() => {});
     // After a restart, confirm the installed version is current.
     window.clinicalRx!.update.getState().then((st) => {
       if (st?.appVersion && meta?.appVersion && st.appVersion === meta.appVersion) {
@@ -32,11 +35,11 @@ export function useUpdateState() {
     return off;
   }, [isElectron]);
 
-  return { meta, phase, isElectron, setPhase };
+  return { meta, phase, isElectron, installType, setPhase };
 }
 
 export function UpdatePanel() {
-  const { meta, phase, isElectron, setPhase } = useUpdateState();
+  const { meta, phase, isElectron, installType, setPhase } = useUpdateState();
 
   async function check() {
     if (!window.clinicalRx) return;
@@ -71,6 +74,7 @@ export function UpdatePanel() {
     );
   }
 
+  const isDeb = installType === 'deb';
   const btn = 'btn-secondary';
   return (
     <div className="card">
@@ -111,11 +115,26 @@ export function UpdatePanel() {
         )}
       </div>
 
+      {isDeb && (
+        <div className="mb-3 rounded-lg bg-amber-50 p-3 text-xs text-amber-800 dark:bg-amber-900 dark:text-amber-200">
+          ℹ️ You installed the <strong>.deb</strong> package — Linux .deb installs don't support in-app auto-update.
+          When a new version is available, download the new <code>.deb</code> from the release page and reinstall.
+        </div>
+      )}
+
       <div className="flex flex-wrap gap-2">
         <button className={btn} onClick={check} disabled={phase.state === 'checking' || phase.state === 'downloading'}>
           {phase.state === 'checking' ? 'Checking…' : '🔎 Check for updates'}
         </button>
-        {(phase.state === 'available' || phase.state === 'error') && (
+        {isDeb && (
+          <button
+            className="btn-primary"
+            onClick={() => window.open('https://github.com/g2code33/CLINICAL-RX-/releases/latest', '_blank')}
+          >
+            ⬇ Download new version
+          </button>
+        )}
+        {!isDeb && (phase.state === 'available' || phase.state === 'error') && (
           <button className="btn-primary" onClick={download}>⬇ Download update</button>
         )}
         {phase.state === 'downloading' && (

@@ -6,6 +6,7 @@ import type { ModuleType, StorageAdapter } from '../types';
 declare global {
   interface Window {
     clinicalRx?: StorageAdapter & {
+      installType?: () => Promise<string>;
       update: {
         getVersion: () => Promise<{ appVersion: string; enabled: boolean; owner: string; repo: string }>;
         getState: () => Promise<{ appVersion: string }>;

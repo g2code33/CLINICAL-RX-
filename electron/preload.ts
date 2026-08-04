@@ -5,6 +5,7 @@ import { contextBridge, ipcRenderer } from 'electron';
 const api = {
   isElectron: true,
   platform: () => ipcRenderer.invoke('app:platform') as Promise<string>,
+  installType: () => ipcRenderer.invoke('app:installType') as Promise<string>,
   list: (module: string) => ipcRenderer.invoke('kv:list', module),
   get: (module: string, id: string) => ipcRenderer.invoke('kv:get', module, id),
   put: (module: string, id: string, data: unknown, createdAt: number, updatedAt: number) =>

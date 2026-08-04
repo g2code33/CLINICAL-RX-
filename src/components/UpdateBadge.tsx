@@ -7,7 +7,7 @@ import { useData } from '../stores/data';
 // date. Auto-checks once on startup (desktop) so an "update available" notice
 // appears on its own.
 export function UpdateBadge() {
-  const { meta, phase, isElectron, setPhase } = useUpdateState();
+  const { meta, phase, isElectron, installType, setPhase } = useUpdateState();
   const setStatus = useData((s) => s.setStatus);
   const [open, setOpen] = useState(false);
   const popRef = useRef<HTMLDivElement>(null);
