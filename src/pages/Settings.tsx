@@ -6,7 +6,8 @@ import { Modal } from '../components/Modal';
 import { UpdatePanel } from '../components/UpdatePanel';
 import { AI_MODULES, newSettings } from '../services/defaults';
 import { loadSampleData } from '../services/demo';
-import { syncClient } from '../services/syncClient';
+import { syncClient, DEFAULT_BACKEND_URL } from '../services/syncClient';
+import { hasElectronBridge } from '../db/adapter';
 import { syncNowFull, autoSyncOnLogin, getPendingCount, savePending } from '../services/syncEngine';
 import { syncAiConfig, queuePushAiConfig } from '../services/aiConfigSync';
 import { saveBank } from '../services/questionBank';
@@ -22,7 +23,15 @@ export function SettingsPage() {
   const setStatus = useData((s) => s.setStatus);
   const [draft, setDraft] = useState<Settings | null>(settings);
   const [showKeys, setShowKeys] = useState<Record<string, boolean>>({});
-  const [acctForm, setAcctForm] = useState({ email: '', password: '', name: draft?.onlineAccount?.name ?? profile?.username ?? '', backendUrl: draft?.onlineAccount?.backendUrl ?? '', securityQuestion: '', securityAnswer: '' });
+  const [acctForm, setAcctForm] = useState(() => ({
+    email: '',
+    password: '',
+    name: draft?.onlineAccount?.name ?? profile?.username ?? '',
+    // Desktop has no same-origin /api, so prefill the deployed backend URL.
+    backendUrl: draft?.onlineAccount?.backendUrl || (hasElectronBridge() ? DEFAULT_BACKEND_URL : ''),
+    securityQuestion: '',
+    securityAnswer: '',
+  }));
   const [acctBusy, setAcctBusy] = useState(false);
   const [syncState, setSyncState] = useState<string>('');
   const [forgotOpen, setForgotOpen] = useState(false);
@@ -240,7 +249,7 @@ export function SettingsPage() {
             </div>
           ) : (
             <div className="space-y-3">
-              <div><label className={label}>Backend URL</label><input className={input} placeholder="https://your-app.vercel.app (blank = same site)" value={acctForm.backendUrl} onChange={(e) => setAcctForm({ ...acctForm, backendUrl: e.target.value })} /></div>
+              <div><label className={label}>Backend URL</label><input className={input} placeholder={DEFAULT_BACKEND_URL} value={acctForm.backendUrl} onChange={(e) => setAcctForm({ ...acctForm, backendUrl: e.target.value })} /></div>
               <div className="grid grid-cols-2 gap-2">
                 <div><label className={label}>Name</label><input className={input} value={acctForm.name} onChange={(e) => setAcctForm({ ...acctForm, name: e.target.value })} placeholder="Your name" /></div>
                 <div><label className={label}>Email</label><input className={input} type="email" value={acctForm.email} onChange={(e) => setAcctForm({ ...acctForm, email: e.target.value })} placeholder="you@example.com" /></div>

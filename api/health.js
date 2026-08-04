@@ -1,4 +1,6 @@
-module.exports = async function handler(req, res) {
+const { guard } = require('./_lib/errors.js');
+
+async function handler(req, res) {
   return res.status(200).json({
     ok: true,
     name: 'clinical-rx-api',
@@ -9,4 +11,6 @@ module.exports = async function handler(req, res) {
     kvToken: process.env.KV_REST_API_TOKEN ? '(set)' : '(not set)',
     sessionSecret: process.env.SESSION_SECRET ? '(set)' : '(not set)',
   });
-};
+}
+
+module.exports = guard(handler);

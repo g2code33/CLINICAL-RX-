@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useData } from '../stores/data';
-import { syncClient } from '../services/syncClient';
+import { syncClient, DEFAULT_BACKEND_URL } from '../services/syncClient';
 import { autoSyncOnLogin } from '../services/syncEngine';
+import { hasElectronBridge } from '../db/adapter';
 
 type Mode = 'signin' | 'signup';
 
@@ -11,12 +12,18 @@ export function AuthPage() {
   const setStatus = useData((s) => s.setStatus);
   const persist = useData((s) => s.saveSettings);
   const [mode, setMode] = useState<Mode>('signin');
-  const [form, setForm] = useState({ email: '', password: '', name: '', securityQuestion: '', securityAnswer: '', backendUrl: '' });
+  // On the desktop app there is no same-origin /api (renderer runs from
+  // file://), so prefill the deployed backend URL. On the web, blank = same
+  // origin, which is correct.
+  const savedBackend = useData((s) => s.settings?.onlineAccount?.backendUrl ?? '');
+  const [form, setForm] = useState(() => ({
+    email: '', password: '', name: '', securityQuestion: '', securityAnswer: '',
+    backendUrl: savedBackend || (hasElectronBridge() ? DEFAULT_BACKEND_URL : ''),
+  }));
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState('');
 
-  const backendUrl = useData((s) => s.settings?.onlineAccount?.backendUrl ?? '');
-  const effectiveUrl = form.backendUrl || backendUrl;
+  const effectiveUrl = form.backendUrl.trim() || savedBackend;
 
   async function submit() {
     setBusy(true);
@@ -68,6 +75,10 @@ export function AuthPage() {
         </div>
 
         <div className="space-y-3">
+          <div>
+            <label className="label">Backend URL <span className="text-slate-400">(web: leave blank)</span></label>
+            <input className={input} value={form.backendUrl} onChange={(e) => setForm({ ...form, backendUrl: e.target.value })} placeholder={DEFAULT_BACKEND_URL} />
+          </div>
           {mode === 'signup' && (
             <div>
               <label className="label">Name</label>

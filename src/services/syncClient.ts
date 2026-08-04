@@ -7,6 +7,10 @@ export interface ApiResult<T = unknown> {
   status?: number;
 }
 
+// The app's deployed backend. Used as the default Backend URL on the desktop
+// app, where there is no same-origin /api (the renderer runs from file://).
+export const DEFAULT_BACKEND_URL = 'https://clinicalrx30.vercel.app';
+
 function baseUrl(backendUrl?: string): string {
   const b = (backendUrl || '').trim();
   if (!b || b === '/' || b === '') return '';
@@ -18,10 +22,24 @@ async function request(backendUrl: string | undefined, path: string, method: 'GE
 }
 
 async function requestWithHeaders(backendUrl: string | undefined, path: string, method: 'GET' | 'POST' | 'DELETE', headers: Record<string, string>, body?: unknown): Promise<ApiResult<any>> {
+  const root = baseUrl(backendUrl);
+  const url = `${root}${path}`;
   let res: Response;
   try {
-    res = await fetch(`${baseUrl(backendUrl)}${path}`, { method, headers: { 'Content-Type': 'application/json', ...headers }, body: body ? JSON.stringify(body) : undefined });
-  } catch (e: any) { return { ok: false, error: e?.message || 'Network error. Are you online?' }; }
+    res = await fetch(url, { method, headers: { 'Content-Type': 'application/json', ...headers }, body: body ? JSON.stringify(body) : undefined });
+  } catch (e: any) {
+    const detail = e?.message || 'network error';
+    if (!root) {
+      return {
+        ok: false,
+        error: `No backend URL set (${detail}). Enter your server URL — e.g. ${DEFAULT_BACKEND_URL} — in the "Backend URL" field (desktop app) or sign in from the web app.`,
+      };
+    }
+    return {
+      ok: false,
+      error: `Could not reach ${root} (${detail}). Check the URL, your internet connection, and that the server is running.`,
+    };
+  }
   let json: any = null;
   const contentType = res.headers.get('content-type') || '';
   try { if (contentType.includes('application/json')) json = await res.json(); } catch { json = null; }

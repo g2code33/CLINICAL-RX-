@@ -6,8 +6,24 @@ function fail(res, status, message, extra) {
   return res.status(status).json({ error: message, ...extra });
 }
 
+// CORS: the desktop app (origin file://) and any custom front-end call these
+// endpoints cross-origin. Every response must carry CORS headers, and OPTIONS
+// preflight requests must be answered, or the browser blocks with
+// "Failed to fetch".
+function setCors(res) {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-admin-token');
+  res.setHeader('Access-Control-Max-Age', '86400');
+  if (!res.headersSent) res.setHeader('Vary', 'Origin');
+}
+
 function guard(fn) {
   return async (req, res) => {
+    setCors(res);
+    if (req.method === 'OPTIONS') {
+      return res.status(204).end();
+    }
     try {
       return await fn(req, res);
     } catch (e) {
@@ -21,4 +37,4 @@ function guard(fn) {
   };
 }
 
-module.exports = { ok, fail, guard };
+module.exports = { ok, fail, guard, setCors };
