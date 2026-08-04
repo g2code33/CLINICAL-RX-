@@ -78,7 +78,9 @@
         "AppImage",
         "deb"
       ],
-      "category": "Education",
+      "category": "Education"
+    },
+    "deb": {
       "afterInstall": "build/after-install.sh"
     },
     "publish": [
