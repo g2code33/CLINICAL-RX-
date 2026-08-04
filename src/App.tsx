@@ -64,6 +64,12 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready]);
 
+  // Auto-backup: if scheduled and due, download + stamp.
+  useEffect(() => {
+    if (!ready) return;
+    import('./services/backup').then((m) => m.runAutoBackupCheck()).catch(() => {});
+  }, [ready]);
+
   const settings = useData((s) => s.settings);
   useEffect(() => {
     const root = document.documentElement;

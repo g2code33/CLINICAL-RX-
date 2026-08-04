@@ -21,7 +21,8 @@
     "dist": "npm run build:web && npm run build:electron && electron-builder",
     "dist:win": "npm run build:web && npm run build:electron && electron-builder --win",
     "dist:linux": "npm run build:web && npm run build:electron && electron-builder --linux",
-    "smoke": "npm run build:web && node smoke.mjs"
+    "smoke": "npm run build:web && node smoke.mjs",
+    "test:api": "node test/api.test.js"
   },
   "dependencies": {
     "better-sqlite3": "12.2.0",

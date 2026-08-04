@@ -154,11 +154,8 @@ export function SettingsPage() {
   }
 
   async function backup() {
-    const state = useData.getState();
-    const data = { app: 'clinical-rx', version: 1, exportedAt: new Date().toISOString(), records: { profile: state.profile, settings: state.settings, days: state.days, diseases: state.diseases, medicines: state.medicines, investigations: state.investigations, questions: state.questions, lessons: state.lessons, revisions: state.revisions, bundles: state.bundles, chats: state.chats, quizzes: state.quizzes } };
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a'); a.href = url; a.download = `clinical-rx-backup-${new Date().toISOString().slice(0, 10)}.json`; a.click(); URL.revokeObjectURL(url);
+    const { downloadBackup } = await import('../services/backup');
+    downloadBackup();
     setStatus('✓ Backup downloaded');
   }
 
@@ -291,6 +288,22 @@ export function SettingsPage() {
           <h2 className="mb-3 font-semibold">Data</h2>
           <div className="space-y-2">
             <button className="btn-secondary w-full" onClick={backup}>⬇ Download backup</button>
+            <div className="flex items-center justify-between gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm dark:border-slate-700">
+              <span className="text-xs text-slate-500">🤖 Auto-backup</span>
+              <select
+                className="input !w-auto !py-1 text-xs"
+                value={draft.autoBackup ?? 'off'}
+                onChange={(e) => set('autoBackup', e.target.value)}
+                title="Automatically download a backup on this schedule (when the app opens and one is due)"
+              >
+                <option value="off">Off</option>
+                <option value="daily">Daily</option>
+                <option value="weekly">Weekly</option>
+              </select>
+            </div>
+            {draft.lastAutoBackup ? (
+              <p className="text-[11px] text-slate-400">Last auto-backup: {new Date(draft.lastAutoBackup).toLocaleString()}</p>
+            ) : null}
             <label className="btn-secondary w-full cursor-pointer">⬆ Import backup<input type="file" accept="application/json" className="hidden" onChange={(e) => e.target.files?.[0] && importBackup(e.target.files[0])} /></label>
             <button className="btn-secondary w-full" onClick={async () => { if (await loadSampleData()) setStatus('✓ Sample data loaded'); }}>🧪 Load sample data</button>
             <button className="btn-secondary w-full !text-red-600" onClick={clearAll}>🗑 Clear all data</button>

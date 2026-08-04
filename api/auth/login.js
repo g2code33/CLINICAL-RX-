@@ -1,6 +1,7 @@
 const { redis } = require('../_lib/redis.js');
 const { verifyPassword, signToken } = require('../_lib/auth.js');
 const { guard, fail, ok } = require('../_lib/errors.js');
+const { rateLimit } = require('../_lib/rateLimit.js');
 
 async function handler(req, res) {
   if (req.method !== 'POST') return fail(res, 405, 'Method not allowed');
@@ -21,4 +22,4 @@ async function handler(req, res) {
   return ok(res, 200, { token, user: { id: user.id, name: user.name, email: e } });
 }
 
-module.exports = guard(handler);
+module.exports = guard(rateLimit({ route: 'login', max: 10, windowMs: 15 * 60 * 1000 })(handler));

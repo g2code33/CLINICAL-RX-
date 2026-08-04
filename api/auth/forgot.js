@@ -1,6 +1,7 @@
 const crypto = require('crypto');
 const { redis } = require('../_lib/redis.js');
 const { guard, fail, ok } = require('../_lib/errors.js');
+const { rateLimit } = require('../_lib/rateLimit.js');
 
 async function handler(req, res) {
   if (req.method !== 'POST') return fail(res, 405, 'Method not allowed');
@@ -46,4 +47,4 @@ async function handler(req, res) {
   return ok(res, 200, { message: `Reset token (dev — no mail configured): ${token}`, resetUrl });
 }
 
-module.exports = guard(handler);
+module.exports = guard(rateLimit({ route: 'forgot', max: 10, windowMs: 15 * 60 * 1000 })(handler));

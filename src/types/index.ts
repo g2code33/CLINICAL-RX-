@@ -58,6 +58,8 @@ export interface Settings extends BaseRecord {
     syncing?: boolean;
   };
   aiPendingBundles: string[]; // bundle ids awaiting AI enrichment once online
+  autoBackup?: 'off' | 'daily' | 'weekly';
+  lastAutoBackup?: number; // epoch ms of last automatic backup
 }
 
 export interface ClinicalDay extends BaseRecord {

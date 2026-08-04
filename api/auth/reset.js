@@ -1,6 +1,7 @@
 const { redis } = require('../_lib/redis.js');
 const { hashPassword, verifyHash } = require('../_lib/auth.js');
 const { guard, fail, ok } = require('../_lib/errors.js');
+const { rateLimit } = require('../_lib/rateLimit.js');
 
 async function handler(req, res) {
   if (req.method !== 'POST') return fail(res, 405, 'Method not allowed');
@@ -58,4 +59,4 @@ async function handler(req, res) {
   return fail(res, 400, 'Invalid reset method.');
 }
 
-module.exports = guard(handler);
+module.exports = guard(rateLimit({ route: 'reset', max: 10, windowMs: 15 * 60 * 1000 })(handler));

@@ -2,6 +2,7 @@ const crypto = require('crypto');
 const { redis } = require('../_lib/redis.js');
 const { hashPassword, signToken, uuid } = require('../_lib/auth.js');
 const { guard, fail, ok } = require('../_lib/errors.js');
+const { rateLimit } = require('../_lib/rateLimit.js');
 
 async function handler(req, res) {
   if (req.method !== 'POST') return fail(res, 405, 'Method not allowed');
@@ -31,4 +32,4 @@ async function handler(req, res) {
   return ok(res, 201, { token, user: { id, name: user.name, email: e } });
 }
 
-module.exports = guard(handler);
+module.exports = guard(rateLimit({ route: 'register', max: 10, windowMs: 15 * 60 * 1000 })(handler));

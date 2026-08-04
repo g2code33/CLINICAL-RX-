@@ -71,6 +71,23 @@ export async function dayToPdf(d: ClinicalDay): Promise<string> {
   return makePdf(`Clinical Day ${d.dayNumber} — ${d.site}`, `Date: ${d.date}`, sections);
 }
 
+/** CSV export of all clinical days (logbook-friendly, opens in Excel/Sheets). */
+export function daysToCsv(days: ClinicalDay[]): string {
+  const esc = (v: unknown) => {
+    const s = String(v ?? '');
+    return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  };
+  const header = ['Date', 'Day #', 'Site', 'Conditions', 'Medicines', 'Investigations', 'Observations', 'Lessons', 'Uncertainties', 'Topics to research'];
+  const rows = [...days]
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .map((d) =>
+      [d.date, d.dayNumber, d.site, d.conditions.join('|'), d.medicines.join('|'), d.investigations.join('|'), d.observations.join('|'), d.lessons.join('|'), d.uncertainties.join('|'), d.topicsToResearch.join('|')]
+        .map(esc)
+        .join(',')
+    );
+  return [header.join(','), ...rows].join('\n');
+}
+
 export function dayToMarkdown(d: ClinicalDay): string {
   const lines: string[] = [];
   lines.push(`# Clinical Day ${d.dayNumber} — ${d.site}`);

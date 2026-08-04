@@ -59,6 +59,7 @@ export function newSettings(): Settings {
     learningProfile: { preferredExplanation: ['simple-first', 'step-by-step', 'pharmacy-focused', 'clinical-examples'] },
     onlineAccount: { connected: false },
     aiPendingBundles: [],
+    autoBackup: 'off',
   };
 }
 

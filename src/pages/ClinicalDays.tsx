@@ -4,7 +4,7 @@ import { PageHeader, EmptyState } from '../components/ui';
 import { TagInput } from '../components/Modal';
 import { newDay, todayIso } from '../services/defaults';
 import { CloudSyncPrompt } from '../components/CloudSyncPrompt';
-import { dayToMarkdown, dayToPdf, downloadText } from '../services/export';
+import { dayToMarkdown, dayToPdf, daysToCsv, downloadText } from '../services/export';
 import { scanForPhi, privacyWarning } from '../services/privacy';
 
 const SECTIONS: Array<{ key: 'conditions' | 'medicines' | 'investigations' | 'observations' | 'lessons' | 'uncertainties' | 'topicsToResearch'; label: string; icon: string }> = [
@@ -68,6 +68,9 @@ export function ClinicalDays() {
         action={
           <div className="flex flex-wrap items-center gap-2">
             <CloudSyncPrompt />
+            <button className="btn-secondary" onClick={() => { downloadText(`clinical-rx-days-${new Date().toISOString().slice(0, 10)}.csv`, daysToCsv(days), 'text/csv'); }} title="Export all days as CSV (Excel/Sheets)">
+              ⬇ CSV
+            </button>
             <button className="btn-primary" onClick={addDay}>＋ New Clinical Day</button>
           </div>
         }
