@@ -67,22 +67,24 @@ function createWindow(): BrowserWindow {
   if (isDev() && process.env.VITE_DEV_SERVER_URL) {
     win.loadURL(process.env.VITE_DEV_SERVER_URL);
   } else {
-    // Load the packaged renderer. If it fails (e.g. partial unpack on first
-    // run after an update), retry once, then surface an error dialog instead
-    // of silently showing a blank window.
-    const load = () =>
-      win.loadFile(path.join(__dirname, '../dist/index.html')).catch(() => {
-        try {
-          win.loadFile(path.join(__dirname, '../dist/index.html'));
-        } catch (e) {
+    // Load the packaged renderer. force reload on first paint failure.
+    const load = (attempt: number) =>
+      win.loadFile(path.join(__dirname, '../dist/index.html'), { query: { t: String(Date.now()) } }).catch(() => {
+        if (attempt < 2) {
+          setTimeout(() => load(attempt + 1), 300);
+        } else {
           const { dialog } = require('electron');
-          dialog.showErrorBox('CLINICAL Rx could not load', String(e));
+          dialog.showErrorBox('CLINICAL Rx could not load', 'The app data may be damaged. Reinstall or contact support.');
         }
       });
-    load();
+    load(0);
   }
-  // Show the window only once the renderer is ready, so users never see a
-  // frozen/blank white window while the app boots.
+  // If the renderer fails to paint even after load, retry once (the classic
+  // "blank until forced reload" is usually a first-paint race).
+  win.webContents.on('did-fail-load', (_e, code, desc) => {
+    if (code === -3) return; // ERR_ABORTED (navigation) — ignore
+    if (!win.isDestroyed()) win.reload();
+  });
   win.once('ready-to-show', () => win.show());
   win.on('closed', () => {
     if (mainWindow === win) mainWindow = null;

@@ -12,11 +12,13 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
   </React.StrictMode>
 );
 
-// PWA: register the service worker for offline support (web build only).
-if ('serviceWorker' in navigator) {
+// PWA: register the service worker for offline support — WEB build only.
+// In Electron the renderer loads from file://, where a service worker can
+// serve a stale shell and cause the "blank window until forced reload" bug.
+if ('serviceWorker' in navigator && location.protocol !== 'file:' && !(window as any).clinicalRx?.isElectron) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('./sw.js').catch(() => {
-      /* SW optional — ignore failures (e.g. file:// in desktop dev) */
+      /* SW optional — ignore failures */
     });
   });
 }

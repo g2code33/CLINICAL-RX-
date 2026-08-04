@@ -1,14 +1,19 @@
 // CLINICAL Rx — service worker for offline-first web (PWA) support.
-// HARDENED (v2):
-//  - Never cache a non-200 / non-HTML navigation response (a cached deploy
-//    error page used to get served later as a "stale shell" -> blank app).
-//  - Only ever fall back to a cached shell that actually contains our mount
-//    point (id="root"); otherwise show a clear offline message.
-//  - Cache version is bumped so stale entries from previous versions are
-//    purged on activate.
-const CACHE = 'clinical-rx-v2';
+//
+// The app is OFFLINE-FIRST: the whole UI must load and run with no network;
+// only cloud sync/AI need a connection (and those are never cached here).
+// Strategy:
+//  - Precache the app shell at install (index.html).
+//  - Navigation: serve the cached shell FIRST (instant, works offline),
+//    then refresh it in the background when online.
+//  - Static assets: cache-first with background refresh.
+//  - NEVER intercept cross-origin API/AI calls.
+const CACHE = 'clinical-rx-v3';
 
-self.addEventListener('install', () => {
+self.addEventListener('install', (event) => {
+  event.waitUntil(
+    caches.open(CACHE).then((c) => c.add('/index.html')).catch(() => {})
+  );
   self.skipWaiting();
 });
 
@@ -24,31 +29,30 @@ self.addEventListener('fetch', (event) => {
   const req = event.request;
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
-  if (url.origin !== self.location.origin) return; // don't touch API/AI calls
+  if (url.origin !== self.location.origin) return; // never touch API/AI calls
 
-  // Navigation: network-first. Cache ONLY a genuine 200 HTML response.
+  // Navigation: cache-first (the app must open instantly & offline), then
+  // update the cached copy in the background when the network is available.
   if (req.mode === 'navigate') {
     event.respondWith(
-      fetch(req)
-        .then((res) => {
-          const isHtml = (res.headers.get('content-type') || '').includes('text/html');
-          if (res.ok && isHtml) {
-            const copy = res.clone();
-            caches.open(CACHE).then((c) => c.put('/index.html', copy)).catch(() => {});
-          }
-          return res;
-        })
-        .catch(() =>
-          caches.match('/index.html').then((cached) => {
-            if (!cached) return offlinePage();
-            return cached.clone().text().then((t) => (t.includes('id="root"') ? cached : offlinePage())).catch(() => offlinePage());
+      caches.match('/index.html').then((cached) => {
+        const network = fetch(req)
+          .then((res) => {
+            const isHtml = (res.headers.get('content-type') || '').includes('text/html');
+            if (res.ok && isHtml) {
+              const copy = res.clone();
+              caches.open(CACHE).then((c) => c.put('/index.html', copy)).catch(() => {});
+            }
+            return res;
           })
-        )
+          .catch(() => cached);
+        return cached || network;
+      })
     );
     return;
   }
 
-  // Static assets: stale-while-revalidate, cache only 200s.
+  // Static assets: cache-first with background refresh.
   event.respondWith(
     caches.match(req).then((cached) => {
       const network = fetch(req)
@@ -64,10 +68,3 @@ self.addEventListener('fetch', (event) => {
     })
   );
 });
-
-function offlinePage() {
-  return new Response(
-    '<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><body style="font-family:system-ui;background:#0f172a;color:#e2e8f0;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;text-align:center"><div><h2>📵 You are offline</h2><p style="color:#94a3b8">CLINICAL Rx needs a connection to load. Reconnect and reload.</p></div></body>',
-    { status: 503, headers: { 'Content-Type': 'text/html' } }
-  );
-}
