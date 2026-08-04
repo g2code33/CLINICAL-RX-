@@ -54,6 +54,7 @@ function createWindow(): BrowserWindow {
     minHeight: 640,
     title: 'Clinical Rx',
     icon: path.join(__dirname, '../build/icon.png'),
+    show: false,
     backgroundColor: '#0f172a',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -66,8 +67,23 @@ function createWindow(): BrowserWindow {
   if (isDev() && process.env.VITE_DEV_SERVER_URL) {
     win.loadURL(process.env.VITE_DEV_SERVER_URL);
   } else {
-    win.loadFile(path.join(__dirname, '../dist/index.html'));
+    // Load the packaged renderer. If it fails (e.g. partial unpack on first
+    // run after an update), retry once, then surface an error dialog instead
+    // of silently showing a blank window.
+    const load = () =>
+      win.loadFile(path.join(__dirname, '../dist/index.html')).catch(() => {
+        try {
+          win.loadFile(path.join(__dirname, '../dist/index.html'));
+        } catch (e) {
+          const { dialog } = require('electron');
+          dialog.showErrorBox('CLINICAL Rx could not load', String(e));
+        }
+      });
+    load();
   }
+  // Show the window only once the renderer is ready, so users never see a
+  // frozen/blank white window while the app boots.
+  win.once('ready-to-show', () => win.show());
   win.on('closed', () => {
     if (mainWindow === win) mainWindow = null;
   });
@@ -128,12 +144,10 @@ function initIpc() {
   ipcMain.handle('update:install', async () => {
     if (!app.isPackaged) return { ok: false, reason: 'dev' };
     try {
-      // quitAndInstall(isSilent, isForceRunAfter):
-      // - isSilent=false  -> show the NSIS installer progress (Windows),
-      //   and on Linux the AppImage swap happens visibly. Silent installs
-      //   can look like the app just crashed.
-      // - isForceRunAfter=true -> relaunch the app after install.
-      setImmediate(() => autoUpdater.quitAndInstall(false, true));
+      // Wait a beat for the IPC response to flush, then quit & install.
+      // isForceRunAfter=true relaunches the app automatically after the
+      // installer finishes — the user shouldn't have to open it manually.
+      setTimeout(() => autoUpdater.quitAndInstall(false, true), 500);
       return { ok: true };
     } catch (e: any) {
       return { ok: false, reason: 'error', message: e?.message || 'Install failed' };

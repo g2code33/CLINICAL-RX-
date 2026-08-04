@@ -39,7 +39,16 @@ module.exports = guard(async function handler(req, res) {
     if (!users) return ok(res, 200, { users: [], adminEmail, total: 0 });
     const userList = Object.entries(users).map(([email, data]) => {
       const user = JSON.parse(data);
-      return { id: user.id, name: user.name, email, createdAt: user.createdAt, hasSecurityQuestion: !!user.securityQuestion, isAdmin: email.toLowerCase() === adminEmail };
+      return {
+        id: user.id,
+        name: user.name,
+        email,
+        createdAt: user.createdAt,
+        hasSecurityQuestion: !!user.securityQuestion,
+        securityQuestion: user.securityQuestion || null, // masked hint for admin
+        isAdmin: email.toLowerCase() === adminEmail,
+        hasPassword: !!user.password,
+      };
     });
     return ok(res, 200, { users: userList, adminEmail, total: userList.length });
   }

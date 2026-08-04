@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useData } from '../stores/data';
 import { syncClient } from '../services/syncClient';
 import { PasswordInput } from '../components/ui';
+import { Modal } from '../components/Modal';
 
 interface AdminUser {
   id: string;
@@ -10,7 +11,9 @@ interface AdminUser {
   email: string;
   createdAt: number;
   hasSecurityQuestion: boolean;
+  securityQuestion?: string | null;
   isAdmin: boolean;
+  hasPassword?: boolean;
 }
 
 export function AdminPage() {
@@ -19,10 +22,13 @@ export function AdminPage() {
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [msg, setMsg] = useState('');
+  const [query, setQuery] = useState('');
+  const [adminEmail, setAdminEmail] = useState('');
   const [resetEmail, setResetEmail] = useState('');
   const [resetPw, setResetPw] = useState('');
-  const [deleteEmail, setDeleteEmail] = useState('');
-  const [adminEmail, setAdminEmail] = useState('');
+  const [resetTarget, setResetTarget] = useState<AdminUser | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<AdminUser | null>(null);
+  const [busy, setBusy] = useState(false);
 
   const token = settings?.onlineAccount?.token ?? '';
   const bUrl = settings?.onlineAccount?.backendUrl ?? '';
@@ -38,27 +44,41 @@ export function AdminPage() {
     setLoading(false);
   }
 
-  async function doReset() {
-    if (!resetEmail || !resetPw) return;
-    setMsg('');
-    const res = await syncClient.adminResetPassword(bUrl, token, resetEmail, resetPw);
-    setMsg(res.ok ? `✓ Password reset for ${resetEmail}` : '⚠️ ' + (res.error || 'Failed'));
-    if (res.ok) { setResetEmail(''); setResetPw(''); }
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return users;
+    return users.filter((u) => u.name?.toLowerCase().includes(q) || u.email?.toLowerCase().includes(q));
+  }, [users, query]);
+
+  const stats = useMemo(() => {
+    const total = users.length;
+    const admins = users.filter((u) => u.isAdmin).length;
+    const withSec = users.filter((u) => u.hasSecurityQuestion).length;
+    return { total, admins, withSec };
+  }, [users]);
+
+  async function doReset(email: string, pw: string) {
+    if (!email || !pw) return;
+    setBusy(true); setMsg('');
+    const res = await syncClient.adminResetPassword(bUrl, token, email, pw);
+    setMsg(res.ok ? `✓ Password reset for ${email}` : '⚠️ ' + (res.error || 'Failed'));
+    setBusy(false);
+    if (res.ok) { setResetEmail(''); setResetPw(''); setResetTarget(null); }
   }
 
   async function doDelete(email: string) {
-    if (!confirm(`Delete user ${email}? This cannot be undone.`)) return;
-    setMsg('');
+    setBusy(true); setMsg('');
     const res = await syncClient.adminDeleteUser(bUrl, token, email);
     setMsg(res.ok ? `✓ Deleted ${email}` : '⚠️ ' + (res.error || 'Failed'));
-    if (res.ok) loadUsers();
+    setBusy(false);
+    if (res.ok) { setDeleteTarget(null); loadUsers(); }
   }
 
   if (!token) {
     return (
       <div className="flex min-h-full items-center justify-center p-4">
         <div className="card text-center">
-          <h1 className="text-xl font-bold"> Admin Panel</h1>
+          <h1 className="text-xl font-bold">🛡️ Admin Panel</h1>
           <p className="mt-2 text-sm text-slate-400">Please sign in first.</p>
           <button className="btn-primary mt-4" onClick={() => navigate('/auth')}>Go to Sign In</button>
         </div>
@@ -68,22 +88,44 @@ export function AdminPage() {
 
   return (
     <div className="p-4">
-      <div className="mb-6 flex items-center justify-between">
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold">️ Admin Panel</h1>
+          <h1 className="text-2xl font-bold">🛡️ Admin Panel</h1>
           <p className="text-sm text-slate-400">Admin: {adminEmail || 'not configured'}</p>
         </div>
-        <button className="btn-secondary" onClick={loadUsers}>🔄 Refresh</button>
+        <div className="flex gap-2">
+          <button className="btn-secondary" onClick={loadUsers}>🔄 Refresh</button>
+          <button className="btn-ghost" onClick={() => navigate('/settings')}>← Settings</button>
+        </div>
       </div>
 
       {msg && <div className="mb-4 rounded-lg bg-slate-50 p-3 text-sm dark:bg-slate-700">{msg}</div>}
 
+      {/* Stats */}
+      <div className="mb-6 grid grid-cols-3 gap-3">
+        <div className="card !p-4 text-center">
+          <div className="text-2xl font-extrabold text-brand-600">{stats.total}</div>
+          <div className="text-xs text-slate-400">Total users</div>
+        </div>
+        <div className="card !p-4 text-center">
+          <div className="text-2xl font-extrabold">{stats.admins}</div>
+          <div className="text-xs text-slate-400">Admins</div>
+        </div>
+        <div className="card !p-4 text-center">
+          <div className="text-2xl font-extrabold text-green-600">{stats.withSec}</div>
+          <div className="text-xs text-slate-400">Have security Q</div>
+        </div>
+      </div>
+
       {/* User list */}
       <div className="card mb-6">
-        <h2 className="mb-3 font-semibold">👥 Registered Users ({users.length})</h2>
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <h2 className="font-semibold">👥 Registered Users ({filtered.length})</h2>
+          <input className="input !w-auto !py-1 text-sm" placeholder="🔍 Search name / email…" value={query} onChange={(e) => setQuery(e.target.value)} />
+        </div>
         {loading ? (
           <div className="py-8 text-center text-slate-400">Loading...</div>
-        ) : users.length === 0 ? (
+        ) : filtered.length === 0 ? (
           <div className="py-8 text-center text-slate-400">No users found.</div>
         ) : (
           <div className="overflow-x-auto">
@@ -93,23 +135,27 @@ export function AdminPage() {
                   <th className="pb-2">Name</th>
                   <th className="pb-2">Email</th>
                   <th className="pb-2">Created</th>
-                  <th className="pb-2">Recovery</th>
+                  <th className="pb-2">Security Q</th>
                   <th className="pb-2">Role</th>
-                  <th className="pb-2">Actions</th>
+                  <th className="pb-2 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {users.map((u) => (
+                {filtered.map((u) => (
                   <tr key={u.id} className="border-b border-slate-100 dark:border-slate-800">
                     <td className="py-2 font-medium">{u.name}</td>
                     <td className="py-2 text-slate-400">{u.email}</td>
                     <td className="py-2 text-xs text-slate-400">{new Date(u.createdAt).toLocaleDateString()}</td>
-                    <td className="py-2">{u.hasSecurityQuestion ? '✅' : '—'}</td>
+                    <td className="py-2" title={u.securityQuestion || ''}>{u.hasSecurityQuestion ? '✅' : '—'}</td>
                     <td className="py-2">{u.isAdmin ? '👑 Admin' : 'User'}</td>
-                    <td className="py-2">
+                    <td className="py-2 text-right">
                       {!u.isAdmin && (
-                        <button className="text-xs text-red-500 hover:text-red-700" onClick={() => doDelete(u.email)}>Delete</button>
+                        <div className="flex justify-end gap-2">
+                          <button className="text-xs text-brand-600 hover:underline dark:text-brand-400" onClick={() => { setResetTarget(u); setResetEmail(u.email); setResetPw(''); }}>Reset pwd</button>
+                          <button className="text-xs text-red-500 hover:underline" onClick={() => setDeleteTarget(u)}>Delete</button>
+                        </div>
                       )}
+                      {u.isAdmin && <span className="text-xs text-slate-300">—</span>}
                     </td>
                   </tr>
                 ))}
@@ -119,28 +165,34 @@ export function AdminPage() {
         )}
       </div>
 
-      {/* Reset password */}
+      {/* Reset password (form) */}
       <div className="card mb-6">
         <h2 className="mb-3 font-semibold">🔑 Reset User Password</h2>
         <div className="grid gap-3 md:grid-cols-3">
           <div><label className="label">User email</label><input className="input" value={resetEmail} onChange={(e) => setResetEmail(e.target.value)} placeholder="user@example.com" /></div>
           <div><label className="label">New password</label><PasswordInput value={resetPw} onChange={(e) => setResetPw(e.target.value)} placeholder="At least 6 characters" /></div>
-          <div className="flex items-end"><button className="btn-primary w-full" disabled={!resetEmail || !resetPw} onClick={doReset}>Reset Password</button></div>
+          <div className="flex items-end"><button className="btn-primary w-full" disabled={busy || !resetEmail || !resetPw} onClick={() => doReset(resetEmail, resetPw)}>Reset Password</button></div>
         </div>
       </div>
 
-      {/* Delete user */}
-      <div className="card">
-        <h2 className="mb-3 font-semibold">🗑 Delete User</h2>
-        <div className="grid gap-3 md:grid-cols-2">
-          <div><label className="label">User email</label><input className="input" value={deleteEmail} onChange={(e) => setDeleteEmail(e.target.value)} placeholder="user@example.com" /></div>
-          <div className="flex items-end"><button className="btn-primary w-full !bg-red-600" disabled={!deleteEmail} onClick={() => doDelete(deleteEmail)}>Delete User</button></div>
+      {/* Reset confirm modal */}
+      <Modal open={!!resetTarget} onClose={() => setResetTarget(null)} title={`🔑 Reset password for ${resetTarget?.email ?? ''}`}>
+        <p className="mb-3 text-sm text-slate-500 dark:text-slate-300">Set a new password for <strong>{resetTarget?.email}</strong>. They can sign in with it immediately.</p>
+        <div className="space-y-3">
+          <PasswordInput value={resetPw} onChange={(e) => setResetPw(e.target.value)} placeholder="New password (at least 6 chars)" autoFocus />
+          <button className="btn-primary w-full" disabled={busy || resetPw.length < 6} onClick={() => resetTarget && doReset(resetTarget.email, resetPw)}>
+            {busy ? 'Resetting…' : 'Confirm reset'}
+          </button>
         </div>
-      </div>
+      </Modal>
 
-      <div className="mt-6 text-center">
-        <button className="btn-ghost" onClick={() => navigate('/settings')}>← Back to Settings</button>
-      </div>
+      {/* Delete confirm modal */}
+      <Modal open={!!deleteTarget} onClose={() => setDeleteTarget(null)} title={`🗑 Delete ${deleteTarget?.email ?? ''}`}>
+        <p className="mb-3 text-sm text-red-600 dark:text-red-400">⚠️ This permanently deletes the account and all its synced data. This cannot be undone.</p>
+        <button className="btn-primary w-full !bg-red-600" disabled={busy} onClick={() => deleteTarget && doDelete(deleteTarget.email)}>
+          {busy ? 'Deleting…' : 'Yes, delete this user'}
+        </button>
+      </Modal>
     </div>
   );
 }

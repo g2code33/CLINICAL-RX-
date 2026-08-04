@@ -344,6 +344,13 @@ export function SettingsPage() {
 
       <div className="mt-6"><UpdatePanel /></div>
 
+      {/* Admin panel — lives beside Updates in Settings now */}
+      <div className="mt-6 card">
+        <h2 className="mb-1 font-semibold">🛡️ Admin Panel</h2>
+        <p className="mb-3 text-xs text-slate-400">Manage users, reset passwords and review accounts (admin access required).</p>
+        <button className="btn-secondary" onClick={() => navigate('/admin')}>Open Admin Panel →</button>
+      </div>
+
       {/* Change password modal */}
       <Modal open={pwOpen} onClose={() => setPwOpen(false)} title="🔑 Change password">
         <div className="space-y-3 text-sm">

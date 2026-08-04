@@ -26,7 +26,6 @@ const NAV = [
   { to: '/progress', icon: '📊', label: 'Progress' },
   { to: '/ai', icon: '🤖', label: 'AI' },
   { to: '/settings', icon: '⚙️', label: 'Settings' },
-  { to: '/admin', icon: '🛡️', label: 'Admin' },
 ];
 
 // Shown in the mobile bottom bar (keep it short).
