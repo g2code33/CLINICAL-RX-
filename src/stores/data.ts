@@ -87,42 +87,58 @@ export const useData = create<DataStore>((set, get) => ({
   init: async () => {
     const adapter = get().adapter;
     set({ status: 'Loading local data…' });
-    const platform = await adapter.platform();
-    const [profiles, settingsList, days, diseases, medicines, investigations, questions, lessons, revisions, bundles, chats, quizzes] =
-      await Promise.all([
-        adapter.list('profile'),
-        adapter.list('settings'),
-        adapter.list('day'),
-        adapter.list('disease'),
-        adapter.list('medicine'),
-        adapter.list('investigation'),
-        adapter.list('question'),
-        adapter.list('lesson'),
-        adapter.list('revision'),
-        adapter.list('bundle'),
-        adapter.list('chat'),
-        adapter.list('quiz'),
-      ]);
-    const parse = (items: any[]) => items.map((i) => JSON.parse(i.data));
-    const profile = profiles.length ? parse(profiles)[0] : null;
-    const settings = settingsList.length ? parse(settingsList)[0] : null;
-    set({
-      platform,
-      profile,
-      settings,
-      days: sortByUpdated(parse(days)),
-      diseases: sortByUpdated(parse(diseases)),
-      medicines: sortByUpdated(parse(medicines)),
-      investigations: sortByUpdated(parse(investigations)),
-      questions: sortByUpdated(parse(questions)),
-      lessons: sortByUpdated(parse(lessons)),
-      revisions: sortByUpdated(parse(revisions)),
-      bundles: sortByUpdated(parse(bundles)),
-      chats: sortByUpdated(parse(chats)),
-      quizzes: sortByUpdated(parse(quizzes)),
-      ready: true,
-      status: 'Ready · ' + (hasElectronBridge() ? 'SQLite (offline)' : 'Web storage'),
-    });
+    try {
+      const platform = await adapter.platform();
+      const [profiles, settingsList, days, diseases, medicines, investigations, questions, lessons, revisions, bundles, chats, quizzes] =
+        await Promise.all([
+          adapter.list('profile'),
+          adapter.list('settings'),
+          adapter.list('day'),
+          adapter.list('disease'),
+          adapter.list('medicine'),
+          adapter.list('investigation'),
+          adapter.list('question'),
+          adapter.list('lesson'),
+          adapter.list('revision'),
+          adapter.list('bundle'),
+          adapter.list('chat'),
+          adapter.list('quiz'),
+        ]);
+      // Defensive parse: skip any corrupt record instead of throwing, so the
+      // app can never be locked on the splash screen by bad stored data.
+      const parse = (items: any[]) =>
+        items
+          .map((i) => {
+            try { return JSON.parse(i.data); } catch { return null; }
+          })
+          .filter(Boolean);
+      const profile = profiles.length ? parse(profiles)[0] : null;
+      const settings = settingsList.length ? parse(settingsList)[0] : null;
+      set({
+        platform,
+        profile,
+        settings,
+        days: sortByUpdated(parse(days)),
+        diseases: sortByUpdated(parse(diseases)),
+        medicines: sortByUpdated(parse(medicines)),
+        investigations: sortByUpdated(parse(investigations)),
+        questions: sortByUpdated(parse(questions)),
+        lessons: sortByUpdated(parse(lessons)),
+        revisions: sortByUpdated(parse(revisions)),
+        bundles: sortByUpdated(parse(bundles)),
+        chats: sortByUpdated(parse(chats)),
+        quizzes: sortByUpdated(parse(quizzes)),
+        ready: true,
+        status: 'Ready · ' + (hasElectronBridge() ? 'SQLite (offline)' : 'Web storage'),
+      });
+    } catch (e: any) {
+      // Never hard-lock the app: surface the error but still boot.
+      console.error('[clinical-rx] init failed:', e);
+      set({
+        ready: true,
+        status: '⚠️ Load error — some data may be missing',
+      });
+    }
   },
 
   platformName: async () => {
