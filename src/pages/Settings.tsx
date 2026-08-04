@@ -389,7 +389,7 @@ export function SettingsPage() {
       </Modal>
 
       <div className="mt-6 flex flex-col items-center gap-2 text-center text-xs text-slate-400">
-        <img src="./v3.PNG" alt="CLINICAL Rx logo" className="h-10 w-10 rounded-lg object-cover" />
+        <img src="./v2.PNG" alt="CLINICAL Rx logo" className="h-10 w-10 rounded-lg object-cover" />
         <div>CLINICAL Rx v{__APP_VERSION__} · Built with React + Electron + SQLite · Web via Vercel</div>
       </div>
     </div>

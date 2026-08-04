@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import type { ReactNode } from 'react';
 import { useData } from '../stores/data';
@@ -46,6 +47,10 @@ export function Layout({ children }: { children: ReactNode }) {
   const setPaletteOpen = useUi((s) => s.setPaletteOpen);
   const sidebarOpen = useUi((s) => s.sidebarOpen);
   const setSidebarOpen = useUi((s) => s.setSidebarOpen);
+  const connected = useData((s) => s.settings?.onlineAccount?.connected);
+  const syncing = useData((s) => s.settings?.onlineAccount?.syncing);
+  const pending = useData((s) => s.removed.length); // lightweight re-render driver
+  const [beepOn, setBeepOn] = useState(true);
 
   return (
     <ContextMenuProvider>
@@ -55,7 +60,7 @@ export function Layout({ children }: { children: ReactNode }) {
       {sidebarOpen ? (
         <aside className="flex w-56 shrink-0 flex-col border-r border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-800">
           <div className="flex items-center gap-2.5 border-b border-slate-200 px-4 py-4 dark:border-slate-700">
-            <img src="./v3.PNG" alt="CLINICAL Rx" className="h-9 w-9 rounded-lg object-cover" />
+            <img src="./v2.PNG" alt="CLINICAL Rx" className="h-9 w-9 rounded-lg object-cover" />
             <div>
               <div className="text-sm font-extrabold tracking-tight text-brand-700 dark:text-brand-300">CLINICAL Rx</div>
               <div className="text-[11px] text-slate-400">Clinical Companion</div>
@@ -90,7 +95,7 @@ export function Layout({ children }: { children: ReactNode }) {
       ) : (
         <aside className="flex w-14 shrink-0 flex-col border-r border-slate-200 bg-white py-2 dark:border-slate-700 dark:bg-slate-800">
           <div className="mb-1 flex justify-center">
-            <img src="./v3.PNG" alt="CLINICAL Rx" className="h-8 w-8 rounded-lg object-cover" />
+            <img src="./v2.PNG" alt="CLINICAL Rx" className="h-8 w-8 rounded-lg object-cover" />
           </div>
           <nav className="flex flex-1 flex-col items-center gap-1 px-1">
             {NAV.map((n) => (
@@ -124,9 +129,23 @@ export function Layout({ children }: { children: ReactNode }) {
             >
               ☰
             </button>
-            <img src="./v3.PNG" alt="CLINICAL Rx" className="h-7 w-7 rounded-lg object-cover" />
+            <img src="./v2.PNG" alt="CLINICAL Rx" className="h-7 w-7 rounded-lg object-cover" />
             <div className="truncate text-sm font-medium text-slate-500 dark:text-slate-300">
-              🟢 <span className="hidden sm:inline">{status}</span>
+              {/* Live status dot: green = cloud connected, amber = syncing/pending,
+                  slate = local-only. Click toggles the 'beep' pulse on/off. */}
+              <button
+                className="inline-flex items-center gap-1.5"
+                onClick={() => setBeepOn((v) => !v)}
+                title={beepOn ? 'Status beep on — click to silence' : 'Status beep off — click to enable'}
+              >
+                <span
+                  className={`inline-block h-2.5 w-2.5 rounded-full ${
+                    connected ? 'bg-green-500' : syncing ? 'bg-amber-500' : pending > 0 ? 'bg-amber-400' : 'bg-slate-400'
+                  } ${beepOn && (connected || syncing || pending > 0) ? 'animate-pulse' : ''}`}
+                />
+                <span className="hidden sm:inline">{connected ? '☁️ Cloud' : syncing ? 'Syncing…' : pending > 0 ? 'Local · pending' : 'Local'}</span>
+                <span className="hidden sm:inline text-slate-300 dark:text-slate-500">{beepOn ? '🔔' : '🔕'}</span>
+              </button>
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-2 lg:gap-3">
