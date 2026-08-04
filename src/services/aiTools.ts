@@ -287,8 +287,13 @@ export async function generateQuiz(focus?: string, count = 10, opts: RunOpts = {
     `Create a ${count}-question multiple-choice quiz based on my clinical exposure.`,
     `Focus areas: ${context || 'general clinical pharmacy'}.`,
     `Return ONLY valid JSON in EXACTLY this shape (no commentary, no markdown):`,
-    `{"title":"A short quiz title","questions":[{"question":"...","options":["A text","B text","C text","D text"],"answer":0,"explanation":"1-line explanation"}]}`,
+    `{"title":"A short quiz title","questions":[{"question":"...","options":["A text","B text","C text","D text"],"answer":0,"explanation":"...full teaching explanation..."}]}`,
     `answer is the 0-based index of the correct option. Make options plausible and at my learning level.`,
+    `EXPLANATIONS MUST BE THOROUGH AND CONVINCING — this is the most important part. For EVERY question, write a full teaching-style explanation of 3-6 sentences that:`,
+    `1) clearly explains WHY the correct answer is right (the mechanism, guideline, or reasoning),`,
+    `2) teaches the key clinical concept so the student actually learns it,`,
+    `3) briefly explains why the wrong options are incorrect where relevant (trap-busting).`,
+    `Write like an excellent tutor: precise, warm, and educational. Never write "1-line explanation" or a placeholder.`,
   ].join('\n');
 
   // Generous token budget + streaming + a longer timeout so big quizzes are

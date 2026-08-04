@@ -23,6 +23,8 @@ export function SettingsPage() {
   const setStatus = useData((s) => s.setStatus);
   const [draft, setDraft] = useState<Settings | null>(settings);
   const [showKeys, setShowKeys] = useState<Record<string, boolean>>({});
+  const [testBusy, setTestBusy] = useState<Record<string, boolean>>({});
+  const [testResult, setTestResult] = useState<Record<string, string>>({});
   const [acctForm, setAcctForm] = useState(() => ({
     email: '',
     password: '',
@@ -327,7 +329,9 @@ export function SettingsPage() {
                 <div className="grid gap-2 md:grid-cols-3">
                   <div><label className={label}>Provider</label><select className={input} value={cfg.provider} onChange={(e) => updateAi(draft, m.key, { provider: e.target.value as any }, saveSettings, setDraft)}><option value="openai">OpenAI</option><option value="anthropic">Anthropic</option><option value="openrouter">OpenRouter</option><option value="nvidia">NVIDIA NIM</option><option value="custom">Custom</option></select></div>
                   <div><label className={label}>Model</label><input className={input} value={cfg.model} placeholder={modelPlaceholder(cfg.provider)} onChange={(e) => updateAi(draft, m.key, { model: e.target.value }, saveSettings, setDraft)} /></div>
-                  <div><label className={label}>API Key</label><div className="flex gap-1"><input type={showKeys[m.key] ? 'text' : 'password'} className={input} value={cfg.apiKey} placeholder="sk-…" onChange={(e) => updateAi(draft, m.key, { apiKey: e.target.value }, saveSettings, setDraft)} /><button className="btn-secondary shrink-0" onClick={() => setShowKeys({ ...showKeys, [m.key]: !showKeys[m.key] })}>{showKeys[m.key] ? '🙈' : '👁'}</button><button className="btn-secondary shrink-0" title="Use this key + provider for all AI sections (so every section works with one key)" onClick={() => applyKeyToAll(draft, m.key, saveSettings, setDraft, setStatus)}>⇄ All</button></div></div>
+                  <div><label className={label}>API Key</label><div className="flex flex-wrap gap-1"><input type={showKeys[m.key] ? 'text' : 'password'} className="input min-w-40 flex-1" value={cfg.apiKey} placeholder="sk-…" onChange={(e) => updateAi(draft, m.key, { apiKey: e.target.value }, saveSettings, setDraft)} /><button className="btn-secondary shrink-0" onClick={() => setShowKeys({ ...showKeys, [m.key]: !showKeys[m.key] })}>{showKeys[m.key] ? '🙈' : '👁'}</button><button className="btn-secondary shrink-0" title="Use this key + provider for all AI sections (so every section works with one key)" onClick={() => applyKeyToAll(draft, m.key, saveSettings, setDraft, setStatus)}>⇄ All</button><button className="btn-secondary shrink-0" title="Test this API key with a tiny request" disabled={testBusy[m.key]} onClick={() => void testModuleKey(m.key, setTestBusy, setTestResult)}>{testBusy[m.key] ? 'Testing…' : '🔌 Test'}</button></div>
+                  {testResult[m.key] && <div className={`mt-1 text-[11px] ${testResult[m.key].startsWith('✓') ? 'text-green-600' : 'text-red-500'}`}>{testResult[m.key]}</div>}
+                  </div>
                 </div>
                 {cfg.provider === 'custom' && <div className="mt-2"><label className={label}>Base URL</label><input className={input} value={cfg.baseUrl ?? ''} placeholder="https://api.example.com" onChange={(e) => updateAi(draft, m.key, { baseUrl: e.target.value }, saveSettings, setDraft)} /></div>}
                 {cfg.provider === 'nvidia' && <div className="mt-2 rounded bg-slate-50 px-3 py-2 text-[11px] text-slate-500 dark:bg-slate-700 dark:text-slate-300">🟩 NVIDIA NIM endpoint: <code>https://integrate.api.nvidia.com/v1</code> · default model <code>meta/llama-3.3-70b-instruct</code>.</div>}
@@ -390,6 +394,38 @@ export function SettingsPage() {
       </div>
     </div>
   );
+}
+
+async function testModuleKey(key: string, setTestBusy: any, setTestResult: any) {
+  const d = useData.getState().settings;
+  if (!d) return;
+  // Use the module's own key, or borrow from another enabled module (same as
+  // the runtime resolution in aiTools.getEffectiveAiConfig).
+  const cfg = d.ai?.[key];
+  if (!cfg) return;
+  let eff = { ...cfg };
+  if (!eff.apiKey?.trim()) {
+    const all = d.ai ?? {};
+    for (const [k2, c] of Object.entries(all)) {
+      if (k2 === key || !c) continue;
+      if (c.enabled && c.apiKey?.trim()) { eff = { ...eff, apiKey: c.apiKey.trim(), model: eff.model || c.model || '' }; break; }
+    }
+  }
+  if (!eff.apiKey?.trim()) {
+    setTestResult((r: any) => ({ ...r, [key]: 'Enter an API key first (or one is borrowed from another section).' }));
+    return;
+  }
+  setTestBusy((b: any) => ({ ...b, [key]: true }));
+  setTestResult((r: any) => ({ ...r, [key]: '' }));
+  try {
+    const { testAiKey } = await import('../services/ai');
+    const res = await testAiKey(eff);
+    setTestResult((r: any) => ({ ...r, [key]: res.ok ? `✓ Key works — responded in ${res.ms}ms` : `✗ ${res.error || 'Test failed'}` }));
+  } catch (e: any) {
+    setTestResult((r: any) => ({ ...r, [key]: '✗ ' + (e?.message || 'Test failed') }));
+  } finally {
+    setTestBusy((b: any) => ({ ...b, [key]: false }));
+  }
 }
 
 /** Copy one module's API key + provider (+ baseUrl) to every AI section. */

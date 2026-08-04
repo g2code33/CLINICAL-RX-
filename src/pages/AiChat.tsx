@@ -4,6 +4,7 @@ import { useData, uid } from '../stores/data';
 import { newChatSession } from '../services/defaults';
 import { copyToClipboard } from '../services/export';
 import { useContextMenu, ctxHandlers, type CtxItem } from '../components/ContextMenu';
+import { AiThinking } from '../components/AiThinking';
 import { runAiModule, aiReady, aiModuleLabel, analyzeLearning, generateQuestions, revisionCoach, organizeNote } from '../services/aiTools';
 import type { AiModuleKey, RunOpts } from '../services/aiTools';
 import type { ChatSession } from '../types';
@@ -473,7 +474,9 @@ export function AiChat() {
                   </div>
                 </div>
               )}
-              {thisBusy && !showStreaming && <div className="text-sm text-slate-400 animate-pulse">🤖 {aiModuleLabel(active.module)} is thinking…</div>}
+              {thisBusy && !showStreaming && (
+                <AiThinking moduleLabel={aiModuleLabel(active.module)} />
+              )}
               <div ref={bottomRef} />
             </div>
           )}

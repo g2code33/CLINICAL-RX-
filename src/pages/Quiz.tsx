@@ -7,6 +7,7 @@ import { aiReady } from '../services/aiTools';
 import { copyToClipboard } from '../services/export';
 import { loadBank } from '../services/questionBank';
 import { useContextMenu, ctxHandlers, type CtxItem } from '../components/ContextMenu';
+import { AiThinking } from '../components/AiThinking';
 import { newSavedQuiz } from '../services/defaults';
 import type { SavedQuiz } from '../types';
 
@@ -238,11 +239,13 @@ export function Quiz() {
           actions={<button className="btn-primary" onClick={startFresh}>＋ Create a Quiz</button>}
         />
       ) : loading ? (
-        <EmptyState
-          icon="🤖"
-          title="Generating your quiz…"
-          hint={streamText ? 'Live preview: ' + streamText : 'This streams in as fast as the AI can write — usually a few seconds per question.'}
-        />
+        <div className="card max-w-2xl">
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="text-lg font-bold">Generating your quiz…</h2>
+            {streamText && <span className="text-xs text-slate-400">streaming…</span>}
+          </div>
+          <AiThinking moduleLabel="AI Question Generator" detail={streamText ? 'Live preview: ' + streamText.slice(0, 200) : 'Building questions from your clinical exposure…'} />
+        </div>
       ) : quiz ? (
         <div className="space-y-4">
           {/* Exam header */}

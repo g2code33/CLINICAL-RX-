@@ -233,3 +233,19 @@ export async function aiChat(cfg: AiModuleConfig, system: string, user: string, 
     return { ok: false, error: friendlyNetworkError(e, host) };
   }
 }
+
+/**
+ * Test an AI key: makes a tiny 1-token request and reports success + latency.
+ * Lets users verify a key in Settings without waiting for a full answer.
+ */
+export async function testAiKey(cfg: AiModuleConfig): Promise<{ ok: boolean; ms: number; error?: string }> {
+  const t0 = Date.now();
+  const res = await aiChat({ ...cfg, enabled: true, model: cfg.model || defaultModelFor(cfg) }, 'Reply with the single word: ok', 'ok', {
+    maxTokens: 5,
+    temperature: 0,
+    timeoutMs: 15000,
+  });
+  const ms = Date.now() - t0;
+  if (res.ok) return { ok: true, ms };
+  return { ok: false, ms, error: res.error };
+}
