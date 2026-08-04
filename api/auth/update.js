@@ -27,7 +27,7 @@ module.exports = guard(async function handler(req, res) {
     if (securityQuestion.trim()) {
       userData.securityQuestion = securityQuestion.trim();
       if (securityAnswer && securityAnswer.trim()) {
-        userData.securityAnswer = hashPassword(securityAnswer.trim());
+        userData.securityAnswer = hashPassword(securityAnswer.trim().toLowerCase());
       }
     } else {
       delete userData.securityQuestion;

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { PageHeader, EmptyState } from '../components/ui';
 import { useData, uid } from '../stores/data';
 import { newChatSession } from '../services/defaults';
+import { copyToClipboard } from '../services/export';
 import { runAiModule, aiReady, aiModuleLabel, analyzeLearning, generateQuestions, revisionCoach, organizeNote } from '../services/aiTools';
 import type { AiModuleKey, RunOpts } from '../services/aiTools';
 import type { ChatSession } from '../types';
@@ -29,23 +30,34 @@ export function AiChat() {
   const [mode, setMode] = useState<Mode>('chat');
   const [activeId, setActiveId] = useState<string | null>(null);
   const [input, setInput] = useState('');
-  const [thinking, setThinking] = useState(false);
+  // Busy state is PER SECTION — one AI working must never block another.
+  const [busyBySection, setBusyBySection] = useState<Partial<Record<Mode, boolean>>>({});
   const [streaming, setStreaming] = useState<{ sessionId: string; text: string } | null>(null);
   const [parsedRecords, setParsedRecords] = useState<{ medicines: string[]; diseases: string[]; investigations: string[]; lessons: string[]; questions: string[] } | null>(null);
+  const [showHidden, setShowHidden] = useState(false);
+  const [renameId, setRenameId] = useState<string | null>(null);
+  const [renameVal, setRenameVal] = useState('');
+  const [listOpen, setListOpen] = useState(true); // hamburger: show/hide the chat list
+  const [pendingImages, setPendingImages] = useState<string[]>([]); // images to attach
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
 
   const chats = useData((s) => s.chats);
   const save = useData((s) => s.save);
   const remove = useData((s) => s.remove);
+  const setStatus = useData((s) => s.setStatus);
 
   const sessions = chats.filter((c) => c.section === mode).sort((a, b) => b.updatedAt - a.updatedAt);
+  const visibleSessions = sessions.filter((c) => showHidden || !c.hidden);
+  const hiddenCount = sessions.filter((c) => c.hidden).length;
   const active = MODES.find((m) => m.key === mode)!;
   const currentSession = activeId ? chats.find((c) => c.id === activeId) ?? null : null;
 
   useEffect(() => {
+    // Scroll to the LAST message whenever a chat is opened or a message lands.
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [chats, streaming, thinking]);
+  }, [chats, streaming, busyBySection, activeId, currentSession?.messages.length]);
 
   useEffect(() => {
     setParsedRecords(null);
@@ -65,13 +77,78 @@ export function AiChat() {
     setInput('');
     setStreaming(null);
     setParsedRecords(null);
+    setPendingImages([]);
     setTimeout(() => inputRef.current?.focus(), 50);
+  }
+
+  /** Downscale an image data URL so stored chats stay small (max 1024px, JPEG). */
+  async function downscaleImage(dataUrl: string, maxSize = 1024, quality = 0.8): Promise<string> {
+    try {
+      const img = new Image();
+      await new Promise<void>((resolve, reject) => { img.onload = () => resolve(); img.onerror = () => reject(new Error('bad image')); img.src = dataUrl; });
+      const scale = Math.min(1, maxSize / Math.max(img.width, img.height));
+      const w = Math.max(1, Math.round(img.width * scale));
+      const h = Math.max(1, Math.round(img.height * scale));
+      const canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      canvas.getContext('2d')!.drawImage(img, 0, 0, w, h);
+      return canvas.toDataURL('image/jpeg', quality);
+    } catch {
+      return dataUrl; // keep original if it can't be processed
+    }
+  }
+
+  function onPickImages(files: FileList | null) {
+    if (!files) return;
+    const list = Array.from(files).filter((f) => f.type.startsWith('image/'));
+    for (const f of list) {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const dataUrl = String(reader.result || '');
+        if (!dataUrl) return;
+        void downscaleImage(dataUrl).then((small) => {
+          setPendingImages((p) => [...p, small].slice(0, 4)); // max 4 images per message
+        });
+      };
+      reader.readAsDataURL(f);
+    }
+    if (fileRef.current) fileRef.current.value = '';
   }
 
   async function deleteSession(id: string) {
     if (!confirm('Delete this chat? This cannot be undone.')) return;
     await remove('chat', id);
     if (activeId === id) setActiveId(null);
+  }
+
+  async function setHidden(id: string, hidden: boolean) {
+    const s = chats.find((c) => c.id === id);
+    if (!s) return;
+    await save('chat', { ...s, hidden, updatedAt: Date.now() });
+  }
+
+  async function renameSession(id: string, title: string) {
+    const t = title.trim();
+    const s = chats.find((c) => c.id === id);
+    if (!s || !t) { setRenameId(null); return; }
+    await save('chat', { ...s, title: t.slice(0, 60), updatedAt: Date.now() });
+    setRenameId(null);
+  }
+
+  async function shareSession(id: string) {
+    const s = chats.find((c) => c.id === id);
+    if (!s) return;
+    const lines = [
+      `# 💊 CLINICAL Rx — ${s.title}`,
+      `**Section:** ${active.label} · **Saved:** ${fmtTime(s.updatedAt)} · **Messages:** ${s.messages.length}`,
+      '',
+    ];
+    for (const m of s.messages) {
+      lines.push(`**${m.role === 'user' ? 'Student' : 'AI'}:** ${m.text}`);
+      lines.push('');
+    }
+    await copyToClipboard(lines.join('\n'));
+    setStatus(`✓ Chat "${s.title}" copied — paste it anywhere to share`);
   }
 
   function extractStructured(text: string): { medicines: string[]; diseases: string[]; investigations: string[]; lessons: string[]; questions: string[] } {
@@ -93,8 +170,14 @@ export function AiChat() {
     }
   }
 
+  const thisBusy = !!busyBySection[mode];
+
+  function setBusy(b: boolean) {
+    setBusyBySection((prev) => ({ ...prev, [mode]: b }));
+  }
+
   async function send(text?: string) {
-    if (thinking) return;
+    if (busyBySection[mode]) return;
     const moduleKey = active.module;
     if (!aiReady(moduleKey)) {
       setMsgsInline(`⚠️ ${aiModuleLabel(moduleKey)} isn't ready. Add an API key (and enable it) in Settings → AI.`);
@@ -114,12 +197,13 @@ export function AiChat() {
     }
 
     const now = Date.now();
-    const userMsg = { id: uid(), role: 'user' as const, text: userText, ts: now };
+    const userMsg = { id: uid(), role: 'user' as const, text: userText, ts: now, images: pendingImages.length ? [...pendingImages] : undefined };
     const afterUser: ChatSession = { ...session, messages: [...(session.messages ?? []), userMsg], updatedAt: now };
     await save('chat', afterUser);
 
     setInput('');
-    setThinking(true);
+    setPendingImages([]);
+    setBusy(true);
     setParsedRecords(null);
     const streamSessionId = afterUser.id;
     setStreaming({ sessionId: streamSessionId, text: '' });
@@ -131,9 +215,11 @@ export function AiChat() {
     const history = afterUser.messages.slice(-13, -1).map((m) => ({
       role: m.role === 'user' ? 'user' as const : 'assistant' as const,
       content: m.text,
+      ...(m.images?.length ? { images: m.images } : {}),
     }));
     const opts: RunOpts = {
       history,
+      images: pendingImages.length ? [...pendingImages] : undefined,
       excludeSessionId: afterUser.id,
       onToken: (t) => setStreaming((s) => (s ? { sessionId: s.sessionId, text: s.text + t } : { sessionId: streamSessionId, text: t })),
     };
@@ -153,7 +239,7 @@ export function AiChat() {
       res = { ok: false as const, error: e?.message || 'Something went wrong. Please try again.' };
     }
 
-    setThinking(false);
+    setBusy(false);
     setStreaming(null);
 
     const aiText = res.ok ? res.text : '⚠️ ' + res.error;
@@ -248,34 +334,83 @@ export function AiChat() {
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col gap-3 md:flex-row">
-        {/* Session list for this section */}
+        {/* Session list for this section — hamburger ☰ toggles it */}
+        {!listOpen ? (
+          <button
+            className="flex h-fit shrink-0 flex-col items-center gap-1 self-start rounded-lg border border-slate-200 px-2.5 py-2 text-sm hover:bg-slate-100 dark:border-slate-700 dark:hover:bg-slate-700"
+            onClick={() => setListOpen(true)}
+            title="Show chat list"
+          >
+            <span>☰</span>
+            <span className="text-[10px] text-slate-400">{sessions.length}</span>
+          </button>
+        ) : (
         <div className="flex min-h-0 w-full flex-col md:w-60 md:shrink-0">
           <div className="mb-1 flex items-center justify-between px-1 text-xs font-semibold text-slate-400">
-            <span>{active.label} chats ({sessions.length})</span>
+            <div className="flex items-center gap-1">
+              <button className="btn-ghost !p-0 text-sm" onClick={() => setListOpen(false)} title="Hide chat list">☰</button>
+              <span>{active.label} chats ({sessions.length})</span>
+            </div>
+            {hiddenCount > 0 && (
+              <button className="btn-ghost !p-0 text-[11px] text-brand-600 dark:text-brand-400" onClick={() => setShowHidden((v) => !v)}>
+                {showHidden ? '🙈 Hide hidden' : `👁 Show hidden (${hiddenCount})`}
+              </button>
+            )}
           </div>
           <div className="min-h-0 flex-1 space-y-1 overflow-y-auto rounded-lg border border-slate-200 p-1.5 dark:border-slate-700">
-            {sessions.length === 0 && (
-              <p className="p-2 text-xs text-slate-400">No chats yet. Start one below.</p>
+            {visibleSessions.length === 0 && (
+              <p className="p-2 text-xs text-slate-400">{hiddenCount ? 'All chats hidden — tap "Show hidden" to bring them back.' : 'No chats yet. Start one below.'}</p>
             )}
-            {sessions.map((s) => (
-              <div
-                key={s.id}
-                className={`group flex cursor-pointer items-center gap-1 rounded-md px-2 py-1.5 text-left text-xs ${s.id === activeId ? 'bg-brand-600 text-white' : 'hover:bg-slate-100 dark:hover:bg-slate-700'}`}
-                onClick={() => { setActiveId(s.id); setStreaming(null); }}
-              >
-                <span className="min-w-0 flex-1 truncate">
-                  {s.title || 'Untitled'}
-                  <span className={`ml-1 opacity-60 ${s.id === activeId ? 'text-white' : 'text-slate-400'}`}>{s.messages.length} msgs · {fmtTime(s.updatedAt)}</span>
-                </span>
-                <button
-                  className={`shrink-0 opacity-0 group-hover:opacity-100 ${s.id === activeId ? 'text-white/80 hover:text-white' : 'text-slate-400 hover:text-red-500'}`}
-                  title="Delete chat"
-                  onClick={(e) => { e.stopPropagation(); void deleteSession(s.id); }}
-                >🗑</button>
+            {visibleSessions.map((s) => (
+              <div key={s.id}>
+                {renameId === s.id ? (
+                  <div className="flex items-center gap-1 rounded-md bg-slate-100 p-1 dark:bg-slate-700">
+                    <input
+                      className="input !px-1.5 !py-0.5 text-xs"
+                      autoFocus
+                      value={renameVal}
+                      onChange={(e) => setRenameVal(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === 'Enter') void renameSession(s.id, renameVal); if (e.key === 'Escape') setRenameId(null); }}
+                      onBlur={() => void renameSession(s.id, renameVal)}
+                      placeholder="New title…"
+                    />
+                  </div>
+                ) : (
+                  <div
+                    className={`group flex cursor-pointer items-center gap-1 rounded-md px-2 py-1.5 text-left text-xs ${s.id === activeId ? 'bg-brand-600 text-white' : 'hover:bg-slate-100 dark:hover:bg-slate-700'} ${s.hidden ? 'opacity-50' : ''}`}
+                    onClick={() => { setActiveId(s.id); setStreaming(null); }}
+                  >
+                    <span className="min-w-0 flex-1 truncate">
+                      {s.hidden && '🙈 '}{s.title || 'Untitled'}
+                      <span className={`ml-1 opacity-60 ${s.id === activeId ? 'text-white' : 'text-slate-400'}`}>{s.messages.length} msgs · {fmtTime(s.updatedAt)}</span>
+                    </span>
+                    <button
+                      className={`shrink-0 opacity-0 group-hover:opacity-100 ${s.id === activeId ? 'text-white/80 hover:text-white' : 'text-slate-400 hover:text-brand-600'}`}
+                      title={s.hidden ? 'Show chat' : 'Hide chat'}
+                      onClick={(e) => { e.stopPropagation(); void setHidden(s.id, !s.hidden); }}
+                    >{s.hidden ? '👁' : '🙈'}</button>
+                    <button
+                      className={`shrink-0 opacity-0 group-hover:opacity-100 ${s.id === activeId ? 'text-white/80 hover:text-white' : 'text-slate-400 hover:text-brand-600'}`}
+                      title="Rename chat"
+                      onClick={(e) => { e.stopPropagation(); setRenameId(s.id); setRenameVal(s.title || ''); }}
+                    >✏️</button>
+                    <button
+                      className={`shrink-0 opacity-0 group-hover:opacity-100 ${s.id === activeId ? 'text-white/80 hover:text-white' : 'text-slate-400 hover:text-brand-600'}`}
+                      title="Share chat (copy)"
+                      onClick={(e) => { e.stopPropagation(); void shareSession(s.id); }}
+                    >📤</button>
+                    <button
+                      className={`shrink-0 opacity-0 group-hover:opacity-100 ${s.id === activeId ? 'text-white/80 hover:text-white' : 'text-slate-400 hover:text-red-500'}`}
+                      title="Delete chat"
+                      onClick={(e) => { e.stopPropagation(); void deleteSession(s.id); }}
+                    >🗑</button>
+                  </div>
+                )}
               </div>
             ))}
           </div>
         </div>
+        )}
 
         {/* Chat area */}
         <div className="card flex min-h-0 min-w-0 flex-1 flex-col">
@@ -300,6 +435,13 @@ export function AiChat() {
               {(currentSession?.messages ?? []).map((m, i) => (
                 <div key={m.id || i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                   <div className={`max-w-[85%] whitespace-pre-wrap rounded-2xl px-4 py-2.5 text-sm ${m.role === 'user' ? 'bg-brand-600 text-white' : 'bg-slate-100 dark:bg-slate-700'}`}>
+                    {m.images && m.images.length > 0 && (
+                      <div className={`mb-2 flex flex-wrap gap-1.5 ${m.role === 'user' ? 'justify-end' : ''}`}>
+                        {m.images.map((u, ui) => (
+                          <img key={ui} src={u} alt="attached" className="h-24 w-24 rounded-lg object-cover" />
+                        ))}
+                      </div>
+                    )}
                     {m.text}
                   </div>
                 </div>
@@ -312,7 +454,7 @@ export function AiChat() {
                   </div>
                 </div>
               )}
-              {thinking && !showStreaming && <div className="text-sm text-slate-400 animate-pulse">🤖 {aiModuleLabel(active.module)} is thinking…</div>}
+              {thisBusy && !showStreaming && <div className="text-sm text-slate-400 animate-pulse">🤖 {aiModuleLabel(active.module)} is thinking…</div>}
               <div ref={bottomRef} />
             </div>
           )}
@@ -334,23 +476,51 @@ export function AiChat() {
             </div>
           )}
 
+          {pendingImages.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 border-t border-slate-200 p-2 dark:border-slate-700">
+              {pendingImages.map((u, i) => (
+                <div key={i} className="relative">
+                  <img src={u} alt={`attach ${i + 1}`} className="h-14 w-14 rounded-lg object-cover" />
+                  <button
+                    className="absolute -right-1.5 -top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[10px] leading-none text-white"
+                    onClick={() => setPendingImages((p) => p.filter((_, j) => j !== i))}
+                    title="Remove image"
+                  >✕</button>
+                </div>
+              ))}
+            </div>
+          )}
           <div className="flex gap-2 border-t border-slate-200 p-3 dark:border-slate-700">
+            <input
+              ref={fileRef}
+              type="file"
+              accept="image/*"
+              multiple
+              className="hidden"
+              onChange={(e) => onPickImages(e.target.files)}
+            />
+            <button
+              className="btn-ghost !px-2 !py-1 text-lg"
+              onClick={() => fileRef.current?.click()}
+              title="Attach image(s)"
+              disabled={thisBusy || pendingImages.length >= 4}
+            >🖼</button>
             <input
               ref={inputRef}
               className="input flex-1"
               placeholder={active.placeholder}
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && !thinking && void send()}
-              disabled={thinking}
+              onKeyDown={(e) => e.key === 'Enter' && !thisBusy && void send()}
+              disabled={thisBusy}
             />
             {active.auto ? (
-              <button className="btn-primary" onClick={() => void send()} disabled={thinking} title={active.auto ? 'Run now' : 'Send'}>
-                {thinking ? '…' : '▶ Run'}
+              <button className="btn-primary" onClick={() => void send()} disabled={thisBusy} title={active.auto ? 'Run now' : 'Send'}>
+                {thisBusy ? '…' : '▶ Run'}
               </button>
             ) : (
-              <button className="btn-primary" onClick={() => void send()} disabled={thinking} title="Send">
-                {thinking ? '…' : '➤'}
+              <button className="btn-primary" onClick={() => void send()} disabled={thisBusy} title="Send">
+                {thisBusy ? '…' : '➤'}
               </button>
             )}
           </div>

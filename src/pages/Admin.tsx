@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useData } from '../stores/data';
 import { syncClient } from '../services/syncClient';
+import { PasswordInput } from '../components/ui';
 
 interface AdminUser {
   id: string;
@@ -123,7 +124,7 @@ export function AdminPage() {
         <h2 className="mb-3 font-semibold">🔑 Reset User Password</h2>
         <div className="grid gap-3 md:grid-cols-3">
           <div><label className="label">User email</label><input className="input" value={resetEmail} onChange={(e) => setResetEmail(e.target.value)} placeholder="user@example.com" /></div>
-          <div><label className="label">New password</label><input className="input" type="password" value={resetPw} onChange={(e) => setResetPw(e.target.value)} placeholder="At least 6 characters" /></div>
+          <div><label className="label">New password</label><PasswordInput value={resetPw} onChange={(e) => setResetPw(e.target.value)} placeholder="At least 6 characters" /></div>
           <div className="flex items-end"><button className="btn-primary w-full" disabled={!resetEmail || !resetPw} onClick={doReset}>Reset Password</button></div>
         </div>
       </div>

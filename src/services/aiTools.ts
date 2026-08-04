@@ -78,8 +78,43 @@ export function getAiConfig(key: AiModuleKey): AiModuleConfig | null {
   return cfg;
 }
 
-export function aiReady(key: AiModuleKey): boolean {
+/**
+ * Effective config: if a module has no API key of its own, borrow one from any
+ * OTHER enabled module that uses the same provider (so one key makes every
+ * section work). The module's own model is kept when set.
+ */
+export function getEffectiveAiConfig(key: AiModuleKey): AiModuleConfig | null {
   const cfg = getAiConfig(key);
+  if (!cfg) return null;
+
+  // 1) The section's OWN key always wins.
+  if (cfg.enabled && cfg.apiKey && cfg.apiKey.trim()) return cfg;
+
+  const all = useData.getState().settings?.ai ?? {};
+
+  // 2) Borrow a key from another enabled module on the SAME provider
+  //    (keeps the section's own provider + model choice).
+  for (const [k, c] of Object.entries(all)) {
+    if (k === key || !c) continue;
+    if (c.enabled && c.provider === cfg.provider && c.apiKey && c.apiKey.trim()) {
+      return { ...cfg, apiKey: c.apiKey.trim(), model: cfg.model || c.model || '' };
+    }
+  }
+
+  // 3) Fall back to ANY enabled module that has a key — use its whole
+  //    config (provider + key + model), so the section still works.
+  for (const [k, c] of Object.entries(all)) {
+    if (k === key || !c) continue;
+    if (c.enabled && c.apiKey && c.apiKey.trim()) {
+      return { ...c };
+    }
+  }
+
+  return cfg;
+}
+
+export function aiReady(key: AiModuleKey): boolean {
+  const cfg = getEffectiveAiConfig(key);
   return !!cfg && cfg.enabled && !!cfg.apiKey;
 }
 
@@ -90,10 +125,10 @@ export async function runAiModule(
   extraContext = '',
   opts: RunOpts = {}
 ): Promise<AiResult> {
-  const cfg = getAiConfig(key);
+  const cfg = getEffectiveAiConfig(key);
   if (!cfg) return { ok: false, error: `Enable "${MODULE_LABEL[key]}" in Settings → AI to use this.` };
   if (!cfg.enabled) return { ok: false, error: `"${MODULE_LABEL[key]}" is disabled in Settings.` };
-  if (!cfg.apiKey) return { ok: false, error: `No API key set for "${MODULE_LABEL[key]}". Add one in Settings → AI.` };
+  if (!cfg.apiKey) return { ok: false, error: `No API key set for "${MODULE_LABEL[key]}". Add one in Settings → AI (or set one for any module on the same provider and it will be shared).` };
   // Cross-section memory: other sessions (across all AI sections). The current
   // session's own thread is provided via opts.history, so exclude it here to
   // avoid duplication.

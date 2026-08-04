@@ -47,8 +47,9 @@ export function Layout({ children }: { children: ReactNode }) {
 
   return (
     <div className="flex h-screen flex-col bg-slate-50 text-slate-800 dark:bg-slate-900 dark:text-slate-100 lg:flex-row">
-      {/* Desktop sidebar — fills the whole column, no bottom gap, no scroll */}
-      {sidebarOpen && (
+      {/* Desktop sidebar — full width when open, slim icon rail when the
+          hamburger hides it (icons stay visible & clickable) */}
+      {sidebarOpen ? (
         <aside className="flex w-56 shrink-0 flex-col border-r border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-800">
           <div className="flex items-center gap-2.5 border-b border-slate-200 px-4 py-4 dark:border-slate-700">
             <img src="./v2.PNG" alt="CLINICAL Rx" className="h-9 w-9 rounded-lg object-cover" />
@@ -82,6 +83,29 @@ export function Layout({ children }: { children: ReactNode }) {
               {profile?.programme} · Level {profile?.level} · {profile?.site}
             </div>
           </div>
+        </aside>
+      ) : (
+        <aside className="flex w-14 shrink-0 flex-col border-r border-slate-200 bg-white py-2 dark:border-slate-700 dark:bg-slate-800">
+          <div className="mb-1 flex justify-center">
+            <img src="./v2.PNG" alt="CLINICAL Rx" className="h-8 w-8 rounded-lg object-cover" />
+          </div>
+          <nav className="flex flex-1 flex-col items-center gap-1 px-1">
+            {NAV.map((n) => (
+              <NavLink
+                key={n.to}
+                to={n.to}
+                end={n.to === '/'}
+                title={n.label}
+                className={({ isActive }) =>
+                  `flex h-9 w-9 items-center justify-center rounded-lg text-lg transition-colors ${
+                    isActive ? 'bg-brand-600' : 'hover:bg-slate-100 dark:hover:bg-slate-700'
+                  }`
+                }
+              >
+                <span>{n.icon}</span>
+              </NavLink>
+            ))}
+          </nav>
         </aside>
       )}
 

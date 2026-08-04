@@ -4,6 +4,7 @@ import { useData } from '../stores/data';
 import { syncClient, DEFAULT_BACKEND_URL } from '../services/syncClient';
 import { autoSyncOnLogin } from '../services/syncEngine';
 import { hasElectronBridge } from '../db/adapter';
+import { PasswordInput } from '../components/ui';
 
 type Mode = 'signin' | 'signup';
 
@@ -91,7 +92,7 @@ export function AuthPage() {
           </div>
           <div>
             <label className="label">Password</label>
-            <input className={input} type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} placeholder="At least 6 characters" />
+            <PasswordInput value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} placeholder="At least 6 characters" />
           </div>
 
           {mode === 'signup' && (

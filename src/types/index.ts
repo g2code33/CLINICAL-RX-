@@ -219,12 +219,14 @@ export interface ChatMessage {
   role: 'user' | 'ai';
   text: string;
   ts: number;
+  images?: string[]; // data URLs for user messages (AI vision)
 }
 
 export interface ChatSession extends BaseRecord {
   section: string; // AiModuleKey: chat | tutor | analyzer | notes | questionGen | revision | bundler
   title: string;
   messages: ChatMessage[];
+  hidden?: boolean; // hidden from the chat list (can be shown again)
 }
 
 // ---- Saved / completed quizzes (persisted, reviewable anytime) ----

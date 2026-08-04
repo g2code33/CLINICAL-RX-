@@ -2,11 +2,19 @@ import type { AiModuleConfig } from '../types';
 
 export type AiResult = { ok: true; text: string } | { ok: false; error: string };
 
+export interface AiHistoryItem {
+  role: 'user' | 'assistant';
+  content: string;
+  images?: string[];
+}
+
 export interface AiChatOpts {
   /** Called with each streamed token. When provided, the response is streamed. */
   onToken?: (token: string) => void;
   /** Prior messages in the current conversation (same section), most recent last. */
-  history?: Array<{ role: 'user' | 'assistant'; content: string }>;
+  history?: AiHistoryItem[];
+  /** Images (data URLs) attached to the CURRENT user message (AI vision). */
+  images?: string[];
   /** Cap on generated tokens (default 1400). */
   maxTokens?: number;
   /** Sampling temperature (default 0.7). */
@@ -69,8 +77,40 @@ async function readSse(res: Response, onJson: (json: any) => void): Promise<void
   }
 }
 
-// OpenAI-compatible chat completion. Anthropic is mapped onto its messages API.
-// Supports streaming (opts.onToken) for a much faster perceived response.
+type TryResult = { ok: true; text: string; status?: number } | { ok: false; error: string; status?: number };
+
+/** Build OpenAI-style multimodal content array from text + image data URLs. */
+function openAiContent(text: string, images?: string[]): any[] {
+  const parts: any[] = [{ type: 'text', text }];
+  for (const img of images ?? []) {
+    if (typeof img === 'string' && img.startsWith('data:')) {
+      parts.push({ type: 'image_url', image_url: { url: img } });
+    }
+  }
+  return parts;
+}
+
+/** Build Anthropic-style multimodal content array from text + image data URLs. */
+function anthropicContent(text: string, images?: string[]): any[] {
+  const parts: any[] = [{ type: 'text', text }];
+  for (const img of images ?? []) {
+    const m = /^data:(image\/[a-z+]+);base64,([A-Za-z0-9+/=]+)$/.exec(img);
+    if (m) parts.push({ type: 'image', source: { type: 'base64', media_type: m[1], data: m[2] } });
+  }
+  return parts;
+}
+
+/** Convert an AiHistoryItem into the content payload for the target API. */
+function historyContent(item: AiHistoryItem, anthropic: boolean): string | any[] {
+  if (!item.images || !item.images.length) return item.content;
+  return anthropic ? anthropicContent(item.content, item.images) : openAiContent(item.content, item.images);
+}
+
+/**
+ * OpenAI-compatible chat completion (Anthropic mapped onto its messages API).
+ * Supports streaming (opts.onToken) for a much faster perceived response.
+ * If a provider rejects "stream": true, retries once without streaming.
+ */
 export async function aiChat(cfg: AiModuleConfig, system: string, user: string, opts: AiChatOpts = {}): Promise<AiResult> {
   if (!cfg.enabled) return { ok: false, error: 'This AI module is disabled in Settings.' };
   if (!cfg.apiKey) return { ok: false, error: 'No API key configured for this AI module. Add one in Settings → AI.' };
@@ -90,7 +130,7 @@ export async function aiChat(cfg: AiModuleConfig, system: string, user: string, 
 
   const cleanup = () => clearTimeout(timer);
 
-  try {
+  const tryOnce = async (useStream: boolean): Promise<TryResult | null> => {
     if (cfg.provider === 'anthropic') {
       const res = await fetch(`${host}/v1/messages`, {
         method: 'POST',
@@ -105,16 +145,19 @@ export async function aiChat(cfg: AiModuleConfig, system: string, user: string, 
           max_tokens: maxTokens,
           temperature,
           system,
-          messages: [...history, { role: 'user', content: user }],
-          stream,
+          messages: [
+            ...history.map((h) => ({ role: h.role, content: historyContent(h, true) })),
+            { role: 'user', content: anthropicContent(user, opts.images) },
+          ],
+          stream: useStream,
         }),
       });
       if (!res.ok) {
         const body = await res.text().catch(() => '');
-        cleanup();
-        return { ok: false, error: friendlyHttpError(res.status, body, host) };
+        return { ok: false, error: friendlyHttpError(res.status, body, host), status: res.status };
       }
-      if (stream) {
+      if (useStream && !res.body) return null; // can't stream -> fall back
+      if (useStream) {
         let text = '';
         await readSse(res, (json) => {
           if (json?.type === 'content_block_delta' && json.delta?.text) {
@@ -122,11 +165,9 @@ export async function aiChat(cfg: AiModuleConfig, system: string, user: string, 
             opts.onToken!(json.delta.text);
           }
         });
-        cleanup();
         return { ok: true, text };
       }
       const data = await res.json();
-      cleanup();
       return { ok: true, text: data?.content?.[0]?.text ?? '' };
     }
 
@@ -135,24 +176,24 @@ export async function aiChat(cfg: AiModuleConfig, system: string, user: string, 
       method: 'POST',
       signal: controller.signal,
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify({
-        model,
-        max_tokens: maxTokens,
-        temperature,
-        messages: [
-          { role: 'system', content: system },
-          ...history,
-          { role: 'user', content: user },
-        ],
-        stream,
-      }),
-    });
-    if (!res.ok) {
-      const body = await res.text().catch(() => '');
-      cleanup();
-      return { ok: false, error: friendlyHttpError(res.status, body, host) };
-    }
-    if (stream) {
+        body: JSON.stringify({
+          model,
+          max_tokens: maxTokens,
+          temperature,
+          messages: [
+            { role: 'system', content: system },
+            ...history.map((h) => ({ role: h.role, content: historyContent(h, false) })),
+            { role: 'user', content: openAiContent(user, opts.images) },
+          ],
+          stream: useStream,
+        }),
+      });
+      if (!res.ok) {
+        const body = await res.text().catch(() => '');
+        return { ok: false, error: friendlyHttpError(res.status, body, host), status: res.status };
+      }
+      if (useStream && !res.body) return null;
+      if (useStream) {
       let text = '';
       await readSse(res, (json) => {
         const d = json?.choices?.[0]?.delta?.content;
@@ -161,13 +202,29 @@ export async function aiChat(cfg: AiModuleConfig, system: string, user: string, 
           opts.onToken!(d);
         }
       });
-      cleanup();
       return { ok: true, text };
     }
     const data = await res.json();
-    cleanup();
     const text = data?.choices?.[0]?.message?.content ?? '';
     return { ok: true, text };
+  };
+
+  try {
+    const first = await tryOnce(stream);
+    if (first && first.ok) {
+      cleanup();
+      return first;
+    }
+    if (first && !first.ok && stream && (first.status === 400 || first.status === 422 || first.status === 501 || first.status === 500)) {
+      // Streaming unsupported by this endpoint — retry non-streamed.
+      const fallback = await tryOnce(false);
+      if (fallback) {
+        cleanup();
+        return fallback as AiResult;
+      }
+    }
+    cleanup();
+    return first as AiResult;
   } catch (e: any) {
     cleanup();
     if (e?.name === 'AbortError') {

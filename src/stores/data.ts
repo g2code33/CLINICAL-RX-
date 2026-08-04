@@ -185,6 +185,11 @@ export const useData = create<DataStore>((set, get) => ({
         : [...existing, rec];
       return { [listKey]: sortByUpdated(next as any), status: '✓ Saved locally' } as any;
     });
+    // Fire-and-forget: when a clinical DAY is saved/updated, try today's auto
+    // bundle (and the pending-AI queue) in the background.
+    if (!fromSync && module === 'day') {
+      import('../services/autoBundle').then((m) => m.processAiWhenOnline()).catch(() => {});
+    }
   },
 
   remove: async (module, id, opts) => {

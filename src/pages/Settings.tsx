@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useData } from '../stores/data';
-import { PageHeader } from '../components/ui';
+import { PageHeader, PasswordInput } from '../components/ui';
 import { Modal } from '../components/Modal';
 import { UpdatePanel } from '../components/UpdatePanel';
 import { AI_MODULES, newSettings } from '../services/defaults';
@@ -254,7 +254,7 @@ export function SettingsPage() {
                 <div><label className={label}>Name</label><input className={input} value={acctForm.name} onChange={(e) => setAcctForm({ ...acctForm, name: e.target.value })} placeholder="Your name" /></div>
                 <div><label className={label}>Email</label><input className={input} type="email" value={acctForm.email} onChange={(e) => setAcctForm({ ...acctForm, email: e.target.value })} placeholder="you@example.com" /></div>
               </div>
-              <div><label className={label}>Password</label><input className={input} type="password" value={acctForm.password} onChange={(e) => setAcctForm({ ...acctForm, password: e.target.value })} placeholder="At least 6 characters" /></div>
+              <div><label className={label}>Password</label><PasswordInput value={acctForm.password} onChange={(e) => setAcctForm({ ...acctForm, password: e.target.value })} placeholder="At least 6 characters" /></div>
               <div className="grid grid-cols-2 gap-2">
                 <div><label className={label}>Security question (optional)</label><input className={input} value={acctForm.securityQuestion} onChange={(e) => setAcctForm({ ...acctForm, securityQuestion: e.target.value })} placeholder="e.g. Your first school" /></div>
                 <div><label className={label}>Answer</label><input className={input} value={acctForm.securityAnswer} onChange={(e) => setAcctForm({ ...acctForm, securityAnswer: e.target.value })} placeholder="Answer (for reset)" /></div>
@@ -314,7 +314,7 @@ export function SettingsPage() {
                 <div className="grid gap-2 md:grid-cols-3">
                   <div><label className={label}>Provider</label><select className={input} value={cfg.provider} onChange={(e) => updateAi(draft, m.key, { provider: e.target.value as any }, saveSettings, setDraft)}><option value="openai">OpenAI</option><option value="anthropic">Anthropic</option><option value="openrouter">OpenRouter</option><option value="nvidia">NVIDIA NIM</option><option value="custom">Custom</option></select></div>
                   <div><label className={label}>Model</label><input className={input} value={cfg.model} placeholder={modelPlaceholder(cfg.provider)} onChange={(e) => updateAi(draft, m.key, { model: e.target.value }, saveSettings, setDraft)} /></div>
-                  <div><label className={label}>API Key</label><div className="flex gap-1"><input type={showKeys[m.key] ? 'text' : 'password'} className={input} value={cfg.apiKey} placeholder="sk-…" onChange={(e) => updateAi(draft, m.key, { apiKey: e.target.value }, saveSettings, setDraft)} /><button className="btn-secondary shrink-0" onClick={() => setShowKeys({ ...showKeys, [m.key]: !showKeys[m.key] })}>{showKeys[m.key] ? '🙈' : '👁'}</button></div></div>
+                  <div><label className={label}>API Key</label><div className="flex gap-1"><input type={showKeys[m.key] ? 'text' : 'password'} className={input} value={cfg.apiKey} placeholder="sk-…" onChange={(e) => updateAi(draft, m.key, { apiKey: e.target.value }, saveSettings, setDraft)} /><button className="btn-secondary shrink-0" onClick={() => setShowKeys({ ...showKeys, [m.key]: !showKeys[m.key] })}>{showKeys[m.key] ? '🙈' : '👁'}</button><button className="btn-secondary shrink-0" title="Use this key + provider for all AI sections (so every section works with one key)" onClick={() => applyKeyToAll(draft, m.key, saveSettings, setDraft, setStatus)}>⇄ All</button></div></div>
                 </div>
                 {cfg.provider === 'custom' && <div className="mt-2"><label className={label}>Base URL</label><input className={input} value={cfg.baseUrl ?? ''} placeholder="https://api.example.com" onChange={(e) => updateAi(draft, m.key, { baseUrl: e.target.value }, saveSettings, setDraft)} /></div>}
                 {cfg.provider === 'nvidia' && <div className="mt-2 rounded bg-slate-50 px-3 py-2 text-[11px] text-slate-500 dark:bg-slate-700 dark:text-slate-300">🟩 NVIDIA NIM endpoint: <code>https://integrate.api.nvidia.com/v1</code> · default model <code>meta/llama-3.3-70b-instruct</code>.</div>}
@@ -330,9 +330,9 @@ export function SettingsPage() {
       {/* Change password modal */}
       <Modal open={pwOpen} onClose={() => setPwOpen(false)} title="🔑 Change password">
         <div className="space-y-3 text-sm">
-          <div><label className={label}>Current password</label><input className={input} type="password" value={pwForm.current} onChange={(e) => setPwForm({ ...pwForm, current: e.target.value })} /></div>
-          <div><label className={label}>New password</label><input className={input} type="password" value={pwForm.new1} onChange={(e) => setPwForm({ ...pwForm, new1: e.target.value })} placeholder="At least 6 characters" /></div>
-          <div><label className={label}>Confirm new password</label><input className={input} type="password" value={pwForm.new2} onChange={(e) => setPwForm({ ...pwForm, new2: e.target.value })} /></div>
+          <div><label className={label}>Current password</label><PasswordInput value={pwForm.current} onChange={(e) => setPwForm({ ...pwForm, current: e.target.value })} /></div>
+          <div><label className={label}>New password</label><PasswordInput value={pwForm.new1} onChange={(e) => setPwForm({ ...pwForm, new1: e.target.value })} placeholder="At least 6 characters" /></div>
+          <div><label className={label}>Confirm new password</label><PasswordInput value={pwForm.new2} onChange={(e) => setPwForm({ ...pwForm, new2: e.target.value })} /></div>
           <button className="btn-primary w-full" disabled={acctBusy || !pwForm.current || !pwForm.new1 || !pwForm.new2} onClick={doChangePassword}>{acctBusy ? '…' : 'Change password'}</button>
           {syncState && <div className="rounded-lg bg-slate-50 p-3 text-sm text-slate-600 dark:bg-slate-700 dark:text-slate-200">{syncState}</div>}
         </div>
@@ -343,7 +343,7 @@ export function SettingsPage() {
         <div className="space-y-3 text-sm">
           <p className="text-red-600 dark:text-red-400">⚠️ This will permanently delete your cloud account and all synced data. Local data is kept.</p>
           <div><label className={label}>Type <strong>DELETE</strong> to confirm</label><input className={input} value={delConfirm} onChange={(e) => setDelConfirm(e.target.value)} placeholder="DELETE" /></div>
-          <div><label className={label}>Your password (to confirm)</label><input className={input} type="password" value={acctForm.password} onChange={(e) => setAcctForm({ ...acctForm, password: e.target.value })} /></div>
+          <div><label className={label}>Your password (to confirm)</label><PasswordInput value={acctForm.password} onChange={(e) => setAcctForm({ ...acctForm, password: e.target.value })} /></div>
           <button className="btn-primary w-full !bg-red-600" disabled={acctBusy || delConfirm !== 'DELETE' || !acctForm.password} onClick={doDeleteAccount}>{acctBusy ? '…' : 'Delete my account'}</button>
           {syncState && <div className="rounded-lg bg-slate-50 p-3 text-sm text-slate-600 dark:bg-slate-700 dark:text-slate-200">{syncState}</div>}
         </div>
@@ -363,7 +363,7 @@ export function SettingsPage() {
               <input className={input} type="email" value={acctForm.email} onChange={(e) => setAcctForm({ ...acctForm, email: e.target.value })} placeholder="your@email.com" />
               <input className={input} value={acctForm.securityQuestion} onChange={(e) => setAcctForm({ ...acctForm, securityQuestion: e.target.value })} placeholder="Your security question" />
               <input className={input} value={acctForm.securityAnswer} onChange={(e) => setAcctForm({ ...acctForm, securityAnswer: e.target.value })} placeholder="Your answer" />
-              <input className={input} type="password" value={acctForm.password} onChange={(e) => setAcctForm({ ...acctForm, password: e.target.value })} placeholder="New password" />
+              <PasswordInput value={acctForm.password} onChange={(e) => setAcctForm({ ...acctForm, password: e.target.value })} placeholder="New password" />
               <button className="btn-primary w-full" disabled={acctBusy || !acctForm.email || !acctForm.password || !acctForm.securityQuestion || !acctForm.securityAnswer} onClick={doResetSecurity}>{acctBusy ? '…' : 'Reset with security question'}</button>
             </div>
           </div>
@@ -377,6 +377,20 @@ export function SettingsPage() {
       </div>
     </div>
   );
+}
+
+/** Copy one module's API key + provider (+ baseUrl) to every AI section. */
+function applyKeyToAll(draft: Settings, key: string, saveSettings: any, setDraft: any, setStatus: any) {
+  const src = draft.ai?.[key];
+  if (!src || !src.apiKey?.trim()) { setStatus('⚠️ Add an API key to this section first, then tap ⇄ All.'); return; }
+  const ai: Record<string, any> = {};
+  for (const [k, c] of Object.entries(draft.ai ?? {})) {
+    ai[k] = { ...c, provider: src.provider, apiKey: src.apiKey, baseUrl: src.baseUrl ?? c.baseUrl };
+  }
+  const next = { ...draft, ai };
+  void saveSettings({ ...next, updatedAt: Date.now() });
+  setDraft(next);
+  setStatus('✓ Copied key + provider to all AI sections');
 }
 
 function modelPlaceholder(provider: string): string {

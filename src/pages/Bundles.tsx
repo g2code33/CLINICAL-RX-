@@ -252,7 +252,9 @@ function BundleDetail({ bundle, onClose, onOpenBundle }: { bundle: Bundle; onClo
   const [thinking, setThinking] = useState(false);
 
   const settings = useData((s) => s.settings);
-  const chatCfg = settings?.ai?.['chat'];
+  const chatCfg = (settings?.ai?.['chat'] && settings.ai['chat'].apiKey)
+    ? settings.ai['chat']
+    : (Object.values(settings?.ai ?? {}).find((c) => c?.enabled && c?.apiKey) as any) ?? settings?.ai?.['chat'];
 
   async function duplicate() {
     const copy: Bundle = {

@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 
 export function PageHeader({ title, subtitle, action }: { title: string; subtitle?: string; action?: ReactNode }) {
@@ -31,13 +32,32 @@ export function StatCard({ icon, label, value, accent, to }: { icon: string; lab
   return inner;
 }
 
-export function EmptyState({ icon, title, hint, actions }: { icon: string; title: string; hint?: string; actions?: ReactNode }) {
-  return (
+export function EmptyState({ icon, title, hint, actions }: { icon: string; title: string; hint?: string; actions?: ReactNode }) {  return (
     <div className="card flex flex-col items-center justify-center py-12 text-center">
       <div className="text-4xl">{icon}</div>
       <div className="mt-2 font-semibold text-slate-600 dark:text-slate-300">{title}</div>
       {hint && <div className="mt-1 max-w-sm text-sm text-slate-400">{hint}</div>}
       {actions && <div className="mt-4 flex flex-wrap items-center justify-center gap-2">{actions}</div>}
+    </div>
+  );
+}
+
+/** Password field with an eye toggle to show/hide the typed value. */
+export function PasswordInput(props: React.InputHTMLAttributes<HTMLInputElement> & { className?: string }) {
+  const [show, setShow] = useState(false);
+  const { className, ...rest } = props;
+  return (
+    <div className={`relative ${className ?? ''}`}>
+      <input {...rest} type={show ? 'text' : 'password'} className="input w-full pr-9" />
+      <button
+        type="button"
+        tabIndex={-1}
+        onClick={() => setShow((s) => !s)}
+        className="absolute right-2 top-1/2 -translate-y-1/2 text-lg leading-none text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+        title={show ? 'Hide password' : 'Show password'}
+      >
+        {show ? '🙈' : '👁'}
+      </button>
     </div>
   );
 }

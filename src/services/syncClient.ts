@@ -86,6 +86,9 @@ export const syncClient = {
     return request(backendUrl, "/api/admin", "POST", token, { action: "delete", email });
   },
   forgot(backendUrl: string | undefined, email: string) { return request(backendUrl, '/api/auth/forgot', 'POST', undefined, { email }); },
+  getSecurityQuestion(backendUrl: string | undefined, email: string) {
+    return request(backendUrl, '/api/auth/security-question', 'POST', undefined, { email });
+  },
   reset(backendUrl: string | undefined, payload: { method: string; email?: string; password?: string; token?: string; securityQuestion?: string; securityAnswer?: string; adminToken?: string }) {
     const headers: Record<string, string> = {};
     if (payload.adminToken) headers['x-admin-token'] = payload.adminToken;

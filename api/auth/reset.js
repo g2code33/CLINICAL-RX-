@@ -39,14 +39,17 @@ async function handler(req, res) {
   }
 
   if (method === 'security') {
-    if (!email || !password || !securityQuestion || !securityAnswer) return fail(res, 400, 'All fields required.');
+    if (!email || !password || !securityAnswer) return fail(res, 400, 'Email, new password and security answer are required.');
     const e = String(email).trim().toLowerCase();
     const raw = await redis.hget('users', e);
     if (!raw) return fail(res, 404, 'User not found.');
     const user = JSON.parse(raw);
     if (!user.securityQuestion || !user.securityAnswer) return fail(res, 400, 'No security question set.');
-    if (user.securityQuestion !== securityQuestion) return fail(res, 400, 'Security question mismatch.');
-    if (!verifyHash(securityAnswer, user.securityAnswer)) return fail(res, 400, 'Security answer incorrect.');
+    // The client already fetched & displayed the question; the server checks
+    // the answer against the stored hash (case-insensitive to be forgiving).
+    if (!verifyHash(String(securityAnswer).trim().toLowerCase(), user.securityAnswer)) {
+      return fail(res, 400, 'Security answer incorrect.');
+    }
     user.password = hashPassword(password);
     await redis.hset('users', { [e]: JSON.stringify(user) });
     return ok(res, 200, { message: 'Password reset via security question.' });

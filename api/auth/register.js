@@ -23,7 +23,7 @@ async function handler(req, res) {
     email: e,
     password: hashPassword(password),
     createdAt: Date.now(),
-    ...(securityQuestion && securityAnswer ? { securityQuestion, securityAnswer: hashPassword(securityAnswer) } : {}),
+    ...(securityQuestion && securityAnswer ? { securityQuestion: String(securityQuestion).trim(), securityAnswer: hashPassword(String(securityAnswer).trim().toLowerCase()) } : {}),
   };
   await redis.hset('users', { [e]: JSON.stringify(user) });
 

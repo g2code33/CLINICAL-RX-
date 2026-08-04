@@ -2,6 +2,7 @@ import { useData } from '../stores/data';
 import type { Bundle, BundleCreateInput, ClinicalDay, Disease, Medicine, Investigation, Question } from '../types';
 import { emptyBundle, todayIso } from './defaults';
 import { aiChat } from './ai';
+import { getEffectiveAiConfig } from './aiTools';
 
 interface Context {
   days: ClinicalDay[];
@@ -102,13 +103,13 @@ export interface EnrichResult {
 }
 
 export function aiAvailable(): boolean {
-  const cfg = useData.getState().settings?.ai?.['bundler'];
+  // Use the effective config (own key first, then borrow from any section).
+  const cfg = getEffectiveAiConfig('bundler');
   return !!cfg?.enabled && !!cfg?.apiKey;
 }
 
 async function enrichWithAi(bundle: Bundle, ctx: Context): Promise<EnrichResult> {
-  const settings = useData.getState().settings;
-  const cfg = settings?.ai?.['bundler'];
+  const cfg = getEffectiveAiConfig('bundler');
   if (!cfg?.enabled || !cfg.apiKey) {
     return { bundle, succeeded: false, reason: 'no-config' };
   }
@@ -144,7 +145,21 @@ export async function queueAiPending(bundleId: string) {
 }
 
 /** Re-process every pending bundle with AI (run once you're back online). */
+let aiQueueRunning = false;
 export async function processAiQueue(): Promise<{ processed: number; failed: number }> {
+  // Re-entrancy guard: never run two AI-queue passes at once (e.g. from app
+  // startup and the browser 'online' event), so the bundler AI can't block
+  // or duplicate work with other AI sections.
+  if (aiQueueRunning) return { processed: 0, failed: 0 };
+  aiQueueRunning = true;
+  try {
+    return await processAiQueueInner();
+  } finally {
+    aiQueueRunning = false;
+  }
+}
+
+async function processAiQueueInner(): Promise<{ processed: number; failed: number }> {
   const s = useData.getState();
   const settings = s.settings;
   if (!settings || !settings.aiPendingBundles?.length) return { processed: 0, failed: 0 };
