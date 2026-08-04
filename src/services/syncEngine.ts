@@ -56,7 +56,7 @@ function applyServerRecords(records: SyncRecord[]) {
   const st = useData.getState();
   const byKey = new Map(records.map((r) => [`${r.module}:${r.id}`, r]));
 
-  const modules: ModuleType[] = ['day', 'disease', 'medicine', 'investigation', 'question', 'lesson', 'revision', 'bundle'];
+  const modules: ModuleType[] = ['day', 'disease', 'medicine', 'investigation', 'question', 'lesson', 'revision', 'bundle', 'chat'];
 
   const tasks: Promise<void>[] = [];
   for (const m of modules) {

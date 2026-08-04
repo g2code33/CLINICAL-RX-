@@ -8,7 +8,8 @@ export type ModuleType =
   | 'question'
   | 'lesson'
   | 'revision'
-  | 'bundle';
+  | 'bundle'
+  | 'chat';
 
 export interface BaseRecord {
   id: string;
@@ -208,4 +209,19 @@ export interface BundleCreateInput {
   periodEnd: string;
   sourceModules?: ModuleType[];
   sourceBundleIds?: string[];
+}
+
+// ---- AI chat sessions (persisted per AI section, synced across devices) ----
+
+export interface ChatMessage {
+  id: string;
+  role: 'user' | 'ai';
+  text: string;
+  ts: number;
+}
+
+export interface ChatSession extends BaseRecord {
+  section: string; // AiModuleKey: chat | tutor | analyzer | notes | questionGen | revision | bundler
+  title: string;
+  messages: ChatMessage[];
 }

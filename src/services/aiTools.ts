@@ -1,5 +1,5 @@
 import { useData } from '../stores/data';
-import { aiChat, type AiResult } from './ai';
+import { aiChat, type AiChatOpts, type AiResult } from './ai';
 import type { AiModuleConfig } from '../types';
 
 export type AiModuleKey =
@@ -11,6 +11,8 @@ export type AiModuleKey =
   | 'chat'
   | 'bundler';
 
+export type RunOpts = AiChatOpts & { excludeSessionId?: string };
+
 const MODULE_LABEL: Record<AiModuleKey, string> = {
   tutor: 'AI Clinical Tutor',
   analyzer: 'AI Learning Analyzer',
@@ -19,6 +21,16 @@ const MODULE_LABEL: Record<AiModuleKey, string> = {
   revision: 'AI Revision Coach',
   chat: 'AI Clinical Chat',
   bundler: 'AI Daily/Weekly Bundler',
+};
+
+const SECTION_LABEL: Record<string, string> = {
+  chat: 'Chat',
+  tutor: 'Explain',
+  analyzer: 'Analyze',
+  notes: 'Organize',
+  questionGen: 'Questions',
+  revision: 'Revision',
+  bundler: 'Bundler',
 };
 
 export function aiModuleLabel(key: AiModuleKey): string {
@@ -37,6 +49,29 @@ function studentContext(): string {
   ].join('\n');
 }
 
+/**
+ * Cross-section memory: recent messages from ALL the student's other chat
+ * sessions (any section), so any AI section can recall earlier conversations
+ * from any other section. Bounded so prompts stay small and fast.
+ */
+export function buildMemoryContext(section: AiModuleKey, excludeSessionId?: string, limit = 24): string {
+  const chats = useData.getState().chats ?? [];
+  const items: Array<{ ts: number; section: string; title: string; role: string; text: string }> = [];
+  for (const c of chats) {
+    if (c.id === excludeSessionId) continue;
+    for (const m of c.messages ?? []) {
+      items.push({ ts: m.ts ?? Date.now(), section: c.section, title: c.title, role: m.role, text: m.text });
+    }
+  }
+  items.sort((a, b) => a.ts - b.ts);
+  const recent = items.slice(-limit);
+  if (!recent.length) return '';
+  const body = recent
+    .map((l) => `[${SECTION_LABEL[l.section] ?? l.section}] ${l.role === 'user' ? 'Student' : 'AI'}: ${l.text.slice(0, 400)}`)
+    .join('\n');
+  return `MEMORY — these are your OTHER conversations in the app (across all AI sections). Use them to remember the student's context, but never invent facts that are not present:\n${body}`;
+}
+
 export function getAiConfig(key: AiModuleKey): AiModuleConfig | null {
   const cfg = useData.getState().settings?.ai?.[key];
   if (!cfg) return null;
@@ -48,35 +83,40 @@ export function aiReady(key: AiModuleKey): boolean {
   return !!cfg && cfg.enabled && !!cfg.apiKey;
 }
 
-/** Run any configured AI module with the standard student context baked in. */
+/** Run any configured AI module with standard context + cross-section memory. */
 export async function runAiModule(
   key: AiModuleKey,
   userPrompt: string,
-  extraContext = ''
+  extraContext = '',
+  opts: RunOpts = {}
 ): Promise<AiResult> {
   const cfg = getAiConfig(key);
   if (!cfg) return { ok: false, error: `Enable "${MODULE_LABEL[key]}" in Settings → AI to use this.` };
   if (!cfg.enabled) return { ok: false, error: `"${MODULE_LABEL[key]}" is disabled in Settings.` };
   if (!cfg.apiKey) return { ok: false, error: `No API key set for "${MODULE_LABEL[key]}". Add one in Settings → AI.` };
-  const system = `You are CLINICAL Rx, a clinical learning assistant.\n${studentContext()}\n${extraContext}`.trim();
-  return aiChat(cfg, system, userPrompt);
+  // Cross-section memory: other sessions (across all AI sections). The current
+  // session's own thread is provided via opts.history, so exclude it here to
+  // avoid duplication.
+  const memory = buildMemoryContext(key, opts.excludeSessionId, 24);
+  const system = `You are CLINICAL Rx, a clinical learning assistant.\n${studentContext()}\n${memory ? memory + '\n' : ''}${extraContext}`.trim();
+  return aiChat(cfg, system, userPrompt, opts);
 }
 
 // ---- Semantic helpers used by the UI ----
 
 /** Tutor: explain a disease/medicine/investigation from its record. */
-export function explainEntity(kind: 'disease' | 'medicine' | 'investigation', rec: Record<string, any>): Promise<AiResult> {
+export function explainEntity(kind: 'disease' | 'medicine' | 'investigation', rec: Record<string, any>, opts: RunOpts = {}): Promise<AiResult> {
   const label = (kind[0].toUpperCase() + kind.slice(1));
   const detail = [
     `Explain this ${label} to me at my level.`,
     'Use the WHO → WHAT → WHERE → WHY → HOW → DT structure where relevant.',
     `Record: ${JSON.stringify(rec)}`,
   ].join('\n');
-  return runAiModule('tutor', detail);
+  return runAiModule('tutor', detail, '', opts);
 }
 
 /** Analyzer: summarize strengths/gaps from recent clinical data. */
-export function analyzeLearning(): Promise<AiResult> {
+export function analyzeLearning(opts: RunOpts = {}): Promise<AiResult> {
   const s = useData.getState();
   const recentDays = s.days.slice(-7);
   const openQuestions = s.questions.filter((q) => q.status === 'open').slice(0, 15);
@@ -97,24 +137,26 @@ export function analyzeLearning(): Promise<AiResult> {
   return runAiModule(
     'analyzer',
     'Analyze my recent clinical learning. Return: STRENGTHS (list), KNOWLEDGE GAPS (list), NEXT-STEP FOCUS (list).',
-    'DATA:\n' + JSON.stringify(data)
+    'DATA:\n' + JSON.stringify(data),
+    opts
   );
 }
 
 /** Notes: turn rough natural language into structured clinical learning records. */
-export function organizeNote(text: string): Promise<AiResult> {
+export function organizeNote(text: string, opts: RunOpts = {}): Promise<AiResult> {
   return runAiModule(
     'notes',
     `Turn this clinical note into structured learning records. Return ONLY valid JSON with no commentary, shaped exactly like:
 {"medicines":["..."],"diseases":["..."],"investigations":["..."],"lessons":["..."],"questions":["..."]}
 Use empty arrays for anything not mentioned. Do not invent patient-identifying information.
 NOTE: "${text}"`,
-    'You extract structured de-identified clinical learning data from natural language.'
+    'You extract structured de-identified clinical learning data from natural language.',
+    opts
   );
 }
 
 /** Question generator: turn encounters into MCQs / study questions. */
-export function generateQuestions(focus?: string, count = 5): Promise<AiResult> {
+export function generateQuestions(focus?: string, count = 5, opts: RunOpts = {}): Promise<AiResult> {
   const s = useData.getState();
   const context = focus
     ? focus
@@ -130,12 +172,13 @@ export function generateQuestions(focus?: string, count = 5): Promise<AiResult> 
   return runAiModule(
     'questionGen',
     `Generate ${count} study questions from my recent clinical exposure. For each give the question, 4 options, and the correct answer with a 1-line explanation. Focus areas: ${context}.`,
-    'Questions should test clinical knowledge appropriate for a pharmacy student at my level.'
+    'Questions should test clinical knowledge appropriate for a pharmacy student at my level.',
+    opts
   );
 }
 
 /** Revision coach: recommend what to revise next. */
-export function revisionCoach(): Promise<AiResult> {
+export function revisionCoach(opts: RunOpts = {}): Promise<AiResult> {
   const s = useData.getState();
   const incomplete = s.diseases
     .filter((d) => {
@@ -146,7 +189,9 @@ export function revisionCoach(): Promise<AiResult> {
   const gaps = s.questions.filter((q) => q.status === 'open').slice(0, 10).map((q) => q.text);
   return runAiModule(
     'revision',
-    `Recommend a revision plan. I've seen these conditions recently, some with incomplete revision coverage: ${incomplete.join(', ') || 'none yet'}. My open questions: ${gaps.join('; ') || 'none'}. Give a prioritized, realistic revision list with reasons.`
+    `Recommend a revision plan. I've seen these conditions recently, some with incomplete revision coverage: ${incomplete.join(', ') || 'none yet'}. My open questions: ${gaps.join('; ') || 'none'}. Give a prioritized, realistic revision list with reasons.`,
+    '',
+    opts
   );
 }
 
@@ -211,7 +256,7 @@ export async function generateQuiz(focus?: string, count = 10): Promise<Quiz | n
     `answer is the 0-based index of the correct option. Make options plausible and at my learning level.`,
   ].join('\n');
 
-  const res = await runAiModule('questionGen', prompt, 'Return strictly valid JSON only.');
+  const res = await runAiModule('questionGen', prompt, 'Return strictly valid JSON only.', { maxTokens: 3000 });
   if (!res.ok) return null;
   return parseQuiz(res.text);
 }

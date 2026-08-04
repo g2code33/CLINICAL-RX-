@@ -2,6 +2,7 @@ import { uid } from '../stores/data';
 import type {
   AiProvider,
   Bundle,
+  ChatSession,
   ClinicalDay,
   Disease,
   Investigation,
@@ -119,6 +120,17 @@ export function newRevisionItem(topic: string): RevisionItem {
   return {
     id: uid(), createdAt: Date.now(), updatedAt: Date.now(),
     topic, module: 'disease', items: [], due: true,
+  };
+}
+
+export function newChatSession(section: string, title: string): ChatSession {
+  return {
+    id: uid(),
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+    section,
+    title,
+    messages: [],
   };
 }
 
