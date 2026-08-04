@@ -6,6 +6,7 @@ import { generateQuiz, type Quiz as QuizType } from '../services/aiTools';
 import { aiReady } from '../services/aiTools';
 import { copyToClipboard } from '../services/export';
 import { loadBank } from '../services/questionBank';
+import { useContextMenu, ctxHandlers, type CtxItem } from '../components/ContextMenu';
 import { newSavedQuiz } from '../services/defaults';
 import type { SavedQuiz } from '../types';
 
@@ -40,6 +41,16 @@ export function Quiz() {
   const [savedId, setSavedId] = useState<string | null>(null); // reviewing a saved quiz
   const timerRef = useRef<any>(null);
   const bank = loadBank();
+  const showMenu = useContextMenu();
+
+  function historyMenu(q: SavedQuiz): CtxItem[] {
+    return [
+      { label: 'Review', icon: '👁', onClick: () => openHistory(q.id) },
+      { label: 'Retry wrong answers', icon: '🔁', onClick: () => startRetry(q, true) },
+      { label: 'Retry same quiz', icon: '↻', onClick: () => startRetry(q, false) },
+      { label: 'Delete', icon: '🗑', danger: true, onClick: () => void deleteHistory(q.id) },
+    ];
+  }
 
   useEffect(() => {
     if (!submitted && quiz && timeLeft > 0) {
@@ -401,7 +412,7 @@ export function Quiz() {
             {savedQuizzes.map((q) => {
               const p = q.total ? Math.round((q.score / q.total) * 100) : 0;
               return (
-                <div key={q.id} className="flex items-center gap-3 rounded-lg border border-slate-200 p-3 dark:border-slate-700">
+                <div key={q.id} className="flex cursor-default items-center gap-3 rounded-lg border border-slate-200 p-3 dark:border-slate-700" {...ctxHandlers(showMenu, historyMenu(q))}>
                   <div className="min-w-0 flex-1">
                     <div className="truncate text-sm font-semibold">{q.title}</div>
                     <div className="text-xs text-slate-400">{q.date} · {q.total} questions · {Math.round(q.durationSeconds / 60)} min</div>

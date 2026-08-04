@@ -8,6 +8,7 @@ import { ShortcutHelp } from './ShortcutHelp';
 import { CommandPalette } from './CommandPalette';
 import { UpdateBadge } from './UpdateBadge';
 import { UndoToast } from './UndoToast';
+import { ContextMenuProvider } from './ContextMenu';
 
 const NAV = [
   { to: '/', icon: '🏠', label: 'Home' },
@@ -47,6 +48,7 @@ export function Layout({ children }: { children: ReactNode }) {
   const setSidebarOpen = useUi((s) => s.setSidebarOpen);
 
   return (
+    <ContextMenuProvider>
     <div className="flex h-screen flex-col bg-slate-50 text-slate-800 dark:bg-slate-900 dark:text-slate-100 lg:flex-row">
       {/* Desktop sidebar — full width when open, slim icon rail when the
           hamburger hides it (icons stay visible & clickable) */}
@@ -146,7 +148,7 @@ export function Layout({ children }: { children: ReactNode }) {
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto p-4 lg:p-8">{children}</div>
+        <div className="flex-1 overflow-y-auto p-3 sm:p-4 lg:p-8">{children}</div>
       </main>
 
       {/* Mobile bottom nav */}
@@ -173,5 +175,6 @@ export function Layout({ children }: { children: ReactNode }) {
       <CommandPalette />
       <UndoToast />
     </div>
+    </ContextMenuProvider>
   );
 }

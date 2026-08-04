@@ -4,6 +4,8 @@ import { PageHeader, EmptyState } from './ui';
 import { Modal, TagInput } from './Modal';
 import { explainEntity } from '../services/aiTools';
 import type { ModuleType } from '../types';
+import { useContextMenu, ctxHandlers, type CtxItem } from './ContextMenu';
+import { copyToClipboard } from '../services/export';
 
 export interface FieldConfig {
   key: string;
@@ -36,6 +38,30 @@ export function EntityManager({ module, title, subtitle, icon, emptyText, emptyH
   const [creating, setCreating] = useState(false);
   const [query, setQuery] = useState('');
   const [explain, setExplain] = useState<{ rec: any; text: string; loading: boolean; error?: string } | null>(null);
+  const showMenu = useContextMenu();
+
+  function cardMenu(rec: any): CtxItem[] {
+    const items: CtxItem[] = [];
+    items.push({ label: 'Edit', icon: '✏️', onClick: () => openEdit(rec) });
+    if (explainKind) {
+      items.push({
+        label: 'AI Explain',
+        icon: '🤖',
+        onClick: async () => {
+          setExplain({ rec, text: '', loading: true });
+          const res = await explainEntity(explainKind, rec);
+          setExplain((ex) => (ex ? { rec, text: res.ok ? res.text : '', loading: false, error: res.ok ? undefined : res.error } : ex));
+        },
+      });
+    }
+    items.push({
+      label: 'Copy name',
+      icon: '📋',
+      onClick: () => { void copyToClipboard(String(rec?.name ?? '')); },
+    });
+    items.push({ label: 'Delete', icon: '🗑', danger: true, onClick: () => void remove(module, rec.id) });
+    return items;
+  }
 
   function openCreate() {
     setCreating(true);
@@ -72,7 +98,7 @@ export function EntityManager({ module, title, subtitle, icon, emptyText, emptyH
       ) : (
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {filtered.map((rec) => (
-            <div key={rec.id} className="card flex flex-col justify-between hover:border-brand-400">
+            <div key={rec.id} className="card flex cursor-default flex-col justify-between hover:border-brand-400" {...ctxHandlers(showMenu, cardMenu(rec))}>
               {renderCard(rec)}
               <div className="mt-3 flex justify-end gap-2">
                 {explainKind && (

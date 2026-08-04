@@ -3,6 +3,7 @@ import { PageHeader, EmptyState } from '../components/ui';
 import { useData, uid } from '../stores/data';
 import { newChatSession } from '../services/defaults';
 import { copyToClipboard } from '../services/export';
+import { useContextMenu, ctxHandlers, type CtxItem } from '../components/ContextMenu';
 import { runAiModule, aiReady, aiModuleLabel, analyzeLearning, generateQuestions, revisionCoach, organizeNote } from '../services/aiTools';
 import type { AiModuleKey, RunOpts } from '../services/aiTools';
 import type { ChatSession } from '../types';
@@ -47,6 +48,17 @@ export function AiChat() {
   const save = useData((s) => s.save);
   const remove = useData((s) => s.remove);
   const setStatus = useData((s) => s.setStatus);
+  const showMenu = useContextMenu();
+
+  function sessionMenu(s: ChatSession): CtxItem[] {
+    return [
+      { label: 'Open', icon: '💬', onClick: () => { setActiveId(s.id); setStreaming(null); } },
+      { label: 'Rename', icon: '✏️', onClick: () => { setRenameId(s.id); setRenameVal(s.title || ''); } },
+      { label: s.hidden ? 'Show' : 'Hide', icon: s.hidden ? '👁' : '🙈', onClick: () => void setHidden(s.id, !s.hidden) },
+      { label: 'Share', icon: '📤', onClick: () => void shareSession(s.id) },
+      { label: 'Delete', icon: '🗑', danger: true, onClick: () => void deleteSession(s.id) },
+    ];
+  }
 
   const sessions = chats.filter((c) => c.section === mode).sort((a, b) => b.updatedAt - a.updatedAt);
   const visibleSessions = sessions.filter((c) => showHidden || !c.hidden);
@@ -333,8 +345,9 @@ export function AiChat() {
         ))}
       </div>
 
-      <div className="flex min-h-0 flex-1 flex-col gap-3 md:flex-row">
-        {/* Session list for this section — hamburger ☰ toggles it */}
+      <div className="relative flex min-h-0 flex-1 flex-col gap-3 md:flex-row">
+        {/* Session list for this section — hamburger ☰ toggles it.
+            On mobile it slides over the chat as a drawer. */}
         {!listOpen ? (
           <button
             className="flex h-fit shrink-0 flex-col items-center gap-1 self-start rounded-lg border border-slate-200 px-2.5 py-2 text-sm hover:bg-slate-100 dark:border-slate-700 dark:hover:bg-slate-700"
@@ -345,7 +358,11 @@ export function AiChat() {
             <span className="text-[10px] text-slate-400">{sessions.length}</span>
           </button>
         ) : (
-        <div className="flex min-h-0 w-full flex-col md:w-60 md:shrink-0">
+        <>
+        {listOpen && (
+          <div className="absolute inset-0 z-20 bg-slate-900/30 md:hidden" onClick={() => setListOpen(false)} />
+        )}
+        <div className="absolute inset-y-0 left-0 z-30 flex w-64 max-w-[80vw] flex-col bg-white p-1.5 shadow-xl dark:bg-slate-800 md:static md:z-auto md:w-60 md:shrink-0 md:p-0 md:shadow-none">
           <div className="mb-1 flex items-center justify-between px-1 text-xs font-semibold text-slate-400">
             <div className="flex items-center gap-1">
               <button className="btn-ghost !p-0 text-sm" onClick={() => setListOpen(false)} title="Hide chat list">☰</button>
@@ -379,6 +396,7 @@ export function AiChat() {
                   <div
                     className={`group flex cursor-pointer items-center gap-1 rounded-md px-2 py-1.5 text-left text-xs ${s.id === activeId ? 'bg-brand-600 text-white' : 'hover:bg-slate-100 dark:hover:bg-slate-700'} ${s.hidden ? 'opacity-50' : ''}`}
                     onClick={() => { setActiveId(s.id); setStreaming(null); }}
+                    {...ctxHandlers(showMenu, sessionMenu(s))}
                   >
                     <span className="min-w-0 flex-1 truncate">
                       {s.hidden && '🙈 '}{s.title || 'Untitled'}
@@ -410,6 +428,7 @@ export function AiChat() {
             ))}
           </div>
         </div>
+        </>
         )}
 
         {/* Chat area */}

@@ -11,3 +11,12 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
     </HashRouter>
   </React.StrictMode>
 );
+
+// PWA: register the service worker for offline support (web build only).
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js').catch(() => {
+      /* SW optional — ignore failures (e.g. file:// in desktop dev) */
+    });
+  });
+}
