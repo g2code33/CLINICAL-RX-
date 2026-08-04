@@ -12,9 +12,11 @@ set -e
 
 SANDBOX=""
 if command -v clinical-rx >/dev/null 2>&1; then
-  # /usr/bin/clinical-rx is an update-alternatives symlink to
-  # /opt/Clinical Rx/clinical-rx — resolve it fully (space-safe).
+  # /usr/bin/clinical-rx is an update-alternatives symlink into the real
+  # install dir — resolve it fully (handles dirs with spaces too).
   SANDBOX="$(dirname "$(readlink -f "$(command -v clinical-rx)")")/chrome-sandbox"
+elif [ -f "/opt/ClinicalRx/chrome-sandbox" ]; then
+  SANDBOX="/opt/ClinicalRx/chrome-sandbox"
 elif [ -f "/opt/Clinical Rx/chrome-sandbox" ]; then
   SANDBOX="/opt/Clinical Rx/chrome-sandbox"
 fi

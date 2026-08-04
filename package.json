@@ -1,6 +1,6 @@
 {
   "name": "clinical-rx",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "private": true,
   "author": {
     "name": "Clinical Rx",
@@ -53,7 +53,7 @@
   },
   "build": {
     "appId": "com.clinicalrx.app",
-    "productName": "Clinical Rx",
+    "productName": "ClinicalRx",
     "directories": {
       "output": "release"
     },
@@ -78,7 +78,12 @@
         "AppImage",
         "deb"
       ],
-      "category": "Education"
+      "category": "Education",
+      "executableName": "clinical-rx",
+      "desktop": {
+        "Name": "Clinical Rx",
+        "Comment": "Your personal clinical companion"
+      }
     },
     "deb": {
       "afterInstall": "build/after-install.sh"
