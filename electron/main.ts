@@ -120,9 +120,19 @@ function initIpc() {
       return { ok: false, reason: 'error', message: e?.message || 'Download failed' };
     }
   });
+  ipcMain.handle('update:getState', () => {
+    // Reflect the installed version so the renderer can confirm it's current
+    // after a restart (electron-updater exposes no reliable "staged" flag).
+    return { appVersion: app.getVersion() };
+  });
   ipcMain.handle('update:install', async () => {
     if (!app.isPackaged) return { ok: false, reason: 'dev' };
     try {
+      // quitAndInstall(isSilent, isForceRunAfter):
+      // - isSilent=false  -> show the NSIS installer progress (Windows),
+      //   and on Linux the AppImage swap happens visibly. Silent installs
+      //   can look like the app just crashed.
+      // - isForceRunAfter=true -> relaunch the app after install.
       setImmediate(() => autoUpdater.quitAndInstall(false, true));
       return { ok: true };
     } catch (e: any) {

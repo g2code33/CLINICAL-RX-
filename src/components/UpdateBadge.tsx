@@ -41,11 +41,13 @@ export function UpdateBadge() {
   async function download() {
     setPhase({ state: 'downloading', percent: 0 });
     setStatus('⬇ Downloading update…');
-    await window.clinicalRx!.update.download();
+    const res = await window.clinicalRx!.update.download();
+    if (!res.ok) setStatus('⚠️ ' + (res.message || 'Download failed.'));
   }
   async function install() {
     setStatus('🔄 Restarting & installing…');
-    await window.clinicalRx!.update.install();
+    const res = await window.clinicalRx!.update.install();
+    if (!res.ok) setStatus('⚠️ ' + (res.message || 'Install failed.'));
   }
 
   const downloading = phase.state === 'downloading';

@@ -12,6 +12,7 @@ const api = {
   remove: (module: string, id: string) => ipcRenderer.invoke('kv:remove', module, id),
   update: {
     getVersion: () => ipcRenderer.invoke('update:getVersion'),
+    getState: () => ipcRenderer.invoke('update:getState'),
     check: () => ipcRenderer.invoke('update:check'),
     download: () => ipcRenderer.invoke('update:download'),
     install: () => ipcRenderer.invoke('update:install'),

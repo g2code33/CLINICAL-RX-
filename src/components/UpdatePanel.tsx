@@ -20,6 +20,12 @@ export function useUpdateState() {
   useEffect(() => {
     if (!isElectron) return;
     window.clinicalRx!.update.getVersion().then(setMeta);
+    // After a restart, confirm the installed version is current.
+    window.clinicalRx!.update.getState().then((st) => {
+      if (st?.appVersion && meta?.appVersion && st.appVersion === meta.appVersion) {
+        setPhase({ state: 'up-to-date', version: st.appVersion });
+      }
+    }).catch(() => {});
     const off = window.clinicalRx!.update.onStatus((s: any) => {
       if (s?.state) setPhase(s);
     });
@@ -45,7 +51,10 @@ export function UpdatePanel() {
   async function download() {
     if (!window.clinicalRx) return;
     setPhase({ state: 'downloading', percent: 0 });
-    await window.clinicalRx.update.download();
+    const res = await window.clinicalRx.update.download();
+    if (!res.ok) {
+      setPhase({ state: 'error', message: res.message || 'Download failed. Check your connection and try again.' });
+    }
   }
   async function install() {
     await window.clinicalRx?.update.install();

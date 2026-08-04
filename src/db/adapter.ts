@@ -8,6 +8,7 @@ declare global {
     clinicalRx?: StorageAdapter & {
       update: {
         getVersion: () => Promise<{ appVersion: string; enabled: boolean; owner: string; repo: string }>;
+        getState: () => Promise<{ appVersion: string }>;
         check: () => Promise<{ ok: boolean; reason?: string; message?: string; updateInfo?: any }>;
         download: () => Promise<{ ok: boolean; reason?: string; message?: string }>;
         install: () => Promise<{ ok: boolean; reason?: string; message?: string }>;
