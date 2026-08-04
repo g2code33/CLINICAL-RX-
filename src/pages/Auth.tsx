@@ -65,7 +65,7 @@ export function AuthPage() {
     <div className="flex min-h-full items-center justify-center p-4">
       <div className="card w-full max-w-md">
         <div className="mb-4 text-center">
-          <img src="./v2.PNG" alt="CLINICAL Rx" className="mx-auto h-16 w-16 rounded-2xl object-cover" />
+          <img src="./v3.PNG" alt="CLINICAL Rx" className="mx-auto h-16 w-16 rounded-2xl object-cover" />
           <h1 className="mt-2 text-xl font-bold">☁️ CLINICAL Rx Cloud</h1>
           <p className="text-sm text-slate-400">Sign in to sync your data & AI setup across devices.</p>
         </div>

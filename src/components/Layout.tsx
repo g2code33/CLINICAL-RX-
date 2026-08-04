@@ -55,7 +55,7 @@ export function Layout({ children }: { children: ReactNode }) {
       {sidebarOpen ? (
         <aside className="flex w-56 shrink-0 flex-col border-r border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-800">
           <div className="flex items-center gap-2.5 border-b border-slate-200 px-4 py-4 dark:border-slate-700">
-            <img src="./v2.PNG" alt="CLINICAL Rx" className="h-9 w-9 rounded-lg object-cover" />
+            <img src="./v3.PNG" alt="CLINICAL Rx" className="h-9 w-9 rounded-lg object-cover" />
             <div>
               <div className="text-sm font-extrabold tracking-tight text-brand-700 dark:text-brand-300">CLINICAL Rx</div>
               <div className="text-[11px] text-slate-400">Clinical Companion</div>
@@ -90,7 +90,7 @@ export function Layout({ children }: { children: ReactNode }) {
       ) : (
         <aside className="flex w-14 shrink-0 flex-col border-r border-slate-200 bg-white py-2 dark:border-slate-700 dark:bg-slate-800">
           <div className="mb-1 flex justify-center">
-            <img src="./v2.PNG" alt="CLINICAL Rx" className="h-8 w-8 rounded-lg object-cover" />
+            <img src="./v3.PNG" alt="CLINICAL Rx" className="h-8 w-8 rounded-lg object-cover" />
           </div>
           <nav className="flex flex-1 flex-col items-center gap-1 px-1">
             {NAV.map((n) => (
@@ -124,7 +124,7 @@ export function Layout({ children }: { children: ReactNode }) {
             >
               ☰
             </button>
-            <img src="./v2.PNG" alt="CLINICAL Rx" className="h-7 w-7 rounded-lg object-cover" />
+            <img src="./v3.PNG" alt="CLINICAL Rx" className="h-7 w-7 rounded-lg object-cover" />
             <div className="truncate text-sm font-medium text-slate-500 dark:text-slate-300">
               🟢 <span className="hidden sm:inline">{status}</span>
             </div>

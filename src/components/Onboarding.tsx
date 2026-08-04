@@ -21,7 +21,7 @@ export function Onboarding() {
     <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-brand-700 to-slate-900 p-6">
       <div className="w-full max-w-md rounded-2xl bg-white p-8 shadow-xl dark:bg-slate-800">
         <div className="mb-6 text-center">
-          <img src="./v2.PNG" alt="CLINICAL Rx logo" className="mx-auto h-20 w-20 rounded-2xl object-cover shadow-lg" />
+          <img src="./v3.PNG" alt="CLINICAL Rx logo" className="mx-auto h-20 w-20 rounded-2xl object-cover shadow-lg" />
           <h1 className="mt-3 text-2xl font-extrabold text-brand-700 dark:text-brand-300">CLINICAL Rx</h1>
           <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
             Your personal clinical companion — works fully offline.
