@@ -3,6 +3,7 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import { useData } from './stores/data';
 import { newSettings } from './services/defaults';
 import { setupAutoAndReconnect } from './services/autoBundle';
+import { shouldRemind, computeStreak } from './services/streaks';
 import { KeyboardShortcuts } from './components/KeyboardShortcuts';
 import { useUi } from './stores/ui';
 import { Layout } from './components/Layout';
@@ -44,6 +45,23 @@ export default function App() {
     if (acct?.connected && acct.token) {
       import('./services/aiConfigSync').then((m) => m.syncAiConfig()).catch(() => {});
     }
+  }, [ready]);
+
+  // Daily reminder: if today isn't logged yet and it's late, nudge the user.
+  useEffect(() => {
+    if (!ready) return;
+    const days = useData.getState().days;
+    if (!shouldRemind(days)) return;
+    const s = computeStreak(days);
+    const msg = s.loggedYesterday
+      ? `Don't break your ${s.current + 1}-day streak — log today's clinical day!`
+      : 'You haven\'t logged today yet. Capture your clinical day in a minute.';
+    useData.getState().setStatus('🔔 ' + msg);
+    // Browser notification (best-effort, only if permission was granted).
+    if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+      try { new Notification('CLINICAL Rx', { body: msg }); } catch { /* ignore */ }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready]);
 
   const settings = useData((s) => s.settings);

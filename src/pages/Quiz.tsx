@@ -116,6 +116,27 @@ export function Quiz() {
     setSetupOpen(true);
   }
 
+  /** Re-quiz: build a fresh session from the given questions (optionally only the wrong ones). */
+  function startRetry(source: { title: string; questions: QuizType['questions']; answers?: number[] }, onlyWrong: boolean) {
+    const qs = onlyWrong
+      ? source.questions.map((q, i) => ({ q, i })).filter(({ q, i }) => (source.answers?.[i] ?? -1) !== q.answer).map(({ q }) => q)
+      : source.questions;
+    if (!qs.length) {
+      setStatus(onlyWrong ? '🎉 Perfect score — nothing to retry!' : 'No questions to retry.');
+      return;
+    }
+    const title = (onlyWrong ? 'Retry: wrong answers — ' : 'Retry: ') + source.title;
+    setQuiz({ title, questions: qs });
+    setAnswers(new Array(qs.length).fill(-1));
+    setSubmitted(false);
+    setCurrent(0);
+    setSavedId(null);
+    setTimeLeft(qs.length * 60);
+    setReviewOpen(false);
+    setHistoryOpen(false);
+    setStatus(`✓ Retry quiz ready — ${qs.length} question(s)`);
+  }
+
   const score = quiz ? quiz.questions.filter((_, i) => answers[i] === quiz.questions[i].answer).length : 0;
   const pct = quiz ? Math.round((score / quiz.questions.length) * 100) : 0;
   const allAnswered = quiz ? answers.every((a) => a !== -1) : false;
@@ -233,9 +254,15 @@ export function Quiz() {
                   <button className="btn-primary" onClick={submit} disabled={!allAnswered}>Submit ({answers.filter((a) => a !== -1).length}/{quiz.questions.length})</button>
                 </>
               ) : (
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   <span className="text-2xl font-extrabold text-brand-600">{pct}%</span>
                   <Pill color={pct >= 70 ? 'green' : pct >= 50 ? 'amber' : 'red'}>{score}/{quiz.questions.length}</Pill>
+                  <button className="btn-secondary !py-1 text-xs" onClick={() => startRetry({ title: quiz.title, questions: quiz.questions, answers }, true)} title="Re-quiz only the questions you got wrong">
+                    🔁 Retry wrong
+                  </button>
+                  <button className="btn-secondary !py-1 text-xs" onClick={() => startRetry({ title: quiz.title, questions: quiz.questions, answers }, false)} title="Re-take the same quiz">
+                    ↻ Same quiz
+                  </button>
                 </div>
               )}
             </div>
@@ -381,6 +408,8 @@ export function Quiz() {
                   </div>
                   <Pill color={p >= 70 ? 'green' : p >= 50 ? 'amber' : 'red'}>{q.score}/{q.total} ({p}%)</Pill>
                   <button className="btn-secondary !py-1 text-xs" onClick={() => openHistory(q.id)}>Review</button>
+                  <button className="btn-secondary !py-1 text-xs" onClick={() => startRetry(q, true)} title="Re-quiz only wrong answers">🔁 Wrong</button>
+                  <button className="btn-secondary !py-1 text-xs" onClick={() => startRetry(q, false)} title="Re-take the same quiz">↻ Same</button>
                   <button className="btn-ghost !py-1 text-xs text-red-500" onClick={() => void deleteHistory(q.id)}>🗑</button>
                 </div>
               );

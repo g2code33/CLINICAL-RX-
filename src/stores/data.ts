@@ -38,12 +38,14 @@ export interface DataStore {
   chats: ChatSession[];
   quizzes: SavedQuiz[];
   status: string;
+  removed: Array<{ module: ModuleType; record: any }>;
 
   init: () => Promise<void>;
   platformName: () => Promise<string>;
   getProfile: () => Promise<Profile | null>;
   saveProfile: (p: Profile) => Promise<void>;
   saveSettings: (s: Settings) => Promise<void>;
+  undoRemoved: () => Promise<number>;
 
   all: (module: ModuleType) => Array<BaseRecord & Record<string, any>>;
   getById: (module: ModuleType, id: string) => any | null;
@@ -79,6 +81,7 @@ export const useData = create<DataStore>((set, get) => ({
   bundles: [],
   chats: [],
   quizzes: [],
+  removed: [],
   status: 'Initializing…',
 
   init: async () => {
@@ -195,13 +198,29 @@ export const useData = create<DataStore>((set, get) => ({
   remove: async (module, id, opts) => {
     const adapter = get().adapter;
     const fromSync = opts?.fromSync === true;
+    // Keep the record for undo (unless this came from a sync apply).
+    let snapshot: any = null;
+    if (!fromSync) snapshot = get().all(module).find((r) => r.id === id) ?? null;
     await adapter.remove(module, id);
     if (!fromSync && backendConfigured()) enqueue({ op: 'delete', module, id });
     set((s) => {
       const listKey = (module + 's' in s ? module + 's' : module) as keyof DataStore;
       const existing = (s[listKey] as BaseRecord[]) || [];
-      return { [listKey]: existing.filter((r) => r.id !== id), status: fromSync ? '✓ Synced' : '✓ Deleted' } as any;
+      const removed = snapshot ? [...s.removed, { module, record: snapshot }].slice(-10) : s.removed;
+      return { [listKey]: existing.filter((r) => r.id !== id), removed, status: fromSync ? '✓ Synced' : '✓ Deleted' } as any;
     });
+  },
+
+  undoRemoved: async () => {
+    const st = get();
+    if (!st.removed.length) return 0;
+    const last = st.removed[st.removed.length - 1];
+    const rec = last.record;
+    if (rec && rec.id) {
+      await st.save(last.module, rec, { fromSync: true });
+    }
+    set({ removed: st.removed.slice(0, -1), status: '↩ Undid deletion' });
+    return 1;
   },
 
   setStatus: (s) => set({ status: s }),

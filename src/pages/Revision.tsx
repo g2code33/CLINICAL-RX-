@@ -3,6 +3,7 @@ import { PageHeader, EmptyState, Pill } from '../components/ui';
 import { newRevisionItem } from '../services/defaults';
 import { useState } from 'react';
 import { Modal } from '../components/Modal';
+import { isDue, reviewPass, reviewFail, boxLabel, dueInText, countDue, REVISION_BOX_HELP } from '../services/srs';
 
 export function Revision() {
   const revisions = useData((s) => s.revisions);
@@ -11,14 +12,18 @@ export function Revision() {
   const remove = useData((s) => s.remove);
   const [open, setOpen] = useState(false);
   const [topic, setTopic] = useState('');
+  const [filter, setFilter] = useState<'due' | 'all'>('due');
 
-  // Auto-suggest topics from conditions with incomplete revision coverage.
   const suggestions = diseases
     .filter((d) => {
       const r = d.revision as any;
       return r && Object.values(r).some((v) => v === false);
     })
     .slice(0, 8);
+
+  const dueCount = countDue(revisions);
+  const shown = filter === 'due' ? revisions.filter((r) => isDue(r)) : revisions;
+  const sorted = [...shown].sort((a, b) => (a.nextReview ?? 0) - (b.nextReview ?? 0));
 
   async function addTopic() {
     if (!topic.trim()) return;
@@ -27,15 +32,11 @@ export function Revision() {
     setOpen(false);
   }
 
-  async function toggleReviewed(item: any) {
-    await save('revision', { ...item, due: !item.due, reviewedAt: Date.now() });
-  }
-
   return (
     <div>
       <PageHeader
         title="Revision Engine"
-        subtitle="Your clinical exposure becomes your study material."
+        subtitle="Spaced repetition — review when due, and it comes back at the right time."
         action={<button className="btn-primary" onClick={() => setOpen(true)}>＋ Add revision topic</button>}
       />
 
@@ -47,9 +48,7 @@ export function Revision() {
               <button
                 key={d.id}
                 className="rounded-full bg-amber-50 px-3 py-1 text-xs font-medium text-amber-800 hover:bg-amber-100 dark:bg-amber-900 dark:text-amber-200"
-                onClick={async () => {
-                  await save('revision', newRevisionItem(d.name));
-                }}
+                onClick={async () => { await save('revision', newRevisionItem(d.name)); }}
               >
                 + {d.name}
               </button>
@@ -58,31 +57,72 @@ export function Revision() {
         </div>
       )}
 
-      {revisions.length === 0 ? (
-        <EmptyState icon="📚" title="No revision topics yet" hint="Add topics manually or click suggestions above." />
+      {/* Due summary */}
+      <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div className="card !p-3 text-center">
+          <div className="text-2xl font-extrabold text-red-500">{dueCount}</div>
+          <div className="text-[11px] text-slate-400">Due now</div>
+        </div>
+        <div className="card !p-3 text-center">
+          <div className="text-2xl font-extrabold text-brand-600">{revisions.filter((r) => (r.box ?? 0) >= 5).length}</div>
+          <div className="text-[11px] text-slate-400">Mastered</div>
+        </div>
+        <div className="card !p-3 text-center">
+          <div className="text-2xl font-extrabold">{revisions.length}</div>
+          <div className="text-[11px] text-slate-400">Total topics</div>
+        </div>
+        <div className="card !p-3 text-center">
+          <div className="text-2xl font-extrabold">{revisions.reduce((n, r) => n + (r.passCount ?? 0), 0)}</div>
+          <div className="text-[11px] text-slate-400">Reviews done</div>
+        </div>
+      </div>
+
+      <p className="mb-2 text-[11px] text-slate-400">{REVISION_BOX_HELP}</p>
+
+      <div className="mb-3 flex gap-2">
+        <button className={`rounded-full px-3 py-1 text-xs font-medium ${filter === 'due' ? 'bg-brand-600 text-white' : 'bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-300'}`} onClick={() => setFilter('due')}>
+          ⏰ Due now ({dueCount})
+        </button>
+        <button className={`rounded-full px-3 py-1 text-xs font-medium ${filter === 'all' ? 'bg-brand-600 text-white' : 'bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-300'}`} onClick={() => setFilter('all')}>
+          📚 All topics
+        </button>
+      </div>
+
+      {sorted.length === 0 ? (
+        <EmptyState icon="📚" title={filter === 'due' ? 'Nothing due — great job!' : 'No revision topics yet'} hint={filter === 'due' ? 'Add topics or come back when a review is due.' : 'Add topics manually or click suggestions above.'} />
       ) : (
         <div className="space-y-2">
-          {revisions.map((r) => (
-            <div key={r.id} className={`card flex items-center justify-between gap-3 ${!r.due ? 'opacity-60' : ''}`}>
-              <div className="flex items-center gap-3">
-                <button
-                  onClick={() => toggleReviewed(r)}
-                  className={`flex h-5 w-5 items-center justify-center rounded border text-xs ${r.due ? 'border-slate-300' : 'border-brand-500 bg-brand-500 text-white'}`}
-                  title={r.due ? 'Mark reviewed' : 'Mark due'}
-                >
-                  {!r.due && '✓'}
-                </button>
-                <div>
-                  <div className={`font-medium ${r.due ? 'text-slate-800 dark:text-slate-100' : 'line-through text-slate-400'}`}>{r.topic}</div>
-                  <div className="text-xs text-slate-400">{r.due ? 'Due for review' : 'Reviewed'} · {new Date(r.updatedAt).toLocaleDateString()}</div>
+          {sorted.map((r) => {
+            const due = isDue(r);
+            const box = r.box ?? 0;
+            return (
+              <div key={r.id} className={`card flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between ${!due ? 'opacity-70' : ''}`}>
+                <div className="flex items-center gap-3">
+                  <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-xs font-bold ${box >= 5 ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300' : box >= 3 ? 'bg-brand-100 text-brand-700 dark:bg-brand-900 dark:text-brand-300' : 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300'}`}>
+                    {boxLabel(box).replace('Box ', 'B')}
+                  </div>
+                  <div>
+                    <div className={`font-medium ${due ? 'text-slate-800 dark:text-slate-100' : 'text-slate-500 dark:text-slate-300'}`}>{r.topic}</div>
+                    <div className="text-xs text-slate-400">
+                      {boxLabel(box)} · {due ? '🔴 Due now' : `✓ ${dueInText(r)}`}
+                      {r.failCount ? ` · ❌${r.failCount}` : ''}
+                    </div>
+                  </div>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  {due ? (
+                    <>
+                      <button className="btn-primary !py-1 text-xs" onClick={async () => { await save('revision', reviewPass(r)); }}>✓ I know it</button>
+                      <button className="btn-secondary !py-1 text-xs" onClick={async () => { await save('revision', reviewFail(r)); }}>↺ Again</button>
+                    </>
+                  ) : (
+                    <Pill color={box >= 5 ? 'green' : 'amber'}>{dueInText(r)}</Pill>
+                  )}
+                  <button className="btn-ghost !p-1 text-xs hover:text-red-500" onClick={() => remove('revision', r.id)}>Delete</button>
                 </div>
               </div>
-              <div className="flex items-center gap-2">
-                <Pill color={r.due ? 'red' : 'green'}>{r.due ? 'Due' : 'Done'}</Pill>
-                <button className="btn-ghost !p-1 text-xs hover:text-red-500" onClick={() => remove('revision', r.id)}>Delete</button>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 

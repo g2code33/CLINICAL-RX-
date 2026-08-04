@@ -137,6 +137,11 @@ export interface RevisionItem extends BaseRecord {
   items: string[];
   due: boolean;
   reviewedAt?: number;
+  // Spaced repetition (Leitner): box 0 = new, 1..5 = increasing intervals
+  box?: number;
+  nextReview?: number; // epoch ms when it becomes due again
+  failCount?: number;
+  passCount?: number;
 }
 
 export type BundleType = 'auto-daily' | 'auto-weekly' | 'manual-day' | 'manual-week' | 'manual-custom' | 'merged';

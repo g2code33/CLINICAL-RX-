@@ -121,6 +121,7 @@ export function newRevisionItem(topic: string): RevisionItem {
   return {
     id: uid(), createdAt: Date.now(), updatedAt: Date.now(),
     topic, module: 'disease', items: [], due: true,
+    box: 0, nextReview: Date.now(), failCount: 0, passCount: 0,
   };
 }
 

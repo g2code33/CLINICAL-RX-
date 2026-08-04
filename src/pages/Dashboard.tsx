@@ -5,6 +5,8 @@ import { StatCard, EmptyState } from '../components/ui';
 import { QuickAdd } from '../components/QuickAdd';
 import { CloudSyncPrompt } from '../components/CloudSyncPrompt';
 import { newDay, todayIso } from '../services/defaults';
+import { computeStreak } from '../services/streaks';
+import { countDue } from '../services/srs';
 
 export function Dashboard() {
   const navigate = useNavigate();
@@ -22,6 +24,8 @@ export function Dashboard() {
   const today = days.find((d) => d.date === todayIso());
   const hour = new Date().getHours();
   const greet = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
+  const streak = computeStreak(days);
+  const dueCount = countDue(revisions);
 
   async function startToday() {
     if (!today) {
@@ -46,7 +50,8 @@ export function Dashboard() {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
+        <StatCard icon="🔥" label="Day streak" value={streak.current} accent="bg-orange-100 dark:bg-orange-900" to="/clinical" />
         <StatCard icon="📋" label="Clinical days" value={days.length} accent="bg-sky-100 dark:bg-sky-900" to="/clinical" />
         <StatCard icon="🦠" label="Conditions" value={diseases.length} to="/diseases" />
         <StatCard icon="💊" label="Medicines" value={medicines.length} to="/medicines" />
@@ -88,8 +93,8 @@ export function Dashboard() {
             <div className="text-2xl font-bold text-brand-600">{lessons.filter((l) => l.important).length}</div>
           </button>
           <button className="card flex w-full items-center justify-between text-left hover:border-brand-400" onClick={() => navigate('/revision')}>
-            <div><div className="font-semibold">📚 Revision queue</div><div className="text-xs text-slate-400">Topics marked for review</div></div>
-            <div className="text-2xl font-bold text-brand-600">{revisions.filter((r) => r.due).length}</div>
+            <div><div className="font-semibold">📚 Revision due</div><div className="text-xs text-slate-400">Spaced-repetition queue</div></div>
+            <div className="text-2xl font-bold text-brand-600">{dueCount}</div>
           </button>
         </div>
       </div>

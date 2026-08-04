@@ -7,6 +7,7 @@ import { SyncIndicator } from './SyncIndicator';
 import { ShortcutHelp } from './ShortcutHelp';
 import { CommandPalette } from './CommandPalette';
 import { UpdateBadge } from './UpdateBadge';
+import { UndoToast } from './UndoToast';
 
 const NAV = [
   { to: '/', icon: '🏠', label: 'Home' },
@@ -170,6 +171,7 @@ export function Layout({ children }: { children: ReactNode }) {
       <SearchModal open={searchOpen} onClose={() => setSearchOpen(false)} />
       <ShortcutHelp />
       <CommandPalette />
+      <UndoToast />
     </div>
   );
 }
