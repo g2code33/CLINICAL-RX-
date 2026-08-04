@@ -155,7 +155,7 @@ export function SettingsPage() {
 
   async function backup() {
     const state = useData.getState();
-    const data = { app: 'clinical-rx', version: 1, exportedAt: new Date().toISOString(), records: { profile: state.profile, settings: state.settings, days: state.days, diseases: state.diseases, medicines: state.medicines, investigations: state.investigations, questions: state.questions, lessons: state.lessons, revisions: state.revisions, bundles: state.bundles, chats: state.chats } };
+    const data = { app: 'clinical-rx', version: 1, exportedAt: new Date().toISOString(), records: { profile: state.profile, settings: state.settings, days: state.days, diseases: state.diseases, medicines: state.medicines, investigations: state.investigations, questions: state.questions, lessons: state.lessons, revisions: state.revisions, bundles: state.bundles, chats: state.chats, quizzes: state.quizzes } };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a'); a.href = url; a.download = `clinical-rx-backup-${new Date().toISOString().slice(0, 10)}.json`; a.click(); URL.revokeObjectURL(url);
@@ -171,7 +171,7 @@ export function SettingsPage() {
       await put('profile', [recs.profile]); await put('settings', [recs.settings]);
       await put('day', recs.days); await put('disease', recs.diseases); await put('medicine', recs.medicines);
       await put('investigation', recs.investigations); await put('question', recs.questions);
-      await put('lesson', recs.lessons); await put('revision', recs.revisions); await put('bundle', recs.bundles); await put('chat', recs.chats);
+      await put('lesson', recs.lessons); await put('revision', recs.revisions); await put('bundle', recs.bundles); await put('chat', recs.chats); await put('quiz', recs.quizzes);
       await st.init(); setStatus('✓ Backup imported');
     } catch (e: any) { setStatus('⚠️ Import failed: ' + e.message); }
   }
@@ -179,7 +179,7 @@ export function SettingsPage() {
   async function clearAll() {
     if (!confirm('Delete ALL local data? This cannot be undone.')) return;
     const st = useData.getState();
-    const modules: any[] = ['day', 'disease', 'medicine', 'investigation', 'question', 'lesson', 'revision', 'bundle', 'chat', 'profile', 'settings'];
+    const modules: any[] = ['day', 'disease', 'medicine', 'investigation', 'question', 'lesson', 'revision', 'bundle', 'chat', 'quiz', 'profile', 'settings'];
     for (const m of modules) { const items = await st.adapter.list(m); for (const it of items) await st.adapter.remove(m, it.id); }
     // Also drop the offline sync queue and the question bank so no stale
     // operations or questions survive a full reset.

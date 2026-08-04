@@ -7,7 +7,7 @@ export interface AiChatOpts {
   onToken?: (token: string) => void;
   /** Prior messages in the current conversation (same section), most recent last. */
   history?: Array<{ role: 'user' | 'assistant'; content: string }>;
-  /** Cap on generated tokens (default 900). */
+  /** Cap on generated tokens (default 1400). */
   maxTokens?: number;
   /** Sampling temperature (default 0.7). */
   temperature?: number;
@@ -79,7 +79,7 @@ export async function aiChat(cfg: AiModuleConfig, system: string, user: string, 
   if (!apiKey) return { ok: false, error: 'API key looks empty — add one in Settings → AI.' };
 
   const model = (cfg.model || defaultModelFor(cfg)).trim() || defaultModelFor(cfg);
-  const maxTokens = opts.maxTokens ?? 900;
+  const maxTokens = opts.maxTokens ?? 1400;
   const temperature = opts.temperature ?? 0.7;
   const timeoutMs = opts.timeoutMs ?? 120000;
   const history = opts.history ?? [];

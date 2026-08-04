@@ -233,7 +233,7 @@ function parseQuiz(text: string): Quiz | null {
 }
 
 /** Build a quiz from recent clinical exposure + optionally a focus topic. */
-export async function generateQuiz(focus?: string, count = 10): Promise<Quiz | null> {
+export async function generateQuiz(focus?: string, count = 10, opts: RunOpts = {}): Promise<Quiz | null> {
   const s = useData.getState();
   const context = focus?.trim()
     ? focus.trim()
@@ -256,7 +256,13 @@ export async function generateQuiz(focus?: string, count = 10): Promise<Quiz | n
     `answer is the 0-based index of the correct option. Make options plausible and at my learning level.`,
   ].join('\n');
 
-  const res = await runAiModule('questionGen', prompt, 'Return strictly valid JSON only.', { maxTokens: 3000 });
+  // Generous token budget + streaming + a longer timeout so big quizzes are
+  // produced fully and appear progressively instead of hanging.
+  const res = await runAiModule('questionGen', prompt, 'Return strictly valid JSON only.', {
+    ...opts,
+    maxTokens: opts.maxTokens ?? 4000,
+    timeoutMs: opts.timeoutMs ?? 180000,
+  });
   if (!res.ok) return null;
   return parseQuiz(res.text);
 }

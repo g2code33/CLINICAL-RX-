@@ -12,6 +12,7 @@ import type {
   Profile,
   Question,
   RevisionItem,
+  SavedQuiz,
   Settings,
   StorageAdapter,
 } from '../types';
@@ -35,6 +36,7 @@ export interface DataStore {
   revisions: RevisionItem[];
   bundles: Bundle[];
   chats: ChatSession[];
+  quizzes: SavedQuiz[];
   status: string;
 
   init: () => Promise<void>;
@@ -76,13 +78,14 @@ export const useData = create<DataStore>((set, get) => ({
   revisions: [],
   bundles: [],
   chats: [],
+  quizzes: [],
   status: 'Initializing…',
 
   init: async () => {
     const adapter = get().adapter;
     set({ status: 'Loading local data…' });
     const platform = await adapter.platform();
-    const [profiles, settingsList, days, diseases, medicines, investigations, questions, lessons, revisions, bundles, chats] =
+    const [profiles, settingsList, days, diseases, medicines, investigations, questions, lessons, revisions, bundles, chats, quizzes] =
       await Promise.all([
         adapter.list('profile'),
         adapter.list('settings'),
@@ -95,6 +98,7 @@ export const useData = create<DataStore>((set, get) => ({
         adapter.list('revision'),
         adapter.list('bundle'),
         adapter.list('chat'),
+        adapter.list('quiz'),
       ]);
     const parse = (items: any[]) => items.map((i) => JSON.parse(i.data));
     const profile = profiles.length ? parse(profiles)[0] : null;
@@ -112,6 +116,7 @@ export const useData = create<DataStore>((set, get) => ({
       revisions: sortByUpdated(parse(revisions)),
       bundles: sortByUpdated(parse(bundles)),
       chats: sortByUpdated(parse(chats)),
+      quizzes: sortByUpdated(parse(quizzes)),
       ready: true,
       status: 'Ready · ' + (hasElectronBridge() ? 'SQLite (offline)' : 'Web storage'),
     });
@@ -152,6 +157,7 @@ export const useData = create<DataStore>((set, get) => ({
       revision: get().revisions,
       bundle: get().bundles,
       chat: get().chats,
+      quiz: get().quizzes,
     };
     return map[module] as Array<BaseRecord & Record<string, any>>;
   },

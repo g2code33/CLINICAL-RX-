@@ -9,7 +9,8 @@ export type ModuleType =
   | 'lesson'
   | 'revision'
   | 'bundle'
-  | 'chat';
+  | 'chat'
+  | 'quiz';
 
 export interface BaseRecord {
   id: string;
@@ -224,4 +225,23 @@ export interface ChatSession extends BaseRecord {
   section: string; // AiModuleKey: chat | tutor | analyzer | notes | questionGen | revision | bundler
   title: string;
   messages: ChatMessage[];
+}
+
+// ---- Saved / completed quizzes (persisted, reviewable anytime) ----
+
+export interface SavedQuizQuestion {
+  question: string;
+  options: string[];
+  answer: number; // index of correct option
+  explanation: string;
+}
+
+export interface SavedQuiz extends BaseRecord {
+  title: string;
+  date: string; // yyyy-mm-dd when taken
+  questions: SavedQuizQuestion[];
+  answers: number[]; // user's chosen answers (-1 = skipped)
+  score: number;
+  total: number;
+  durationSeconds: number;
 }

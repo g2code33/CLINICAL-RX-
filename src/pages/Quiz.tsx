@@ -6,9 +6,23 @@ import { generateQuiz, type Quiz as QuizType } from '../services/aiTools';
 import { aiReady } from '../services/aiTools';
 import { copyToClipboard } from '../services/export';
 import { loadBank } from '../services/questionBank';
+import { newSavedQuiz } from '../services/defaults';
+import type { SavedQuiz } from '../types';
+
+function fmtTime(ts: number): string {
+  const d = new Date(ts);
+  const today = new Date();
+  const sameDay = d.toDateString() === today.toDateString();
+  const time = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  return sameDay ? time : d.toLocaleDateString([], { month: 'short', day: 'numeric' }) + ' ' + time;
+}
 
 export function Quiz() {
   const setStatus = useData((s) => s.setStatus);
+  const save = useData((s) => s.save);
+  const remove = useData((s) => s.remove);
+  const savedQuizzes = useData((s) => s.quizzes);
+
   const [quiz, setQuiz] = useState<QuizType | null>(null);
   const [answers, setAnswers] = useState<number[]>([]);
   const [current, setCurrent] = useState(0);
@@ -17,10 +31,13 @@ export function Quiz() {
   const [focus, setFocus] = useState('');
   const [count, setCount] = useState(10);
   const [reviewOpen, setReviewOpen] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const [timeLeft, setTimeLeft] = useState(0);
   const [setupOpen, setSetupOpen] = useState(false);
   const [bankMode, setBankMode] = useState(false);
   const [bankCount, setBankCount] = useState(10);
+  const [streamText, setStreamText] = useState('');
+  const [savedId, setSavedId] = useState<string | null>(null); // reviewing a saved quiz
   const timerRef = useRef<any>(null);
   const bank = loadBank();
 
@@ -50,8 +67,12 @@ export function Quiz() {
     setAnswers([]);
     setSubmitted(false);
     setCurrent(0);
+    setSavedId(null);
+    setStreamText('');
     setStatus('🤖 Generating quiz from your clinical exposure…');
-    const q = await generateQuiz(focus, count);
+    const q = await generateQuiz(focus, count, {
+      onToken: (t) => setStreamText((s) => (s + t).slice(-500)),
+    });
     setLoading(false);
     if (!q) {
       setStatus('⚠️ Could not generate a quiz. Check your AI key / connection.');
@@ -77,9 +98,22 @@ export function Quiz() {
     setAnswers(new Array(q.questions.length).fill(-1));
     setSubmitted(false);
     setCurrent(0);
+    setSavedId(null);
     setTimeLeft(q.questions.length * 60);
     setSetupOpen(false);
     setStatus(`✓ Quiz ready from bank — ${q.questions.length} questions`);
+  }
+
+  function startFresh() {
+    setQuiz(null);
+    setAnswers([]);
+    setSubmitted(false);
+    setCurrent(0);
+    setSavedId(null);
+    setTimeLeft(0);
+    setReviewOpen(false);
+    setHistoryOpen(false);
+    setSetupOpen(true);
   }
 
   const score = quiz ? quiz.questions.filter((_, i) => answers[i] === quiz.questions[i].answer).length : 0;
@@ -91,11 +125,44 @@ export function Quiz() {
     setAnswers((a) => { const n = [...a]; n[current] = i; return n; });
   }
 
-  function submit() {
-    if (submitted) return;
+  async function submit() {
+    if (submitted || !quiz) return;
     setSubmitted(true);
     clearInterval(timerRef.current);
-    setStatus(`✓ Quiz submitted — ${score}/${quiz?.questions.length ?? 0}`);
+    const duration = Math.max(0, Math.round(((quiz.questions.length * 60) - timeLeft)));
+    // Persist the completed quiz so it can be reviewed anytime.
+    const rec = newSavedQuiz({
+      title: quiz.title,
+      questions: quiz.questions,
+      answers,
+      score,
+      durationSeconds: duration,
+    });
+    await save('quiz', rec);
+    setSavedId(rec.id);
+    setStatus(`✓ Quiz saved & submitted — ${score}/${quiz.questions.length}`);
+  }
+
+  function openHistory(id: string) {
+    const rec = savedQuizzes.find((q) => q.id === id);
+    if (!rec) return;
+    setQuiz({
+      title: rec.title,
+      questions: rec.questions,
+    });
+    setAnswers(rec.answers);
+    setSubmitted(true);
+    setCurrent(0);
+    setSavedId(rec.id);
+    setTimeLeft(0);
+    setHistoryOpen(false);
+    setStatus(`Reviewing "${rec.title}" (${rec.score}/${rec.total})`);
+  }
+
+  async function deleteHistory(id: string) {
+    if (!confirm('Delete this saved quiz?')) return;
+    await remove('quiz', id);
+    if (savedId === id) startFresh();
   }
 
   async function share() {
@@ -122,26 +189,42 @@ export function Quiz() {
     <div>
       <PageHeader
         title="AI Quiz"
-        subtitle="AI generates a browser-style exam from your clinical exposure — timed, scored, reviewable and shareable."
-        action={<button className="btn-primary" onClick={() => setSetupOpen(true)}>＋ New Quiz</button>}
+        subtitle="Timed exams from your clinical exposure — every result is saved and reviewable anytime. Tap a question number to jump straight to it."
+        action={
+          <div className="flex gap-2">
+            <button className="btn-secondary" onClick={() => setHistoryOpen(true)}>📚 History ({savedQuizzes.length})</button>
+            <button className="btn-primary" onClick={startFresh}>＋ New Quiz</button>
+          </div>
+        }
       />
 
       {!quiz && !loading ? (
         <EmptyState
           icon="📝"
           title="No quiz yet"
-          hint="Generate a timed multiple-choice exam from your recorded conditions, medicines, investigations and questions."
-          actions={<button className="btn-primary" onClick={() => setSetupOpen(true)}>＋ Create a Quiz</button>}
+          hint="Generate a timed multiple-choice exam from your recorded conditions, medicines, investigations and questions — results are saved automatically for review anytime."
+          actions={<button className="btn-primary" onClick={startFresh}>＋ Create a Quiz</button>}
         />
       ) : loading ? (
-        <EmptyState icon="🤖" title="Generating your quiz…" hint="This may take a moment while AI builds questions from your progress." />
+        <EmptyState
+          icon="🤖"
+          title="Generating your quiz…"
+          hint={streamText ? 'Live preview: ' + streamText : 'This streams in as fast as the AI can write — usually a few seconds per question.'}
+        />
       ) : quiz ? (
         <div className="space-y-4">
           {/* Exam header */}
           <div className="card flex flex-wrap items-center justify-between gap-3">
             <div>
               <h2 className="text-lg font-bold">{quiz.title}</h2>
-              <div className="text-xs text-slate-400">{quiz.questions.length} questions · {Math.round((quiz.questions.length * 60) / 60)} min</div>
+              <div className="text-xs text-slate-400">
+                {quiz.questions.length} questions · {Math.round((quiz.questions.length * 60) / 60)} min
+                {savedId && savedQuizzes.find((q) => q.id === savedId) && (
+                  <span className="ml-2 rounded bg-green-100 px-2 py-0.5 text-green-700 dark:bg-green-900 dark:text-green-200">
+                    ✓ Saved · {fmtTime(savedQuizzes.find((q) => q.id === savedId)!.updatedAt)}
+                  </span>
+                )}
+              </div>
             </div>
             <div className="flex items-center gap-3">
               {!submitted ? (
@@ -158,22 +241,33 @@ export function Quiz() {
             </div>
           </div>
 
-          {/* Question navigator */}
+          {/* Question navigator — tap any number to jump there (works before AND after submit) */}
           <div className="flex flex-wrap gap-1.5">
             {quiz.questions.map((_, i) => (
               <button
                 key={i}
-                onClick={() => { if (!submitted) setCurrent(i); }}
+                onClick={() => setCurrent(i)}
+                title={`Jump to question ${i + 1}`}
                 className={`h-8 w-8 rounded-lg text-xs font-semibold transition-colors ${
-                  i === current ? 'bg-brand-600 text-white'
-                  : answers[i] !== -1 ? 'bg-brand-100 text-brand-800 dark:bg-brand-900 dark:text-brand-200'
-                  : 'bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-300'
-                } ${submitted ? 'cursor-default' : ''}`}
+                  i === current ? 'bg-brand-600 text-white ring-2 ring-brand-300'
+                  : submitted
+                    ? answers[i] === quiz.questions[i].answer
+                      ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300'
+                      : answers[i] !== -1
+                        ? 'bg-red-100 text-red-600 dark:bg-red-900 dark:text-red-300'
+                        : 'bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300'
+                    : answers[i] !== -1
+                      ? 'bg-brand-100 text-brand-800 dark:bg-brand-900 dark:text-brand-200'
+                      : 'bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-300'
+                } hover:scale-105`}
               >
                 {i + 1}
               </button>
             ))}
           </div>
+          {submitted && (
+            <p className="text-[11px] text-slate-400">Legend: <span className="text-green-600">green = correct</span> · <span className="text-red-500">red = wrong</span> · <span className="text-amber-500">amber = skipped</span></p>
+          )}
 
           {/* Current question */}
           <div className="card">
@@ -218,7 +312,8 @@ export function Quiz() {
             <button className="btn-secondary" disabled={current === 0} onClick={() => setCurrent((c) => c - 1)}>‹ Previous</button>
             <div className="flex gap-2">
               <button className="btn-secondary" onClick={() => setReviewOpen(true)}>Review all</button>
-              <button className="btn-primary" onClick={share}>📤 Share quiz</button>
+              <button className="btn-secondary" onClick={startFresh}>＋ New Quiz</button>
+              <button className="btn-primary" onClick={share}>📤 Share</button>
             </div>
             <button className="btn-secondary" disabled={current === quiz.questions.length - 1} onClick={() => setCurrent((c) => c + 1)}>Next ›</button>
           </div>
@@ -246,7 +341,7 @@ export function Quiz() {
             </div>
             <div className="flex justify-end gap-2">
               <button className="btn-secondary" onClick={() => setSetupOpen(false)}>Cancel</button>
-              <button className="btn-primary" disabled={loading} onClick={() => { setSetupOpen(false); start(); }}>
+              <button className="btn-primary" disabled={loading} onClick={() => { setSetupOpen(false); void start(); }}>
                 {loading ? 'Generating…' : 'Start Quiz'}
               </button>
             </div>
@@ -270,6 +365,30 @@ export function Quiz() {
         )}
       </Modal>
 
+      {/* History modal */}
+      <Modal open={historyOpen} onClose={() => setHistoryOpen(false)} title={`📚 Saved quizzes (${savedQuizzes.length})`} wide>
+        {savedQuizzes.length === 0 ? (
+          <p className="text-sm text-slate-400">No quizzes saved yet. Submit a quiz and it will be stored here forever for review.</p>
+        ) : (
+          <div className="space-y-2">
+            {savedQuizzes.map((q) => {
+              const p = q.total ? Math.round((q.score / q.total) * 100) : 0;
+              return (
+                <div key={q.id} className="flex items-center gap-3 rounded-lg border border-slate-200 p-3 dark:border-slate-700">
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-sm font-semibold">{q.title}</div>
+                    <div className="text-xs text-slate-400">{q.date} · {q.total} questions · {Math.round(q.durationSeconds / 60)} min</div>
+                  </div>
+                  <Pill color={p >= 70 ? 'green' : p >= 50 ? 'amber' : 'red'}>{q.score}/{q.total} ({p}%)</Pill>
+                  <button className="btn-secondary !py-1 text-xs" onClick={() => openHistory(q.id)}>Review</button>
+                  <button className="btn-ghost !py-1 text-xs text-red-500" onClick={() => void deleteHistory(q.id)}>🗑</button>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </Modal>
+
       {/* Review-all modal */}
       <Modal open={reviewOpen} onClose={() => setReviewOpen(false)} title="Review all questions" wide>
         <div className="space-y-4">
@@ -277,7 +396,7 @@ export function Quiz() {
             <div key={i} className="rounded-lg border border-slate-200 p-3 dark:border-slate-700">
               <div className="mb-1 flex items-center justify-between text-xs">
                 <span className="font-semibold text-slate-600 dark:text-slate-200">Q{i + 1}. {q.question}</span>
-                {answers[i] === q.answer ? <Pill color="green">Correct</Pill> : <Pill color="red">Wrong</Pill>}
+                {answers[i] === q.answer ? <Pill color="green">Correct</Pill> : answers[i] === -1 ? <Pill color="amber">Skipped</Pill> : <Pill color="red">Wrong</Pill>}
               </div>
               <div className="ml-3 text-xs text-slate-500 dark:text-slate-300">
                 {q.options.map((o, oi) => (

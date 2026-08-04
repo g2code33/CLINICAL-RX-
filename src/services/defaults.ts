@@ -10,6 +10,7 @@ import type {
   Profile,
   Question,
   RevisionItem,
+  SavedQuiz,
   Settings,
 } from '../types';
 
@@ -120,6 +121,27 @@ export function newRevisionItem(topic: string): RevisionItem {
   return {
     id: uid(), createdAt: Date.now(), updatedAt: Date.now(),
     topic, module: 'disease', items: [], due: true,
+  };
+}
+
+export function newSavedQuiz(input: {
+  title: string;
+  questions: SavedQuiz['questions'];
+  answers: number[];
+  score: number;
+  durationSeconds: number;
+}): SavedQuiz {
+  return {
+    id: uid(),
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+    date: todayIso(),
+    title: input.title,
+    questions: input.questions,
+    answers: input.answers,
+    score: input.score,
+    total: input.questions.length,
+    durationSeconds: input.durationSeconds,
   };
 }
 
