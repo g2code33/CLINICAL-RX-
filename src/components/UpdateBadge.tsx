@@ -14,13 +14,14 @@ export function UpdateBadge() {
 
   useEffect(() => {
     if (!isElectron) return;
+    if (installType === 'deb') return; // .deb can't auto-update — skip check
     if (phase.state !== 'idle' && phase.state !== 'up-to-date') return;
     window.clinicalRx!.update.check().then((res: any) => {
       if (res?.ok) setStatus('✓ Update check complete');
       else if (res?.reason === 'dev') setStatus('Dev mode — updates available in packaged builds');
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isElectron]);
+  }, [isElectron, installType]);
 
   useEffect(() => {
     if (!open) return;

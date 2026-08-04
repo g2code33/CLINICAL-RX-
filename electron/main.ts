@@ -67,23 +67,27 @@ function createWindow(): BrowserWindow {
   if (isDev() && process.env.VITE_DEV_SERVER_URL) {
     win.loadURL(process.env.VITE_DEV_SERVER_URL);
   } else {
-    // Load the packaged renderer. force reload on first paint failure.
-    const load = (attempt: number) =>
-      win.loadFile(path.join(__dirname, '../dist/index.html'), { query: { t: String(Date.now()) } }).catch(() => {
-        if (attempt < 2) {
-          setTimeout(() => load(attempt + 1), 300);
-        } else {
+    // Load the packaged renderer from app.asar. IMPORTANT: no query string —
+    // a `?t=...` cache-buster on a file:// URL inside asar fails with
+    // ERR_FAILED and causes the blank-blue window. Load the file directly.
+    const index = path.join(__dirname, '../dist/index.html');
+    win.loadFile(index).catch((err) => {
+      console.error('[clinical-rx] load failed:', err);
+      // Retry ONCE after a short delay (transient asar/unpack race), then
+      // surface an error box instead of looping forever.
+      setTimeout(() => {
+        win.loadFile(index).catch((e2) => {
+          console.error('[clinical-rx] second load failed:', e2);
           const { dialog } = require('electron');
-          dialog.showErrorBox('CLINICAL Rx could not load', 'The app data may be damaged. Reinstall or contact support.');
-        }
-      });
-    load(0);
+          dialog.showErrorBox('CLINICAL Rx could not load', 'The app could not load its interface. Please reinstall.');
+        });
+      }, 300);
+    });
   }
-  // If the renderer fails to paint even after load, retry once (the classic
-  // "blank until forced reload" is usually a first-paint race).
-  win.webContents.on('did-fail-load', (_e, code, desc) => {
-    if (code === -3) return; // ERR_ABORTED (navigation) — ignore
-    if (!win.isDestroyed()) win.reload();
+  // Ignore aborted navigations (ERR_ABORTED = -3); a genuine failure already
+  // triggers the retry above, so no aggressive reload loop here.
+  win.webContents.on('did-fail-load', (_e, code) => {
+    if (code === -3) return;
   });
   win.once('ready-to-show', () => win.show());
   win.on('closed', () => {
