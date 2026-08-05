@@ -375,10 +375,25 @@ export function Quiz() {
               <input className="input" placeholder="e.g. antihypertensives, or leave blank for everything" value={focus} onChange={(e) => setFocus(e.target.value)} />
             </div>
             <div>
-              <label className="label">Number of questions</label>
-              <select className="input" value={count} onChange={(e) => setCount(Number(e.target.value))}>
-                {[5, 10, 15, 20].map((n) => <option key={n} value={n}>{n} questions</option>)}
-              </select>
+              <label className="label">Number of questions (1–50)</label>
+              <input
+                type="number"
+                min={1}
+                max={50}
+                className="input"
+                value={count}
+                onChange={(e) => {
+                  const v = Number(e.target.value);
+                  if (!Number.isNaN(v)) setCount(Math.min(50, Math.max(1, Math.round(v))));
+                }}
+              />
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {[5, 10, 15, 20, 30, 50].map((n) => (
+                  <button key={n} type="button" className={`rounded-full px-2.5 py-0.5 text-xs ${count === n ? 'bg-brand-600 text-white' : 'bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-300'}`} onClick={() => setCount(n)}>
+                    {n}
+                  </button>
+                ))}
+              </div>
             </div>
             <div className="flex justify-end gap-2">
               <button className="btn-secondary" onClick={() => setSetupOpen(false)}>Cancel</button>
@@ -393,10 +408,18 @@ export function Quiz() {
               Start a quiz using <strong>{bank.length}</strong> question(s) from your bank (randomly selected, no AI needed).
             </div>
             <div>
-              <label className="label">Number of questions</label>
-              <select className="input" value={bankCount} onChange={(e) => setBankCount(Number(e.target.value))}>
-                {[5, 10, 15, Math.min(20, bank.length)].filter((n, i, a) => a.indexOf(n) === i).map((n) => <option key={n} value={n}>{Math.min(n, bank.length)} questions</option>)}
-              </select>
+              <label className="label">Number of questions (max {bank.length})</label>
+              <input
+                type="number"
+                min={1}
+                max={Math.max(1, bank.length)}
+                className="input"
+                value={bankCount}
+                onChange={(e) => {
+                  const v = Number(e.target.value);
+                  if (!Number.isNaN(v)) setBankCount(Math.min(bank.length, Math.max(1, Math.round(v))));
+                }}
+              />
             </div>
             <div className="flex justify-end gap-2">
               <button className="btn-secondary" onClick={() => setSetupOpen(false)}>Cancel</button>

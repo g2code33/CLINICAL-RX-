@@ -246,10 +246,13 @@ export interface Quiz {
 /** Extract a Quiz from AI text that contains a JSON block. */
 function parseQuiz(text: string): Quiz | null {
   try {
-    const start = text.indexOf('{');
-    const end = text.lastIndexOf('}');
+    // Strip markdown code fences if the model wrapped the JSON in ```json ```.
+    let clean = text.trim();
+    clean = clean.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '');
+    const start = clean.indexOf('{');
+    const end = clean.lastIndexOf('}');
     if (start < 0 || end <= start) return null;
-    const parsed = JSON.parse(text.slice(start, end + 1));
+    const parsed = JSON.parse(clean.slice(start, end + 1));
     const questions = Array.isArray(parsed.questions) ? parsed.questions : [];
     if (!questions.length) return null;
     const normalized: QuizQuestion[] = questions
@@ -297,11 +300,14 @@ export async function generateQuiz(focus?: string, count = 10, opts: RunOpts = {
   ].join('\n');
 
   // Generous token budget + streaming + a longer timeout so big quizzes are
-  // produced fully and appear progressively instead of hanging.
+  // produced fully and appear progressively instead of hanging. Token budget
+  // scales with the requested count (~350 tokens per question incl. the full
+  // explanation) so 50-question quizzes don't get truncated.
   const res = await runAiModule('questionGen', prompt, 'Return strictly valid JSON only.', {
     ...opts,
-    maxTokens: opts.maxTokens ?? 4000,
+    maxTokens: opts.maxTokens ?? Math.min(12000, 4000 + count * 350),
     timeoutMs: opts.timeoutMs ?? 180000,
+    temperature: opts.temperature ?? 0.2, // lower temp = faster, more deterministic JSON
   });
   if (!res.ok) return null;
   return parseQuiz(res.text);

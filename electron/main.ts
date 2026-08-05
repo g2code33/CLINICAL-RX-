@@ -61,6 +61,7 @@ function createWindow(): BrowserWindow {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false,
+      backgroundThrottling: false, // keep timers/AI working when minimized/hidden
     },
   });
 
@@ -92,6 +93,13 @@ function createWindow(): BrowserWindow {
     if (code === -3) return;
   });
   win.once('ready-to-show', () => win.show());
+  // Closing the window hides it (renderer keeps running -> AI/bundles finish)
+  // unless the app is actually quitting (update install / quit).
+  win.on('close', (e) => {
+    if (allowQuit) return;
+    e.preventDefault();
+    win.hide();
+  });
   win.on('closed', () => {
     if (mainWindow === win) mainWindow = null;
   });
@@ -174,16 +182,43 @@ function initIpc() {
   });
 }
 
-app.whenReady().then(() => {
-  initIpc();
-  initUpdater();
-  mainWindow = createWindow();
-  app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) mainWindow = createWindow();
+const gotLock = app.requestSingleInstanceLock();
+if (!gotLock) {
+  app.quit();
+} else {
+  app.on('second-instance', () => {
+    // User launched again while a hidden instance is running — show it.
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.show();
+      mainWindow.focus();
+    }
   });
-});
 
+  app.whenReady().then(() => {
+    initIpc();
+    initUpdater();
+    mainWindow = createWindow();
+    app.on('activate', () => {
+      if (BrowserWindow.getAllWindows().length === 0) mainWindow = createWindow();
+    });
+  });
+}
+
+// Keep the app running in the background when the window is closed, so
+// long-running AI tasks (quiz generation, bundle enrichment, chat replies)
+// finish even if the user closes the window. A single window is re-shown on
+// relaunch.
+let allowQuit = false;
+app.on('before-quit', () => { allowQuit = true; });
 app.on('window-all-closed', () => {
+  // On Linux/Windows, close = hide (keep working). Real quit only via the app
+  // menu / update install / allowQuit.
+  if (process.platform === 'darwin') return;
+  if (!allowQuit) {
+    // keep process alive; the window can be re-opened via the dock/taskbar
+    return;
+  }
   if (store) store.close();
-  if (process.platform !== 'darwin') app.quit();
+  app.quit();
 });
