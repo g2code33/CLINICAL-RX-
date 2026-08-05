@@ -25,6 +25,21 @@ export function SettingsPage() {
   const [showKeys, setShowKeys] = useState<Record<string, boolean>>({});
   const [testBusy, setTestBusy] = useState<Record<string, boolean>>({});
   const [testResult, setTestResult] = useState<Record<string, string>>({});
+  const [secQ, setSecQ] = useState('');
+  const [secQMsg, setSecQMsg] = useState('');
+  const [secQBusy, setSecQBusy] = useState(false);
+
+  async function fetchSecQuestion() {
+    const em = acctForm.email.trim();
+    if (!em) return;
+    setSecQBusy(true); setSecQ(''); setSecQMsg('');
+    const res = await syncClient.getSecurityQuestion(acctForm.backendUrl || bUrl(), em);
+    setSecQBusy(false);
+    if (!res.ok) { setSecQMsg('⚠️ ' + (res.error || 'Could not check that email.')); return; }
+    if (!res.data?.securityQuestion) { setSecQMsg('ℹ️ No security question is set for that account. Use the email reset link (Option 1).'); return; }
+    setSecQ(res.data.securityQuestion);
+    setSecQMsg('');
+  }
   const [acctForm, setAcctForm] = useState(() => ({
     email: '',
     password: '',
@@ -150,7 +165,7 @@ export function SettingsPage() {
 
   async function doResetSecurity() {
     setAcctBusy(true); setSyncState('');
-    const res = await syncClient.reset(acctForm.backendUrl || bUrl(), { method: 'security', email: acctForm.email.trim(), password: acctForm.password, securityQuestion: acctForm.securityQuestion.trim(), securityAnswer: acctForm.securityAnswer.trim() });
+    const res = await syncClient.reset(acctForm.backendUrl || bUrl(), { method: 'security', email: acctForm.email.trim(), password: acctForm.password, securityAnswer: acctForm.securityAnswer.trim() });
     setSyncState(res.data?.message || (res.error || 'Reset failed.'));
     setAcctBusy(false);
   }
@@ -384,11 +399,23 @@ export function SettingsPage() {
           <div className="border-t border-slate-200 pt-4 dark:border-slate-700">
             <div className="label mb-2">Option 2 — Security question</div>
             <div className="space-y-2">
-              <input className={input} type="email" value={acctForm.email} onChange={(e) => setAcctForm({ ...acctForm, email: e.target.value })} placeholder="your@email.com" />
-              <input className={input} value={acctForm.securityQuestion} onChange={(e) => setAcctForm({ ...acctForm, securityQuestion: e.target.value })} placeholder="Your security question" />
-              <input className={input} value={acctForm.securityAnswer} onChange={(e) => setAcctForm({ ...acctForm, securityAnswer: e.target.value })} placeholder="Your answer" />
+              <input className={input} type="email" value={acctForm.email} onChange={(e) => { setAcctForm({ ...acctForm, email: e.target.value }); setSecQ(''); }} placeholder="your@email.com" />
+              <button className="btn-secondary w-full" disabled={acctBusy || !acctForm.email.trim()} onClick={() => void fetchSecQuestion()}>
+                {secQBusy ? 'Fetching…' : '🔎 Show my security question'}
+              </button>
+              {secQ ? (
+                <div className="rounded-lg bg-brand-50 p-3 text-sm text-brand-800 dark:bg-brand-900 dark:text-brand-200">
+                  🔒 <span className="font-semibold">Your security question:</span>
+                  <div className="mt-1 font-medium">{secQ}</div>
+                </div>
+              ) : secQMsg ? (
+                <div className="rounded-lg bg-slate-50 p-3 text-xs text-slate-500 dark:bg-slate-700 dark:text-slate-300">{secQMsg}</div>
+              ) : null}
               <PasswordInput value={acctForm.password} onChange={(e) => setAcctForm({ ...acctForm, password: e.target.value })} placeholder="New password" />
-              <button className="btn-primary w-full" disabled={acctBusy || !acctForm.email || !acctForm.password || !acctForm.securityQuestion || !acctForm.securityAnswer} onClick={doResetSecurity}>{acctBusy ? '…' : 'Reset with security question'}</button>
+              <input className={input} value={acctForm.securityAnswer} onChange={(e) => setAcctForm({ ...acctForm, securityAnswer: e.target.value })} placeholder="Your answer" disabled={!secQ} />
+              <button className="btn-primary w-full" disabled={acctBusy || !acctForm.email || !acctForm.password || !acctForm.securityAnswer || !secQ} onClick={doResetSecurity}>
+                {acctBusy ? '…' : 'Reset with security question'}
+              </button>
             </div>
           </div>
           {syncState && <div className="rounded-lg bg-slate-50 p-3 text-sm text-slate-600 dark:bg-slate-700 dark:text-slate-200">{syncState}</div>}

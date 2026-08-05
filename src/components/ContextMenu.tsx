@@ -60,17 +60,19 @@ export function ContextMenuProvider({ children }: { children: ReactNode }) {
     setState({ x, y, items });
   };
 
-  // Close on outside click / scroll / escape.
+  // Close on outside LEFT-click / touch / scroll / escape. Right-button
+  // (button === 2) must NOT close — that would kill right-click interaction.
   useEffect(() => {
     if (!state) return;
     const close = () => setState(null);
+    const onMouse = (ev: MouseEvent) => { if (ev.button === 2) return; close(); };
     const onKey = (ev: KeyboardEvent) => { if (ev.key === 'Escape') close(); };
-    window.addEventListener('mousedown', close);
+    window.addEventListener('mousedown', onMouse);
     window.addEventListener('touchstart', close, { passive: true });
     window.addEventListener('scroll', close, true);
     window.addEventListener('keydown', onKey);
     return () => {
-      window.removeEventListener('mousedown', close);
+      window.removeEventListener('mousedown', onMouse);
       window.removeEventListener('touchstart', close);
       window.removeEventListener('scroll', close, true);
       window.removeEventListener('keydown', onKey);
@@ -102,7 +104,9 @@ export function ContextMenuProvider({ children }: { children: ReactNode }) {
             <button
               key={i}
               className={`flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-slate-100 dark:hover:bg-slate-700 ${it.danger ? 'text-red-600 dark:text-red-400' : 'text-slate-700 dark:text-slate-200'}`}
-              onClick={() => { setState(null); it.onClick(); }}
+              onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); }}
+              onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); setState(null); it.onClick(); }}
+              onClick={(e) => { e.stopPropagation(); setState(null); it.onClick(); }}
             >
               {it.icon && <span className="w-5 text-center">{it.icon}</span>}
               {it.label}
