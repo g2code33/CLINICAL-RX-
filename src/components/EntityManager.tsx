@@ -189,12 +189,25 @@ function FieldRow({ field, value, onChange }: { field: FieldConfig; value: any; 
         <label className="label">{field.label}</label>
         <div className="flex flex-wrap gap-2">
           {field.options?.map((o) => {
-            const checked = (value ?? []).includes(o);
+            // Robust: value may be an array of strings, OR an object of
+            // {key: boolean} (e.g. Disease.revision). Normalize to a Set.
+            const arr = Array.isArray(value) ? value : value && typeof value === 'object' ? Object.keys(value).filter((k) => value[k]) : [];
+            const checked = arr.includes(o);
             return (
               <button
                 key={o}
                 type="button"
-                onClick={() => onChange(checked ? (value ?? []).filter((x: string) => x !== o) : [...(value ?? []), o])}
+                onClick={() => {
+                  const nextArr = checked ? arr.filter((x: string) => x !== o) : [...arr, o];
+                  // If the original was an object, save back as an object map.
+                  if (value && typeof value === 'object' && !Array.isArray(value)) {
+                    const obj: Record<string, boolean> = {};
+                    for (const k of field.options ?? []) obj[k] = nextArr.includes(k);
+                    onChange(obj);
+                  } else {
+                    onChange(nextArr);
+                  }
+                }}
                 className={`rounded-full px-3 py-1 text-xs font-medium ${checked ? 'bg-brand-600 text-white' : 'bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-200'}`}
               >
                 {o}
