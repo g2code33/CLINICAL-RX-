@@ -330,16 +330,30 @@ export async function generateQuiz(focus?: string, count = 10, opts: RunOpts = {
     `Write like an excellent tutor: precise, warm, and educational. Never write "1-line explanation" or a placeholder.`,
   ].join('\n');
 
-  // Generous token budget + streaming + a longer timeout so big quizzes are
+  // Generous token budget + streaming + a LONG timeout so big quizzes are
   // produced fully and appear progressively instead of hanging. Token budget
   // scales with the requested count (~350 tokens per question incl. the full
   // explanation) so 50-question quizzes don't get truncated.
+  const maxTokens = opts.maxTokens ?? Math.min(12000, 4000 + count * 350);
   const res = await runAiModule('questionGen', prompt, 'Return strictly valid JSON only.', {
     ...opts,
-    maxTokens: opts.maxTokens ?? Math.min(12000, 4000 + count * 350),
-    timeoutMs: opts.timeoutMs ?? 180000,
+    maxTokens,
+    timeoutMs: opts.timeoutMs ?? 300000, // 5 min for large quizzes
     temperature: opts.temperature ?? 0.2, // lower temp = faster, more deterministic JSON
   });
-  if (!res.ok) return null;
+  if (!res.ok) {
+    // Streaming can fail mid-way on some providers; retry once non-streamed.
+    if (opts.onToken) {
+      const retry = await runAiModule('questionGen', prompt, 'Return strictly valid JSON only.', {
+        ...opts,
+        onToken: undefined,
+        maxTokens,
+        timeoutMs: 300000,
+        temperature: 0.2,
+      });
+      if (retry.ok) return parseQuiz(retry.text);
+    }
+    return null;
+  }
   return parseQuiz(res.text);
 }

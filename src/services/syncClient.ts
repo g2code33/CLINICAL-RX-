@@ -57,23 +57,23 @@ async function requestWithHeaders(backendUrl: string | undefined, path: string, 
 
 export const syncClient = {
   register(backendUrl: string | undefined, email: string, password: string, name: string, securityQuestion?: string, securityAnswer?: string) {
-    const body: any = { email, password, name };
+    const body: any = { action: 'register', email, password, name };
     if (securityQuestion) body.securityQuestion = securityQuestion;
     if (securityAnswer) body.securityAnswer = securityAnswer;
-    return request(backendUrl, '/api/auth/register', 'POST', undefined, body);
+    return request(backendUrl, '/api/auth', 'POST', undefined, body);
   },
   login(backendUrl: string | undefined, email: string, password: string) {
-    return request(backendUrl, '/api/auth/login', 'POST', undefined, { email, password });
+    return request(backendUrl, '/api/auth', 'POST', undefined, { action: 'login', email, password });
   },
-  me(backendUrl: string | undefined, token: string) { return request(backendUrl, '/api/auth/me', 'GET', token); },
+  me(backendUrl: string | undefined, token: string) { return request(backendUrl, '/api/auth', 'GET', token, { action: 'me' }); },
   updateProfile(backendUrl: string | undefined, token: string, body: { name?: string; securityQuestion?: string; securityAnswer?: string }) {
-    return request(backendUrl, '/api/auth/update', 'POST', token, body);
+    return request(backendUrl, '/api/auth', 'POST', token, { action: 'update', ...body });
   },
   changePassword(backendUrl: string | undefined, token: string, currentPassword: string, newPassword: string) {
-    return request(backendUrl, '/api/auth/change-password', 'POST', token, { currentPassword, newPassword });
+    return request(backendUrl, '/api/auth', 'POST', token, { action: 'change-password', currentPassword, newPassword });
   },
   deleteAccount(backendUrl: string | undefined, token: string, password: string) {
-    return request(backendUrl, '/api/auth/delete-account', 'DELETE', token, { password });
+    return request(backendUrl, '/api/auth', 'DELETE', token, { action: 'delete-account', password });
   },
   // Admin endpoints
   listUsers(backendUrl: string | undefined, token: string) {
@@ -94,14 +94,14 @@ export const syncClient = {
   adminClearSecurity(backendUrl: string | undefined, token: string, email: string) {
     return request(backendUrl, "/api/admin", "POST", token, { action: "clearSecurity", email });
   },
-  forgot(backendUrl: string | undefined, email: string) { return request(backendUrl, '/api/auth/forgot', 'POST', undefined, { email }); },
+  forgot(backendUrl: string | undefined, email: string) { return request(backendUrl, '/api/auth', 'POST', undefined, { action: 'forgot', email }); },
   getSecurityQuestion(backendUrl: string | undefined, email: string) {
-    return request(backendUrl, '/api/auth/security-question', 'POST', undefined, { email });
+    return request(backendUrl, '/api/auth', 'POST', undefined, { action: 'security-question', email });
   },
   reset(backendUrl: string | undefined, payload: { method: string; email?: string; password?: string; token?: string; securityQuestion?: string; securityAnswer?: string; adminToken?: string }) {
     const headers: Record<string, string> = {};
     if (payload.adminToken) headers['x-admin-token'] = payload.adminToken;
-    return requestWithHeaders(backendUrl, '/api/auth/reset', 'POST', headers, payload);
+    return requestWithHeaders(backendUrl, '/api/auth', 'POST', headers, { action: 'reset', ...payload });
   },
   pull(backendUrl: string | undefined, token: string, since?: number) {
     const q = typeof since === 'number' ? `?since=${since}` : '';

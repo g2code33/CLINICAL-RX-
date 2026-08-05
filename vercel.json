@@ -2,7 +2,15 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "buildCommand": "npm run vercel-build",
   "outputDirectory": "dist",
+  "functions": {
+    "api/auth/index.js": { "maxDuration": 30 },
+    "api/sync.js": { "maxDuration": 30 },
+    "api/aiConfig.js": { "maxDuration": 30 },
+    "api/admin/index.js": { "maxDuration": 30 },
+    "api/health.js": { "maxDuration": 30 }
+  },
   "rewrites": [
+    { "source": "/api/auth/(.*)", "destination": "/api/auth" },
     { "source": "/api/(.*)", "destination": "/api/$1" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
