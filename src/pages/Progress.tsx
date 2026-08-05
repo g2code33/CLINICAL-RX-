@@ -1,20 +1,22 @@
 import { useData } from '../stores/data';
 import { useNavigate } from 'react-router-dom';
 import { PageHeader, StatCard, EmptyState } from '../components/ui';
+import { isDue } from '../services/srs';
 
 function pct(part: number, total: number) {
   return total === 0 ? 0 : Math.round((part / total) * 100);
 }
 
-function Insight({ icon, label, value, color }: { icon: string; label: string; value: string | number; color: string }) {
+function Insight({ icon, label, value, color, to }: { icon: string; label: string; value: string | number; color: string; to: string }) {
+  const navigate = useNavigate();
   return (
-    <div className="card flex items-center gap-3">
+    <button className="card flex items-center gap-3 text-left transition-colors hover:border-brand-400" onClick={() => navigate(to)}>
       <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-xl ${color}`}>{icon}</div>
       <div>
         <div className="text-xs font-medium uppercase tracking-wide text-slate-400">{label}</div>
         <div className="text-2xl font-extrabold text-slate-800 dark:text-slate-100">{value}</div>
       </div>
-    </div>
+    </button>
   );
 }
 
@@ -35,17 +37,14 @@ export function Progress() {
   const microbio = diseases.length ? pct(diseases.filter((d) => d.who && d.dt).length, diseases.length) : 0;
   const labSkill = investigations.length ? pct(investigations.filter((i) => i.interpretation).length, investigations.length) : 0;
 
-  const overall = pct(
-    patho + pharmaco + therapeutic + microbio + labSkill,
-    500
-  );
+  const overall = pct(patho + pharmaco + therapeutic + microbio + labSkill, 500);
 
   const bars = [
-    { label: 'PATHOLOGY', value: patho },
-    { label: 'PHARMACOLOGY', value: pharmaco },
-    { label: 'THERAPEUTICS', value: therapeutic },
-    { label: 'MICROBIOLOGY', value: microbio },
-    { label: 'CLINICAL SKILLS', value: labSkill },
+    { label: 'PATHOLOGY', value: patho, to: '/diseases' },
+    { label: 'PHARMACOLOGY', value: pharmaco, to: '/medicines' },
+    { label: 'THERAPEUTICS', value: therapeutic, to: '/medicines' },
+    { label: 'MICROBIOLOGY', value: microbio, to: '/diseases' },
+    { label: 'CLINICAL SKILLS', value: labSkill, to: '/investigations' },
   ];
 
   const empty = diseases.length + medicines.length + investigations.length + questions.length === 0;
@@ -61,31 +60,34 @@ export function Progress() {
 
   return (
     <div>
-      <PageHeader title="Progress" subtitle="How your clinical learning is building up." />
+      <PageHeader title="Progress" subtitle="How your clinical learning is building up — tap any card to go there." />
+      {/* Stat cards — all clickable */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-6">
-        <StatCard icon="🦠" label="Conditions" value={diseases.length} />
-        <StatCard icon="💊" label="Medicines" value={medicines.length} />
-        <StatCard icon="🧪" label="Investigations" value={investigations.length} />
-        <StatCard icon="📋" label="Clinical days" value={days.length} />
-        <StatCard icon="📦" label="Bundles" value={bundles.length} />
-        <StatCard icon="💡" label="Lessons" value={lessons.length} />
+        <StatCard icon="🦠" label="Conditions" value={diseases.length} to="/diseases" />
+        <StatCard icon="💊" label="Medicines" value={medicines.length} to="/medicines" />
+        <StatCard icon="🧪" label="Investigations" value={investigations.length} to="/investigations" />
+        <StatCard icon="📋" label="Clinical days" value={days.length} to="/clinical" />
+        <StatCard icon="📦" label="Bundles" value={bundles.length} to="/bundles" />
+        <StatCard icon="💡" label="Lessons" value={lessons.length} to="/clinical" />
       </div>
 
+      {/* Insight cards — all clickable */}
       <div className="mt-6 grid gap-4 md:grid-cols-3">
-        <Insight label="Revision due" value={revisions.filter((r) => r.due).length} icon="📚" color="bg-amber-100 dark:bg-amber-900" />
-        <Insight label="Open questions" value={questions.filter((q) => q.status === 'open').length} icon="❓" color="bg-red-100 dark:bg-red-900" />
-        <Insight label="Overall learning" value={`${overall}%`} icon="🎯" color="bg-brand-100 dark:bg-brand-900" />
+        <Insight label="Revision due" value={revisions.filter((r) => isDue(r)).length} icon="📚" color="bg-amber-100 dark:bg-amber-900" to="/revision" />
+        <Insight label="Open questions" value={questions.filter((q) => q.status === 'open').length} icon="❓" color="bg-red-100 dark:bg-red-900" to="/questions" />
+        <Insight label="Overall learning" value={`${overall}%`} icon="🎯" color="bg-brand-100 dark:bg-brand-900" to="/progress" />
       </div>
 
       <div className="mt-6 grid gap-6 lg:grid-cols-2">
+        {/* Learning bars — each bar row clickable to its category */}
         <div className="card">
-          <div className="mb-3 flex items-center justify-between">
+          <button className="mb-3 flex w-full items-center justify-between text-left hover:opacity-80" onClick={() => navigate('/diseases')}>
             <h2 className="font-semibold">Clinical learning</h2>
             <span className="text-2xl font-extrabold text-brand-600">{overall}%</span>
-          </div>
+          </button>
           <div className="space-y-4">
             {bars.map((b) => (
-              <div key={b.label}>
+              <button key={b.label} className="block w-full text-left" onClick={() => navigate(b.to)}>
                 <div className="mb-1 flex justify-between text-xs font-medium text-slate-500">
                   <span>{b.label}</span>
                   <span>{b.value}%</span>
@@ -93,12 +95,13 @@ export function Progress() {
                 <div className="h-2.5 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-700">
                   <div className="h-full rounded-full bg-brand-500 transition-all" style={{ width: `${b.value}%` }} />
                 </div>
-              </div>
+              </button>
             ))}
           </div>
         </div>
 
-        <div className="card">
+        {/* Questions card — clickable to questions */}
+        <button className="card text-left transition-colors hover:border-brand-400" onClick={() => navigate('/questions')}>
           <h2 className="mb-3 font-semibold">Questions</h2>
           <div className="flex items-end gap-2">
             <span className="text-3xl font-extrabold text-brand-600">{pct(questions.filter((q) => q.status === 'answered').length, questions.length)}%</span>
@@ -109,46 +112,55 @@ export function Progress() {
             <div className="flex justify-between"><span>Answered</span><span className="text-green-600">{questions.filter((q) => q.status === 'answered').length}</span></div>
             <div className="flex justify-between"><span>Pending</span><span className="text-red-500">{questions.filter((q) => q.status === 'open').length}</span></div>
           </div>
-        </div>
+        </button>
       </div>
 
+      {/* Chart card — header links to clinical */}
       <div className="mt-6 card">
-        <h2 className="mb-3 font-semibold">📈 Clinical encounters over time</h2>
+        <button className="mb-3 flex w-full items-center justify-between text-left hover:opacity-80" onClick={() => navigate('/clinical')}>
+          <h2 className="font-semibold">📈 Clinical encounters over time</h2>
+          <span className="text-xs text-slate-400">view days →</span>
+        </button>
         <EncountersChart days={days} medicines={medicines} diseases={diseases} />
       </div>
 
+      {/* Top lists — each item clickable to its specific entity */}
       <div className="mt-6 grid gap-6 lg:grid-cols-2">
         <div className="card">
-          <h2 className="mb-3 font-semibold">Most encountered conditions</h2>
-          <TopList items={diseases.map((d) => ({ name: d.name, count: d.encounters }))} onClick={() => navigate('/diseases')} />
+          <button className="mb-3 flex w-full items-center justify-between text-left hover:opacity-80" onClick={() => navigate('/diseases')}>
+            <h2 className="font-semibold">Most encountered conditions</h2>
+            <span className="text-xs text-slate-400">view all →</span>
+          </button>
+          <TopList items={diseases.map((d) => ({ name: d.name, count: d.encounters }))} to="/diseases" />
         </div>
         <div className="card">
-          <h2 className="mb-3 font-semibold">Most encountered medicines</h2>
-          <TopList items={medicines.map((m) => ({ name: m.name, count: m.encounters }))} onClick={() => navigate('/medicines')} />
+          <button className="mb-3 flex w-full items-center justify-between text-left hover:opacity-80" onClick={() => navigate('/medicines')}>
+            <h2 className="font-semibold">Most encountered medicines</h2>
+            <span className="text-xs text-slate-400">view all →</span>
+          </button>
+          <TopList items={medicines.map((m) => ({ name: m.name, count: m.encounters }))} to="/medicines" />
         </div>
       </div>
     </div>
   );
 }
 
-function TopList({ items, onClick }: { items: Array<{ name: string; count: number }>; onClick: () => void }) {
+function TopList({ items, to }: { items: Array<{ name: string; count: number }>; to: string }) {
+  const navigate = useNavigate();
   const top = items.filter((i) => i.name).sort((a, b) => b.count - a.count).slice(0, 8);
   if (!top.length) return <p className="text-sm text-slate-400">Nothing recorded yet.</p>;
   const max = Math.max(...top.map((i) => i.count), 1);
   return (
     <div className="space-y-2">
       {top.map((i) => (
-        <div key={i.name} className="flex items-center gap-3 text-sm">
+        <button key={i.name} className="flex w-full items-center gap-3 text-left text-sm transition-colors hover:opacity-80" onClick={() => navigate(to)}>
           <span className="w-1/3 truncate text-slate-600 dark:text-slate-300">{i.name}</span>
           <div className="h-2 flex-1 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-700">
             <div className="h-full rounded-full bg-brand-500" style={{ width: `${(i.count / max) * 100}%` }} />
           </div>
           <span className="w-8 text-right text-xs text-slate-400">×{i.count}</span>
-        </div>
+        </button>
       ))}
-      {items.length > 8 && (
-        <button className="btn-ghost !p-0 text-xs" onClick={onClick}>View all →</button>
-      )}
     </div>
   );
 }
