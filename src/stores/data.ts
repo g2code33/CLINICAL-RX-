@@ -11,6 +11,7 @@ import type {
   ModuleType,
   Profile,
   Question,
+  Reminder,
   RevisionItem,
   SavedQuiz,
   Settings,
@@ -37,6 +38,7 @@ export interface DataStore {
   bundles: Bundle[];
   chats: ChatSession[];
   quizzes: SavedQuiz[];
+  reminders: Reminder[];
   status: string;
   removed: Array<{ module: ModuleType; record: any }>;
 
@@ -81,6 +83,7 @@ export const useData = create<DataStore>((set, get) => ({
   bundles: [],
   chats: [],
   quizzes: [],
+  reminders: [],
   removed: [],
   status: 'Initializing…',
 
@@ -89,7 +92,7 @@ export const useData = create<DataStore>((set, get) => ({
     set({ status: 'Loading local data…' });
     try {
       const platform = await adapter.platform();
-      const [profiles, settingsList, days, diseases, medicines, investigations, questions, lessons, revisions, bundles, chats, quizzes] =
+      const [profiles, settingsList, days, diseases, medicines, investigations, questions, lessons, revisions, bundles, chats, quizzes, reminders] =
         await Promise.all([
           adapter.list('profile'),
           adapter.list('settings'),
@@ -103,6 +106,7 @@ export const useData = create<DataStore>((set, get) => ({
           adapter.list('bundle'),
           adapter.list('chat'),
           adapter.list('quiz'),
+          adapter.list('reminder'),
         ]);
       // Defensive parse: skip any corrupt record instead of throwing, so the
       // app can never be locked on the splash screen by bad stored data.
@@ -128,6 +132,7 @@ export const useData = create<DataStore>((set, get) => ({
         bundles: sortByUpdated(parse(bundles)),
         chats: sortByUpdated(parse(chats)),
         quizzes: sortByUpdated(parse(quizzes)),
+        reminders: sortByUpdated(parse(reminders)),
         ready: true,
         status: 'Ready · ' + (hasElectronBridge() ? 'SQLite (offline)' : 'Web storage'),
       });
@@ -177,6 +182,7 @@ export const useData = create<DataStore>((set, get) => ({
       bundle: get().bundles,
       chat: get().chats,
       quiz: get().quizzes,
+      reminder: get().reminders,
     };
     return map[module] as Array<BaseRecord & Record<string, any>>;
   },

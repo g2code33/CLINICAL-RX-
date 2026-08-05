@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useData } from '../stores/data';
 import { PageHeader, EmptyState } from '../components/ui';
 import { newDay } from '../services/defaults';
+import { newReminder, remindersForDate } from '../services/reminders';
 
 function toIso(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -22,9 +23,21 @@ export function CalendarPage() {
   const days = useData((s) => s.days);
   const profile = useData((s) => s.profile)!;
   const save = useData((s) => s.save);
+  const remove = useData((s) => s.remove);
+  const reminders = useData((s) => s.reminders);
   const now = new Date();
   const [view, setView] = useState({ year: now.getFullYear(), month: now.getMonth() });
   const [selectedDate, setSelectedDate] = useState<string>(toIso(now));
+  const [remTitle, setRemTitle] = useState('');
+  const [remTime, setRemTime] = useState('09:00');
+  const [remNote, setRemNote] = useState('');
+
+  async function addReminder() {
+    if (!remTitle.trim()) return;
+    await save('reminder', newReminder({ title: remTitle.trim(), date: selectedDate, time: remTime, note: remNote.trim() || undefined }));
+    setRemTitle('');
+    setRemNote('');
+  }
 
   const cells = monthMatrix(view.year, view.month);
   const today = toIso(now);
@@ -67,6 +80,7 @@ export function CalendarPage() {
               if (day === null) return <div key={i} />;
               const iso = `${view.year}-${String(view.month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
               const has = dayByDate.has(iso);
+              const hasRem = reminders.some((r) => r.date === iso);
               const isToday = iso === today;
               const isSel = iso === selectedDate;
               return (
@@ -83,6 +97,7 @@ export function CalendarPage() {
                 >
                   {day}
                   {has && !isSel && <span className="absolute bottom-1 h-1.5 w-1.5 rounded-full bg-brand-500" />}
+                  {hasRem && !isSel && <span className="absolute bottom-3 h-1.5 w-1.5 rounded-full bg-amber-500" />}
                   {isToday && <span className="absolute bottom-1 h-1.5 w-1.5 rounded-full bg-red-500" />}
                 </button>
               );
@@ -96,6 +111,43 @@ export function CalendarPage() {
 
         <div className="card">
           <h2 className="mb-3 font-bold">{selectedDate}</h2>
+
+          {/* Reminders for the selected date */}
+          <div className="mb-4 rounded-lg border border-amber-200 p-3 dark:border-amber-800">
+            <div className="mb-2 flex items-center justify-between">
+              <span className="text-sm font-semibold">⏰ Reminders</span>
+              <span className="text-[11px] text-slate-400">desktop notification</span>
+            </div>
+            {remindersForDate(reminders, selectedDate).length === 0 ? (
+              <p className="mb-2 text-xs text-slate-400">No reminders for this day.</p>
+            ) : (
+              <div className="mb-2 space-y-1.5">
+                {remindersForDate(reminders, selectedDate).map((r) => (
+                  <div key={r.id} className={`flex items-center justify-between gap-2 text-sm ${r.done ? 'opacity-50' : ''}`}>
+                    <div className="min-w-0">
+                      <span className="font-medium">{r.time} — {r.title}</span>
+                      {r.note && <div className="truncate text-xs text-slate-400">{r.note}</div>}
+                    </div>
+                    <div className="flex shrink-0 gap-1.5">
+                      {r.done ? <span className="text-xs text-green-600">✓</span> : (
+                        <button className="text-xs text-green-600" onClick={async () => { await save('reminder', { ...r, done: true, updatedAt: Date.now() }); }}>Done</button>
+                      )}
+                      <button className="text-xs text-red-500" onClick={() => remove('reminder', r.id)}>✕</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div className="flex gap-1.5">
+              <input className="input !py-1 text-xs" placeholder="Reminder title" value={remTitle} onChange={(e) => setRemTitle(e.target.value)} />
+              <input type="time" className="input !w-auto !py-1 text-xs" value={remTime} onChange={(e) => setRemTime(e.target.value)} />
+            </div>
+            <div className="mt-1.5 flex gap-1.5">
+              <input className="input !py-1 text-xs" placeholder="Note (optional)" value={remNote} onChange={(e) => setRemNote(e.target.value)} />
+              <button className="btn-primary !py-1 text-xs" onClick={() => void addReminder()} disabled={!remTitle.trim()}>＋ Set</button>
+            </div>
+          </div>
+
           {selected ? (
             <div className="space-y-3 text-sm">
               <div className="font-semibold">Clinical Day {selected.dayNumber} · {selected.site}</div>

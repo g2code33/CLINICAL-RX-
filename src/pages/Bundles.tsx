@@ -326,6 +326,8 @@ function BundleDetail({ bundle, onClose, onOpenBundle }: { bundle: Bundle; onClo
       bundleToMarkdown(bundle)
     );
     setThinking(false);
+    // Log this AI task to the Chat section so it's viewable in AI → Chat.
+    import('../services/aiTools').then((m) => m.logAiTask('chat', `Explain bundle: ${bundle.title}`, res.ok ? res.text : '⚠️ ' + res.error)).catch(() => {});
     if (res.ok) {
       setStatus('✓ AI explained the bundle');
       setFollowUp(res.text);

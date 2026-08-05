@@ -6,6 +6,7 @@ const api = {
   isElectron: true,
   platform: () => ipcRenderer.invoke('app:platform') as Promise<string>,
   installType: () => ipcRenderer.invoke('app:installType') as Promise<string>,
+  notify: (payload: { title?: string; body?: string }) => ipcRenderer.invoke('notify', payload),
   list: (module: string) => ipcRenderer.invoke('kv:list', module),
   get: (module: string, id: string) => ipcRenderer.invoke('kv:get', module, id),
   put: (module: string, id: string, data: unknown, createdAt: number, updatedAt: number) =>

@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain } from 'electron';
+import { app, BrowserWindow, ipcMain, Notification } from 'electron';
 import path from 'node:path';
 import { autoUpdater } from 'electron-updater';
 import { SqliteKV } from './db/database';
@@ -124,6 +124,13 @@ function initIpc() {
     return { ok: true };
   });
   ipcMain.handle('app:platform', () => process.platform);
+  ipcMain.handle('notify', (_e, { title, body }) => {
+    // Desktop system notification (Windows toast / Linux notify-osd).
+    if (Notification.isSupported()) {
+      new Notification({ title: title || 'CLINICAL Rx', body: body || '' }).show();
+    }
+    return { ok: true };
+  });
   ipcMain.handle('app:installType', () => {
     // 'deb' installs can't auto-update (electron-updater only supports
     // AppImage on Linux); expose it so the UI can offer a download instead.

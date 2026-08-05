@@ -10,7 +10,8 @@ export type ModuleType =
   | 'revision'
   | 'bundle'
   | 'chat'
-  | 'quiz';
+  | 'quiz'
+  | 'reminder';
 
 export interface BaseRecord {
   id: string;
@@ -253,4 +254,14 @@ export interface SavedQuiz extends BaseRecord {
   score: number;
   total: number;
   durationSeconds: number;
+}
+
+// ---- Calendar reminders (persisted, synced, desktop notifications) ----
+
+export interface Reminder extends BaseRecord {
+  title: string;
+  date: string; // yyyy-mm-dd
+  time: string; // HH:mm
+  note?: string;
+  done: boolean;
 }

@@ -37,6 +37,37 @@ export function aiModuleLabel(key: AiModuleKey): string {
   return MODULE_LABEL[key];
 }
 
+/**
+ * Record an AI task into its section's chat history (so every AI action is
+ * viewable in the AI tab's "new chat" for that section). Creates a session if
+ * none exists for the section; appends user+AI messages. Works from anywhere
+ * (Bundles, Explain, Quiz, etc.).
+ */
+export async function logAiTask(section: AiModuleKey, userText: string, aiText: string, title?: string): Promise<void> {
+  const st = useData.getState();
+  const uid = (await import('../stores/data')).uid;
+  const now = Date.now();
+  const sessions = st.chats ?? [];
+  let session = sessions.find((c) => c.section === section && c.messages.length > 0 && !c.hidden) || sessions.find((c) => c.section === section) || null;
+  if (!session) {
+    session = {
+      id: uid(),
+      createdAt: now,
+      updatedAt: now,
+      section,
+      title: title || userText.replace(/\s+/g, ' ').slice(0, 48) || SECTION_LABEL[section] || section,
+      messages: [],
+    };
+  }
+  const userMsg = { id: uid(), role: 'user' as const, text: userText, ts: now };
+  const aiMsg = { id: uid(), role: 'ai' as const, text: aiText, ts: Date.now() };
+  await st.save('chat', {
+    ...session,
+    messages: [...(session.messages ?? []), userMsg, aiMsg],
+    updatedAt: Date.now(),
+  });
+}
+
 function studentContext(): string {
   const s = useData.getState();
   const p = s.profile;

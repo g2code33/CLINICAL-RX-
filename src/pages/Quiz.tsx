@@ -90,6 +90,8 @@ export function Quiz() {
       setStatus('⚠️ Could not generate a quiz. Check your AI key / connection.');
       return;
     }
+    // Log this generation to the Questions section (AI → Questions).
+    import('../services/aiTools').then((m) => m.logAiTask('questionGen', `Generate ${count} quiz question(s)${focus ? ' on ' + focus : ''}`, `Quiz "${q.title}" generated — ${q.questions.length} questions`)).catch(() => {});
     setQuiz(q);
     setAnswers(new Array(q.questions.length).fill(-1));
     setTimeLeft(q.questions.length * 60); // 60s per question

@@ -50,6 +50,8 @@ export function EntityManager({ module, title, subtitle, icon, emptyText, emptyH
         onClick: async () => {
           setExplain({ rec, text: '', loading: true });
           const res = await explainEntity(explainKind, rec);
+          // Log to the tutor section's chat so it's viewable in AI → Explain.
+          import('../services/aiTools').then((m) => m.logAiTask('tutor', `Explain: ${rec?.name ?? ''}`, res.ok ? res.text : '⚠️ ' + res.error)).catch(() => {});
           setExplain((ex) => (ex ? { rec, text: res.ok ? res.text : '', loading: false, error: res.ok ? undefined : res.error } : ex));
         },
       });
@@ -107,6 +109,7 @@ export function EntityManager({ module, title, subtitle, icon, emptyText, emptyH
                     onClick={async () => {
                       setExplain({ rec, text: '', loading: true });
                       const res = await explainEntity(explainKind, rec);
+                      import('../services/aiTools').then((m) => m.logAiTask('tutor', `Explain: ${rec?.name ?? ''}`, res.ok ? res.text : '⚠️ ' + res.error)).catch(() => {});
                       setExplain((ex) => (ex ? { rec, text: res.ok ? res.text : '', loading: false, error: res.ok ? undefined : res.error } : ex));
                     }}
                   >

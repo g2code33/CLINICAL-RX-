@@ -20,6 +20,7 @@ export function buildBackup(): string {
       bundles: st.bundles,
       chats: st.chats,
       quizzes: st.quizzes,
+      reminders: st.reminders,
     },
   };
   return JSON.stringify(data, null, 2);

@@ -7,6 +7,7 @@ declare global {
   interface Window {
     clinicalRx?: StorageAdapter & {
       installType?: () => Promise<string>;
+      notify?: (payload: { title?: string; body?: string }) => Promise<{ ok: boolean }>;
       update: {
         getVersion: () => Promise<{ appVersion: string; enabled: boolean; owner: string; repo: string }>;
         getState: () => Promise<{ appVersion: string }>;

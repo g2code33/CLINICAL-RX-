@@ -70,6 +70,14 @@ export default function App() {
     import('./services/backup').then((m) => m.runAutoBackupCheck()).catch(() => {});
   }, [ready]);
 
+  // Reminder watcher: fires desktop/system notifications for due reminders.
+  useEffect(() => {
+    if (!ready) return;
+    const stop = import('./services/reminders').then((m) => m.startReminderWatcher());
+    let cancelled = false;
+    return () => { cancelled = true; stop.then((s) => s()).catch(() => {}); };
+  }, [ready]);
+
   const settings = useData((s) => s.settings);
   useEffect(() => {
     const root = document.documentElement;
