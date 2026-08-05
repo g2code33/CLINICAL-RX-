@@ -103,3 +103,27 @@ async function call(fn, req, res) { await fn(req, res); return res; }
 
   console.log('ALL API TESTS PASSED ✔');
 })().catch((e) => { console.error('API TEST FAIL:', e); process.exit(1); });
+
+// ---- Admin actions (changeEmail / updateName / clearSecurity) ----
+(async () => {
+  const { makeReqRes, call } = (() => {
+    function makeReqRes() {
+      const headers = {};
+      const res = { statusCode: 0, body: null, headersSent: false, status(c){this.statusCode=c;return this;}, json(b){this.body=b;return this;}, setHeader(k,v){headers[k]=v;}, end(){this.ended=true;return this;} };
+      return { res, headers, req: { headers: {}, query: {}, body: {}, method: 'GET', socket: { remoteAddress: '127.0.0.1' } } };
+    }
+    async function call(fn, req, res) { await fn(req, res); return res; }
+    return { makeReqRes, call };
+  })();
+  const adminApi = require(path.join(apiDir, 'admin/index.js'));
+  // Register a user to manage
+  let { req, res } = makeReqRes(); req.method = 'POST';
+  req.body = { email: 'adminmanage@example.com', password: 'secret123', name: 'Manage Me', securityQuestion: 'Q?', securityAnswer: 'A' };
+  let r = await call(require(path.join(apiDir, 'auth/register.js')), req, res);
+  assert.strictEqual(r.statusCode, 201, 'reg for admin manage');
+  // Without ADMIN_EMAIL, admin is blocked
+  ({ req, res } = makeReqRes()); req.method = 'GET'; req.headers.authorization = 'Bearer ' + r.body.token;
+  r = await call(adminApi, req, res);
+  assert.strictEqual(r.statusCode, 403, 'admin blocked');
+  console.log('ADMIN GUARD OK ✔');
+})().catch((e) => { console.error('ADMIN TEST FAIL:', e); process.exit(1); });

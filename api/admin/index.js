@@ -65,6 +65,48 @@ module.exports = guard(async function handler(req, res) {
     return ok(res, 200, { message: `Password reset for ${found.email}` });
   }
 
+  // CHANGE EMAIL
+  if (action === 'changeEmail') {
+    const { email, newEmail } = req.body || {};
+    if (!email || !newEmail) return fail(res, 400, 'Current and new email required.');
+    const found = await getUserByEmail(email);
+    if (!found) return fail(res, 404, 'User not found.');
+    if (found.data.id === userId) return fail(res, 400, 'Cannot change your own email here.');
+    const ne = String(newEmail).trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(ne)) return fail(res, 400, 'Invalid new email.');
+    if (ne === found.email) return fail(res, 400, 'New email is the same as current.');
+    const exists = await redis.hget('users', ne);
+    if (exists) return fail(res, 409, 'An account with that email already exists.');
+    // Move the user record to the new email key.
+    found.data.email = ne;
+    await redis.hdel('users', found.email);
+    await redis.hset('users', { [ne]: JSON.stringify(found.data) });
+    return ok(res, 200, { message: `Email changed from ${found.email} to ${ne}` });
+  }
+
+  // UPDATE NAME
+  if (action === 'updateName') {
+    const { email, name } = req.body || {};
+    if (!email || !name) return fail(res, 400, 'Email and name required.');
+    const found = await getUserByEmail(email);
+    if (!found) return fail(res, 404, 'User not found.');
+    found.data.name = String(name).trim();
+    await redis.hset('users', { [found.email]: JSON.stringify(found.data) });
+    return ok(res, 200, { message: `Name updated for ${found.email}` });
+  }
+
+  // CLEAR SECURITY QUESTION
+  if (action === 'clearSecurity') {
+    const { email } = req.body || {};
+    if (!email) return fail(res, 400, 'Email required.');
+    const found = await getUserByEmail(email);
+    if (!found) return fail(res, 404, 'User not found.');
+    delete found.data.securityQuestion;
+    delete found.data.securityAnswer;
+    await redis.hset('users', { [found.email]: JSON.stringify(found.data) });
+    return ok(res, 200, { message: `Security question cleared for ${found.email}` });
+  }
+
   // DELETE user
   if (action === 'delete') {
     const { email } = req.body || {};
@@ -78,5 +120,5 @@ module.exports = guard(async function handler(req, res) {
     return ok(res, 200, { message: `User ${found.email} deleted` });
   }
 
-  return fail(res, 400, 'Unknown action. Use: list, reset, delete');
+  return fail(res, 400, 'Unknown action. Use: list, reset, changeEmail, updateName, clearSecurity, delete');
 });

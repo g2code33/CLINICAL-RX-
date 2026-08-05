@@ -28,6 +28,9 @@ export function AdminPage() {
   const [resetPw, setResetPw] = useState('');
   const [resetTarget, setResetTarget] = useState<AdminUser | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<AdminUser | null>(null);
+  const [detail, setDetail] = useState<AdminUser | null>(null);
+  const [newEmail, setNewEmail] = useState('');
+  const [newName, setNewName] = useState('');
   const [busy, setBusy] = useState(false);
 
   const token = settings?.onlineAccount?.token ?? '';
@@ -71,7 +74,34 @@ export function AdminPage() {
     const res = await syncClient.adminDeleteUser(bUrl, token, email);
     setMsg(res.ok ? `✓ Deleted ${email}` : '⚠️ ' + (res.error || 'Failed'));
     setBusy(false);
-    if (res.ok) { setDeleteTarget(null); loadUsers(); }
+    if (res.ok) { setDeleteTarget(null); setDetail(null); loadUsers(); }
+  }
+
+  async function doChangeEmail(email: string, to: string) {
+    if (!email || !to) return;
+    setBusy(true); setMsg('');
+    const res = await syncClient.adminChangeEmail(bUrl, token, email, to);
+    setMsg(res.ok ? `✓ Email changed to ${to}` : '⚠️ ' + (res.error || 'Failed'));
+    setBusy(false);
+    if (res.ok) { setDetail(null); loadUsers(); }
+  }
+
+  async function doRename(email: string, name: string) {
+    if (!email || !name) return;
+    setBusy(true); setMsg('');
+    const res = await syncClient.adminUpdateName(bUrl, token, email, name);
+    setMsg(res.ok ? `✓ Name updated` : '⚠️ ' + (res.error || 'Failed'));
+    setBusy(false);
+    if (res.ok) { setDetail(null); loadUsers(); }
+  }
+
+  async function doClearSecurity(email: string) {
+    if (!confirm('Clear this user\'s security question?')) return;
+    setBusy(true); setMsg('');
+    const res = await syncClient.adminClearSecurity(bUrl, token, email);
+    setMsg(res.ok ? `✓ Security question cleared` : '⚠️ ' + (res.error || 'Failed'));
+    setBusy(false);
+    if (res.ok) { setDetail(null); loadUsers(); }
   }
 
   if (!token) {
@@ -142,20 +172,18 @@ export function AdminPage() {
               </thead>
               <tbody>
                 {filtered.map((u) => (
-                  <tr key={u.id} className="border-b border-slate-100 dark:border-slate-800">
+                  <tr
+                    key={u.id}
+                    className="cursor-pointer border-b border-slate-100 transition-colors hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800/60"
+                    onClick={() => { setDetail(u); setNewEmail(''); setNewName(u.name || ''); }}
+                  >
                     <td className="py-2 font-medium">{u.name}</td>
                     <td className="py-2 text-slate-400">{u.email}</td>
                     <td className="py-2 text-xs text-slate-400">{new Date(u.createdAt).toLocaleDateString()}</td>
                     <td className="py-2" title={u.securityQuestion || ''}>{u.hasSecurityQuestion ? '✅' : '—'}</td>
                     <td className="py-2">{u.isAdmin ? '👑 Admin' : 'User'}</td>
                     <td className="py-2 text-right">
-                      {!u.isAdmin && (
-                        <div className="flex justify-end gap-2">
-                          <button className="text-xs text-brand-600 hover:underline dark:text-brand-400" onClick={() => { setResetTarget(u); setResetEmail(u.email); setResetPw(''); }}>Reset pwd</button>
-                          <button className="text-xs text-red-500 hover:underline" onClick={() => setDeleteTarget(u)}>Delete</button>
-                        </div>
-                      )}
-                      {u.isAdmin && <span className="text-xs text-slate-300">—</span>}
+                      <span className="text-xs text-brand-600 dark:text-brand-400">Manage →</span>
                     </td>
                   </tr>
                 ))}
@@ -192,6 +220,52 @@ export function AdminPage() {
         <button className="btn-primary w-full !bg-red-600" disabled={busy} onClick={() => deleteTarget && doDelete(deleteTarget.email)}>
           {busy ? 'Deleting…' : 'Yes, delete this user'}
         </button>
+      </Modal>
+
+      {/* User detail modal — powerful management */}
+      <Modal open={!!detail} onClose={() => setDetail(null)} title={`🛡️ Manage ${detail?.name ?? ''}`} wide>
+        {detail && (
+          <div className="space-y-4 text-sm">
+            <div className="rounded-lg bg-slate-50 p-3 text-xs text-slate-600 dark:bg-slate-700 dark:text-slate-200">
+              <div><strong>Email:</strong> {detail.email}</div>
+              <div><strong>Joined:</strong> {new Date(detail.createdAt).toLocaleString()}</div>
+              <div><strong>Security question:</strong> {detail.hasSecurityQuestion ? detail.securityQuestion || '✅ set' : '—'}</div>
+              <div><strong>Role:</strong> {detail.isAdmin ? '👑 Admin' : 'User'}</div>
+            </div>
+
+            {/* Change email */}
+            <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-700">
+              <label className="label">✉️ Change email</label>
+              <div className="flex gap-2">
+                <input className="input flex-1" value={newEmail} onChange={(e) => setNewEmail(e.target.value)} placeholder="new@email.com" />
+                <button className="btn-secondary shrink-0" disabled={busy || !newEmail.trim()} onClick={() => detail && doChangeEmail(detail.email, newEmail.trim())}>
+                  {busy ? '…' : 'Change'}
+                </button>
+              </div>
+            </div>
+
+            {/* Rename */}
+            <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-700">
+              <label className="label">✏️ Name</label>
+              <div className="flex gap-2">
+                <input className="input flex-1" value={newName} onChange={(e) => setNewName(e.target.value)} />
+                <button className="btn-secondary shrink-0" disabled={busy || !newName.trim()} onClick={() => detail && doRename(detail.email, newName.trim())}>
+                  {busy ? '…' : 'Rename'}
+                </button>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              {!detail.isAdmin && (
+                <>
+                  <button className="btn-secondary" onClick={() => { setResetTarget(detail); setResetEmail(detail.email); setResetPw(''); setDetail(null); }}>🔑 Reset password</button>
+                  <button className="btn-secondary" disabled={busy} onClick={() => doClearSecurity(detail.email)}>🧹 Clear security Q</button>
+                  <button className="btn-primary !bg-red-600" disabled={busy} onClick={() => { setDeleteTarget(detail); setDetail(null); }}>🗑 Delete user</button>
+                </>
+              )}
+            </div>
+          </div>
+        )}
       </Modal>
     </div>
   );

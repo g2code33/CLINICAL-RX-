@@ -85,6 +85,15 @@ export const syncClient = {
   adminDeleteUser(backendUrl: string | undefined, token: string, email: string) {
     return request(backendUrl, "/api/admin", "POST", token, { action: "delete", email });
   },
+  adminChangeEmail(backendUrl: string | undefined, token: string, email: string, newEmail: string) {
+    return request(backendUrl, "/api/admin", "POST", token, { action: "changeEmail", email, newEmail });
+  },
+  adminUpdateName(backendUrl: string | undefined, token: string, email: string, name: string) {
+    return request(backendUrl, "/api/admin", "POST", token, { action: "updateName", email, name });
+  },
+  adminClearSecurity(backendUrl: string | undefined, token: string, email: string) {
+    return request(backendUrl, "/api/admin", "POST", token, { action: "clearSecurity", email });
+  },
   forgot(backendUrl: string | undefined, email: string) { return request(backendUrl, '/api/auth/forgot', 'POST', undefined, { email }); },
   getSecurityQuestion(backendUrl: string | undefined, email: string) {
     return request(backendUrl, '/api/auth/security-question', 'POST', undefined, { email });
