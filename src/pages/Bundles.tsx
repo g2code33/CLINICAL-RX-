@@ -9,7 +9,7 @@ import { aiChat } from '../services/ai';
 import { CloudSyncPrompt } from '../components/CloudSyncPrompt';
 import type { Bundle } from '../types';
 
-type Filter = 'all' | 'auto' | 'manual' | 'merged';
+type Filter = 'all' | 'days' | 'weeks' | 'merged';
 
 const TYPE_LABEL: Record<string, string> = {
   'auto-daily': '🤖 Auto Daily',
@@ -105,14 +105,38 @@ export function Bundles() {
     setStatus('✓ Merged bundle created');
   }
 
+  // Group bundles: day-level (periodStart === periodEnd), week-level (span
+  // 7 days / auto-weekly / manual-week), and merged (anything with source
+  // bundles or type merged).
+  const isDay = (b: Bundle) => b.type === 'auto-daily' || b.type === 'manual-day' || (b.periodStart === b.periodEnd && b.type !== 'merged');
+  const isWeek = (b: Bundle) => b.type === 'auto-weekly' || b.type === 'manual-week' || (!isDay(b) && b.type !== 'merged');
+  const isMerged = (b: Bundle) => b.type === 'merged' || b.sourceBundleIds.length > 0;
+
   const filtered = bundles.filter((b) => {
     if (query && !b.title.toLowerCase().includes(query.toLowerCase())) return false;
     if (filter === 'all') return true;
-    if (filter === 'auto') return b.type.startsWith('auto');
-    if (filter === 'manual') return b.type.startsWith('manual');
-    if (filter === 'merged') return b.type === 'merged';
+    if (filter === 'days') return isDay(b);
+    if (filter === 'weeks') return isWeek(b);
+    if (filter === 'merged') return isMerged(b);
     return true;
   });
+
+  // Group days by date, weeks by their start date (descending).
+  const dayGroups = new Map<string, Bundle[]>();
+  const weekGroups = new Map<string, Bundle[]>();
+  const mergedList: Bundle[] = [];
+  for (const b of filtered) {
+    if (isMerged(b)) { mergedList.push(b); continue; }
+    if (isDay(b)) {
+      const key = b.periodStart;
+      dayGroups.set(key, [...(dayGroups.get(key) || []), b]);
+    } else if (isWeek(b)) {
+      const key = b.periodStart;
+      weekGroups.set(key, [...(weekGroups.get(key) || []), b]);
+    }
+  }
+  const dayKeys = Array.from(dayGroups.keys()).sort().reverse();
+  const weekKeys = Array.from(weekGroups.keys()).sort().reverse();
 
   const hasAuto = bundles.some((b) => b.type.startsWith('auto'));
   const hasManual = bundles.some((b) => b.type.startsWith('manual'));
@@ -148,13 +172,13 @@ export function Bundles() {
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <input className="input max-w-sm" placeholder="🔍 Search bundles…" value={query} onChange={(e) => setQuery(e.target.value)} />
         <div className="flex gap-1.5">
-          {(['all', 'auto', 'manual', 'merged'] as Filter[]).map((f) => (
+          {(['all', 'days', 'weeks', 'merged'] as Filter[]).map((f) => (
             <button
               key={f}
               onClick={() => setFilter(f)}
               className={`rounded-full px-3 py-1 text-xs font-medium ${filter === f ? 'bg-brand-600 text-white' : 'bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-200'}`}
             >
-              {f[0].toUpperCase() + f.slice(1)}
+              {f === 'days' ? '📅 Days' : f === 'weeks' ? '🗓 Weeks' : f === 'merged' ? '🔗 Merged' : 'All'}
             </button>
           ))}
         </div>
@@ -163,34 +187,71 @@ export function Bundles() {
       {filtered.length === 0 ? (
         <EmptyState icon="📦" title="No bundles here" hint={hasAuto || hasManual ? 'Try a different filter, or create a bundle.' : 'Generate an auto bundle or press + Create Bundle to get started.'} />
       ) : (
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {filtered.map((b) => (
-            <div key={b.id} className="card flex flex-col justify-between hover:border-brand-400">
-              <div>
-                <div className="mb-1 flex items-center justify-between gap-2">
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    <Pill color={b.type.startsWith('auto') ? 'green' : b.type === 'merged' ? 'slate' : 'amber'}>{TYPE_LABEL[b.type]}</Pill>
-                    {b.aiPending && <Pill color="amber">🤖 AI pending</Pill>}
-                  </div>
-                  <input
-                    type="checkbox"
-                    checked={selected.includes(b.id)}
-                    onChange={(e) =>
-                      setSelected(e.target.checked ? [...selected, b.id] : selected.filter((x) => x !== b.id))
-                    }
-                    className="h-4 w-4 accent-brand-600"
-                  />
-                </div>
-                <h3 className="font-bold text-slate-800 dark:text-slate-100">{b.title}</h3>
-                <div className="text-xs text-slate-400">{b.periodStart} → {b.periodEnd}</div>
-                <p className="mt-2 line-clamp-2 text-sm text-slate-500 dark:text-slate-400">{b.summary}</p>
-                {b.sourceBundleIds.length > 0 && <div className="mt-1 text-[11px] text-slate-400">🔗 Merged from {b.sourceBundleIds.length} bundle(s)</div>}
+        <div className="space-y-8">
+          {/* DAYS section */}
+          {dayKeys.length > 0 && (
+            <section>
+              <div className="mb-3 flex items-center gap-2">
+                <h2 className="text-lg font-bold">📅 Daily bundles</h2>
+                <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-500 dark:bg-slate-700 dark:text-slate-300">{dayKeys.length} day(s)</span>
               </div>
-              <button className="btn-secondary mt-3 w-full" onClick={() => setViewing(b)}>Open →</button>
-            </div>
-          ))}
+              {dayKeys.map((date) => (
+                <div key={date} className="mb-4">
+                  <div className="mb-2 flex items-center gap-2 border-b border-slate-200 pb-1 dark:border-slate-700">
+                    <span className="text-sm font-semibold text-slate-700 dark:text-slate-200">🗓 {date}</span>
+                    <span className="text-[11px] text-slate-400">{dayGroups.get(date)!.length} bundle(s)</span>
+                  </div>
+                  <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                    {dayGroups.get(date)!.map((b) => (
+                      <BundleCard key={b.id} b={b} selected={selected.includes(b.id)} onToggle={(v) => setSelected(v ? [...selected, b.id] : selected.filter((x) => x !== b.id))} onOpen={() => setViewing(b)} />
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </section>
+          )}
+
+          {/* WEEKS section */}
+          {weekKeys.length > 0 && (
+            <section>
+              <div className="mb-3 flex items-center gap-2">
+                <h2 className="text-lg font-bold">🗓 Weekly bundles</h2>
+                <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-500 dark:bg-slate-700 dark:text-slate-300">{weekKeys.length} week(s)</span>
+              </div>
+              {weekKeys.map((date) => (
+                <div key={date} className="mb-4">
+                  <div className="mb-2 flex items-center gap-2 border-b border-slate-200 pb-1 dark:border-slate-700">
+                    <span className="text-sm font-semibold text-slate-700 dark:text-slate-200">🗓 Week of {date}</span>
+                    <span className="text-[11px] text-slate-400">{weekGroups.get(date)!.length} bundle(s)</span>
+                  </div>
+                  <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                    {weekGroups.get(date)!.map((b) => (
+                      <BundleCard key={b.id} b={b} selected={selected.includes(b.id)} onToggle={(v) => setSelected(v ? [...selected, b.id] : selected.filter((x) => x !== b.id))} onOpen={() => setViewing(b)} />
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </section>
+          )}
+
+          {/* MERGED section */}
+          {mergedList.length > 0 && (
+            <section>
+              <div className="mb-3 flex items-center gap-2">
+                <h2 className="text-lg font-bold">🔗 Merged bundles</h2>
+                <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-500 dark:bg-slate-700 dark:text-slate-300">{mergedList.length}</span>
+              </div>
+              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                {mergedList.map((b) => (
+                  <BundleCard key={b.id} b={b} selected={selected.includes(b.id)} onToggle={(v) => setSelected(v ? [...selected, b.id] : selected.filter((x) => x !== b.id))} onOpen={() => setViewing(b)} />
+                ))}
+              </div>
+            </section>
+          )}
         </div>
       )}
+
+      {/* Bundle card is defined below as BundleCard */}
 
       {/* Manual create modal */}
       <Modal open={createOpen} onClose={() => setCreateOpen(false)} title="Create Manual Bundle">
@@ -205,6 +266,33 @@ export function Bundles() {
           onOpenBundle={(b) => { setViewing(b); setAiReply(null); }}
         />
       )}
+    </div>
+  );
+}
+
+function BundleCard({ b, selected, onToggle, onOpen }: { b: Bundle; selected: boolean; onToggle: (v: boolean) => void; onOpen: () => void }) {
+  return (
+    <div className="card flex cursor-pointer flex-col justify-between transition-colors hover:border-brand-400" onClick={onOpen}>
+      <div>
+        <div className="mb-1 flex items-center justify-between gap-2">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <Pill color={b.type.startsWith('auto') ? 'green' : b.type === 'merged' ? 'slate' : 'amber'}>{TYPE_LABEL[b.type]}</Pill>
+            {b.aiPending && <Pill color="amber">🤖 AI pending</Pill>}
+          </div>
+          <input
+            type="checkbox"
+            checked={selected}
+            onClick={(e) => e.stopPropagation()}
+            onChange={(e) => onToggle(e.target.checked)}
+            className="h-4 w-4 accent-brand-600"
+          />
+        </div>
+        <h3 className="font-bold text-slate-800 dark:text-slate-100">{b.title}</h3>
+        <div className="text-xs text-slate-400">{b.periodStart} → {b.periodEnd}</div>
+        <p className="mt-2 line-clamp-2 text-sm text-slate-500 dark:text-slate-400">{b.summary}</p>
+        {b.sourceBundleIds.length > 0 && <div className="mt-1 text-[11px] text-slate-400">🔗 Merged from {b.sourceBundleIds.length} bundle(s)</div>}
+      </div>
+      <span className="btn-secondary mt-3 w-full text-center">Open →</span>
     </div>
   );
 }
