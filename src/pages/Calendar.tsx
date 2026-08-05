@@ -32,6 +32,14 @@ export function CalendarPage() {
   const [remTime, setRemTime] = useState('09:00');
   const [remNote, setRemNote] = useState('');
 
+  // Reminders for the currently-viewed month, upcoming-first.
+  const monthReminders = reminders
+    .filter((r) => {
+      const d = r.date;
+      return d >= `${view.year}-${String(view.month + 1).padStart(2, '0')}-01` && d <= `${view.year}-${String(view.month + 1).padStart(2, '0')}-31`;
+    })
+    .sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
+
   async function addReminder() {
     if (!remTitle.trim()) return;
     await save('reminder', newReminder({ title: remTitle.trim(), date: selectedDate, time: remTime, note: remNote.trim() || undefined }));
@@ -105,8 +113,35 @@ export function CalendarPage() {
           </div>
           <p className="mt-3 text-xs text-slate-400">
             <span className="mr-1 inline-block h-2 w-2 rounded-full bg-brand-500" /> clinical day ·{' '}
+            <span className="mr-1 inline-block h-2 w-2 rounded-full bg-amber-500" /> reminder ·{' '}
             <span className="mr-1 inline-block h-2 w-2 rounded-full bg-red-500" /> today
           </p>
+
+          {/* Reminders right under the days of this month */}
+          {monthReminders.length > 0 && (
+            <div className="mt-4 rounded-lg border border-amber-200 p-3 dark:border-amber-800">
+              <div className="mb-2 flex items-center justify-between">
+                <span className="text-sm font-semibold">⏰ Reminders this month</span>
+                <span className="text-[11px] text-slate-400">{monthReminders.length} upcoming</span>
+              </div>
+              <div className="space-y-1.5">
+                {monthReminders.map((r) => (
+                  <div key={r.id} className={`flex items-center justify-between gap-2 text-sm ${r.done ? 'opacity-50' : ''}`}>
+                    <div className="min-w-0">
+                      <span className="font-medium">{r.date} · {r.time} — {r.title}</span>
+                      {r.note && <div className="truncate text-xs text-slate-400">{r.note}</div>}
+                    </div>
+                    <div className="flex shrink-0 gap-1.5">
+                      {!r.done && (
+                        <button className="text-xs text-green-600" onClick={async () => { await save('reminder', { ...r, done: true, updatedAt: Date.now() }); }}>Done</button>
+                      )}
+                      <button className="text-xs text-red-500" onClick={() => remove('reminder', r.id)}>✕</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="card">

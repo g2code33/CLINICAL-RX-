@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useData } from '../stores/data';
 import { PageHeader, EmptyState, Pill } from '../components/ui';
 import { Modal } from '../components/Modal';
-import { generateBundle, mergeBundles, processAiQueue, getPendingAiCount, aiAvailable } from '../services/bundler';
+import { generateBundle, mergeBundles, processAiQueue, getPendingAiCount, aiAvailable, consolidatePeriod } from '../services/bundler';
 import { bundleToMarkdown, bundleToJson, bundleToPdf, downloadText, copyToClipboard } from '../services/export';
 import { scanForPhi, privacyWarning } from '../services/privacy';
 import { aiChat } from '../services/ai';
@@ -138,6 +138,9 @@ export function Bundles() {
   const dayKeys = Array.from(dayGroups.keys()).sort().reverse();
   const weekKeys = Array.from(weekGroups.keys()).sort().reverse();
 
+  // Primary bundle per period (prefer auto, else first) — one card per day/week.
+  const primaryOf = (g: Bundle[]) => g.find((b) => b.type.startsWith('auto')) || g[0];
+
   const hasAuto = bundles.some((b) => b.type.startsWith('auto'));
   const hasManual = bundles.some((b) => b.type.startsWith('manual'));
 
@@ -200,11 +203,34 @@ export function Bundles() {
                   <div className="mb-2 flex items-center gap-2 border-b border-slate-200 pb-1 dark:border-slate-700">
                     <span className="text-sm font-semibold text-slate-700 dark:text-slate-200">🗓 {date}</span>
                     <span className="text-[11px] text-slate-400">{dayGroups.get(date)!.length} bundle(s)</span>
+                    {dayGroups.get(date)!.length > 1 && (
+                      <button
+                        className="ml-auto rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-800 hover:bg-amber-200 dark:bg-amber-900 dark:text-amber-200"
+                        onClick={async () => { await consolidatePeriod(dayGroups.get(date)!); }}
+                        title="Merge all bundles for this day into one"
+                      >
+                        🧹 Consolidate into one
+                      </button>
+                    )}
                   </div>
                   <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-                    {dayGroups.get(date)!.map((b) => (
-                      <BundleCard key={b.id} b={b} selected={selected.includes(b.id)} onToggle={(v) => setSelected(v ? [...selected, b.id] : selected.filter((x) => x !== b.id))} onOpen={() => setViewing(b)} />
-                    ))}
+                    {(() => {
+                      const g = dayGroups.get(date)!;
+                      const primary = primaryOf(g);
+                      const rest = g.filter((b) => b.id !== primary.id);
+                      return (
+                        <>
+                          <BundleCard key={primary.id} b={primary} selected={selected.includes(primary.id)} onToggle={(v) => setSelected(v ? [...selected, primary.id] : selected.filter((x) => x !== primary.id))} onOpen={() => setViewing(primary)} />
+                          {rest.length > 0 && (
+                            <div className="card flex flex-col justify-center border-dashed p-4 text-center text-xs text-slate-400">
+                              <div className="mb-1">➕ {rest.length} more bundle(s) for this day</div>
+                              <div className="mb-2 truncate">{rest.map((b) => b.title).join(' · ')}</div>
+                              <button className="btn-secondary !py-1 text-xs" onClick={async () => { await consolidatePeriod(g); }}>🧹 Sip into one</button>
+                            </div>
+                          )}
+                        </>
+                      );
+                    })()}
                   </div>
                 </div>
               ))}
@@ -223,11 +249,33 @@ export function Bundles() {
                   <div className="mb-2 flex items-center gap-2 border-b border-slate-200 pb-1 dark:border-slate-700">
                     <span className="text-sm font-semibold text-slate-700 dark:text-slate-200">🗓 Week of {date}</span>
                     <span className="text-[11px] text-slate-400">{weekGroups.get(date)!.length} bundle(s)</span>
+                    {weekGroups.get(date)!.length > 1 && (
+                      <button
+                        className="ml-auto rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-800 hover:bg-amber-200 dark:bg-amber-900 dark:text-amber-200"
+                        onClick={async () => { await consolidatePeriod(weekGroups.get(date)!); }}
+                        title="Merge all bundles for this week into one"
+                      >
+                        🧹 Consolidate into one
+                      </button>
+                    )}
                   </div>
                   <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-                    {weekGroups.get(date)!.map((b) => (
-                      <BundleCard key={b.id} b={b} selected={selected.includes(b.id)} onToggle={(v) => setSelected(v ? [...selected, b.id] : selected.filter((x) => x !== b.id))} onOpen={() => setViewing(b)} />
-                    ))}
+                    {(() => {
+                      const g = weekGroups.get(date)!;
+                      const primary = primaryOf(g);
+                      const rest = g.filter((b) => b.id !== primary.id);
+                      return (
+                        <>
+                          <BundleCard key={primary.id} b={primary} selected={selected.includes(primary.id)} onToggle={(v) => setSelected(v ? [...selected, primary.id] : selected.filter((x) => x !== primary.id))} onOpen={() => setViewing(primary)} />
+                          {rest.length > 0 && (
+                            <div className="card flex flex-col justify-center border-dashed p-4 text-center text-xs text-slate-400">
+                              <div className="mb-1">➕ {rest.length} more bundle(s) for this week</div>
+                              <button className="btn-secondary !py-1 text-xs" onClick={async () => { await consolidatePeriod(g); }}>🧹 Sip into one</button>
+                            </div>
+                          )}
+                        </>
+                      );
+                    })()}
                   </div>
                 </div>
               ))}

@@ -78,6 +78,15 @@ export default function App() {
     return () => { cancelled = true; stop.then((s) => s()).catch(() => {}); };
   }, [ready]);
 
+  // Queued AI tasks: retry when the network is back (and on startup).
+  useEffect(() => {
+    if (!ready) return;
+    import('./services/aiTaskQueue').then((m) => m.processPendingAiTasks()).catch(() => {});
+    const onOnline = () => { import('./services/aiTaskQueue').then((m) => m.processPendingAiTasks()).catch(() => {}); };
+    window.addEventListener('online', onOnline);
+    return () => window.removeEventListener('online', onOnline);
+  }, [ready]);
+
   const settings = useData((s) => s.settings);
   useEffect(() => {
     const root = document.documentElement;

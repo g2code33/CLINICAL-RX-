@@ -216,6 +216,17 @@ export function AiChat() {
 
     setInput('');
     setPendingImages([]);
+
+    // Offline? Queue the task — it will complete automatically when the
+    // network returns (and still shows in this chat as a "queued" note).
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      const { queueAiTask } = await import('../services/aiTaskQueue');
+      queueAiTask({ section: moduleKey, mode, userText, sessionTitle: afterUser.title });
+      await save('chat', { ...afterUser, messages: [...afterUser.messages, { id: uid(), role: 'ai' as const, text: '📡 You are offline — this task is queued and will run automatically when you reconnect.', ts: Date.now() }], updatedAt: Date.now() });
+      setStatus("📡 Queued — will run when you're back online");
+      return;
+    }
+
     setBusy(true);
     setParsedRecords(null);
     const streamSessionId = afterUser.id;

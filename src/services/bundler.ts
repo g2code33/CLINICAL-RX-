@@ -196,6 +196,34 @@ export function getPendingAiCount(): number {
 export async function generateBundle(input: BundleCreateInput): Promise<Bundle> {
   const start = input.periodStart || todayIso();
   const end = input.periodEnd || todayIso();
+  const st = useData.getState();
+
+  // ONE bundle per day/week: if a bundle already exists for this exact period
+  // (same day or same week), SIP the fresh data into it instead of creating a
+  // duplicate. Keeps the library tidy: one card per day, one per week.
+  const existing = st.bundles.find(
+    (b) => b.periodStart === start && b.periodEnd === end && b.type === input.type
+  );
+  if (existing) {
+    const ctx = collectContext(start, end, input.sourceModules);
+    const updated: Bundle = {
+      ...existing,
+      title: existing.title,
+      body: buildBody(ctx),
+      stats: statsFor(ctx),
+      knowledgeGaps: localGaps(ctx),
+      recommendedRevision: (buildBody(ctx) as any).topics?.length ? (buildBody(ctx) as any).topics.slice(0, 6) : [],
+      highlights: localHighlights(ctx),
+      summary: localSummary(buildBody(ctx)),
+      sourceIds: [...ctx.days, ...ctx.diseases, ...ctx.medicines, ...ctx.investigations, ...ctx.questions].map((r) => r.id),
+      version: (existing.version ?? 1) + 1,
+      updatedAt: Date.now(),
+    };
+    const enriched = await generateBundleWithAi(updated, ctx);
+    await st.save('bundle', enriched);
+    return enriched;
+  }
+
   const bundle = emptyBundle(input.type, input.title, start, end);
   const ctx = collectContext(start, end, input.sourceModules);
 
@@ -213,6 +241,38 @@ export async function generateBundle(input: BundleCreateInput): Promise<Bundle> 
   const enriched = await generateBundleWithAi(bundle, ctx);
   await useData.getState().save('bundle', enriched);
   return enriched;
+}
+
+/**
+ * Consolidate all bundles that share a period into ONE (keep the primary,
+ * absorb the others' stats/gaps/highlights/sourceIds into it, delete the
+ * rest). Used by the Bundles page to tidy up duplicates.
+ */
+export async function consolidatePeriod(group: Bundle[]): Promise<Bundle | null> {
+  const st = useData.getState();
+  if (!group.length) return null;
+  const primary = group.find((b) => b.type.startsWith('auto')) || group[0];
+  const rest = group.filter((b) => b.id !== primary.id);
+  if (!rest.length) return primary;
+
+  const merged: Bundle = {
+    ...primary,
+    stats: { ...primary.stats },
+    knowledgeGaps: Array.from(new Set([...primary.knowledgeGaps, ...rest.flatMap((b) => b.knowledgeGaps)])).slice(0, 12),
+    recommendedRevision: Array.from(new Set([...primary.recommendedRevision, ...rest.flatMap((b) => b.recommendedRevision)])).slice(0, 8),
+    highlights: Array.from(new Set([...primary.highlights, ...rest.flatMap((b) => b.highlights)])).slice(0, 6),
+    sourceIds: Array.from(new Set([...primary.sourceIds, ...rest.flatMap((b) => b.sourceIds)])),
+    sourceBundleIds: Array.from(new Set([...primary.sourceBundleIds, ...rest.map((b) => b.id)])),
+    body: { ...primary.body, consolidated: rest.map((b) => b.title) },
+    version: (primary.version ?? 1) + 1,
+    updatedAt: Date.now(),
+  };
+  await st.save('bundle', merged);
+  for (const b of rest) {
+    await st.remove('bundle', b.id);
+  }
+  st.setStatus(`✓ Consolidated ${group.length} bundle(s) into one`);
+  return merged;
 }
 
 async function generateBundleWithAi(bundle: Bundle, ctx: Context): Promise<Bundle> {

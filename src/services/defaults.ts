@@ -6,6 +6,7 @@ import type {
   ClinicalDay,
   Disease,
   Investigation,
+  Lesson,
   Medicine,
   Profile,
   Question,
@@ -103,11 +104,17 @@ export function newMedicine(name = ''): Medicine {
   };
 }
 
-export function newInvestigation(name = ''): Investigation {
-  return {
+export function newInvestigation(name = ''): Investigation {  return {
     id: uid(), createdAt: Date.now(), updatedAt: Date.now(),
     name, whyRequested: '', result: '', referenceRange: '', interpretation: '', clinicalSignificance: '',
     linkedConditions: [], encounters: 1, lastSeen: todayIso(),
+  };
+}
+
+export function newLesson(title: string, date: string): Lesson {
+  return {
+    id: uid(), createdAt: Date.now(), updatedAt: Date.now(),
+    title, content: title, date, important: false,
   };
 }
 
