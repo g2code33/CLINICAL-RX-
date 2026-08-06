@@ -6,12 +6,25 @@ name: Build & Release Desktop App
 # 2. Commit + push. From then on, EVERY push to `main`:
 #      - builds Windows (NSIS .exe + latest.yml) and Linux (.deb + AppImage
 #        + latest-linux.yml)
+#      - builds an Android APK (Capacitor) and uploads it to the same release
+#        as clinical-rx-<version>.apk — download it straight from the release
+#        page and sideload on your phone.
 #      - publishes them to a real GitHub Release (not a draft/pre-release),
 #        which is what the in-app 🔄 Update button reads
 #    No tags, no manual steps.
 # 3. To make existing users see an update, bump "version" in package.json
 #    (e.g. 1.0.0 -> 1.0.1) and push. The release's latest.yml carries the new
 #    version, so the app shows "🔄 Update available".
+#
+# OPTIONAL (recommended): signed Android release APK
+# Add these repository secrets (Settings → Secrets and variables → Actions):
+#   ANDROID_KEYSTORE_BASE64     base64 of a PKCS12 keystore
+#   ANDROID_KEYSTORE_PASSWORD   keystore password
+#   ANDROID_KEY_ALIAS           key alias
+#   ANDROID_KEY_PASSWORD        key password
+# When set, the release APK is signed with that key (stable across versions →
+# in-place updates work). Without them, the APK is signed with the debug key
+# (installable, but updating means uninstall + reinstall).
 
 on:
   push:
@@ -59,6 +72,36 @@ jobs:
         run: npm run dist -- --publish never
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # ----- Android APK (ubuntu leg only) -----
+      - name: Set up JDK 17
+        if: matrix.os == 'ubuntu-latest'
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Set up Android SDK
+        if: matrix.os == 'ubuntu-latest'
+        uses: android-actions/setup-android@v3
+
+      - name: Sync Capacitor web assets
+        if: matrix.os == 'ubuntu-latest'
+        run: npx cap sync android
+
+      - name: Build Android APK (debug, installable)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          cd android
+          ./gradlew assembleDebug --no-daemon
+
+      - name: Upload Android APK artifact
+        if: matrix.os == 'ubuntu-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: clinical-rx-android-apk
+          path: android/app/build/outputs/apk/**/*.apk
+          if-no-files-found: warn
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -111,3 +154,54 @@ jobs:
           # Always (re)publish assets for this version, even if the release
           # was created more than 2 hours ago by an earlier push.
           EP_GH_IGNORE_TIME: 'true'
+
+      # ----- Android APK (ubuntu leg only) -----
+      - name: Set up JDK 17
+        if: matrix.os == 'ubuntu-latest'
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Set up Android SDK
+        if: matrix.os == 'ubuntu-latest'
+        uses: android-actions/setup-android@v3
+
+      - name: Build Android APK
+        if: matrix.os == 'ubuntu-latest'
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -e
+          npx cap sync android
+          # Inject the signing keystore when the secrets are configured.
+          if [ -n "$ANDROID_KEYSTORE_BASE64" ]; then
+            echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > android/app/release-keystore.p12
+            echo "Keystore injected — release APK will be signed with it."
+          else
+            echo "No keystore secret — release APK will use the debug key (installable)."
+          fi
+          cd android
+          ./gradlew assembleRelease --no-daemon
+
+      - name: Upload Android APK to release
+        if: matrix.os == 'ubuntu-latest'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -e
+          VERSION=$(node -p "require('./package.json').version")
+          TAG="v$VERSION"
+          APK=$(ls android/app/build/outputs/apk/release/app-release.apk 2>/dev/null || true)
+          if [ -z "$APK" ]; then
+            echo "No release APK found."
+            exit 0
+          fi
+          cp "$APK" "clinical-rx-$VERSION.apk"
+          echo "Uploading clinical-rx-$VERSION.apk to $TAG ..."
+          gh release upload "$TAG" "clinical-rx-$VERSION.apk" --clobber 2>/dev/null \
+            || gh release create "$TAG" "clinical-rx-$VERSION.apk" --title "ClinicalRx $VERSION" --notes "Android APK for $VERSION" \
+            || echo "Upload failed (release may be busy) — will be retried on next push."
