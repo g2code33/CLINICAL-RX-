@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useData } from '../stores/data';
 import { PageHeader, EmptyState } from './ui';
 import { Modal, TagInput } from './Modal';
-import { explainEntity } from '../services/aiTools';
+import { explainEntity, runAiModule } from '../services/aiTools';
 import type { ModuleType } from '../types';
 import { useContextMenu, ctxHandlers, type CtxItem } from './ContextMenu';
 import { copyToClipboard } from '../services/export';
@@ -38,7 +38,33 @@ export function EntityManager({ module, title, subtitle, icon, emptyText, emptyH
   const [creating, setCreating] = useState(false);
   const [query, setQuery] = useState('');
   const [explain, setExplain] = useState<{ rec: any; text: string; loading: boolean; error?: string } | null>(null);
+  const [focusAi, setFocusAi] = useState<{ rec: any; messages: Array<{ role: 'user' | 'ai'; text: string }>; input: string; busy: boolean } | null>(null);
+  const [view, setView] = useState<'cards' | 'list'>('cards');
   const showMenu = useContextMenu();
+
+  /** Open a focused AI chat on just this card — ask anything about it. */
+  function openFocusAi(rec: any) {
+    setFocusAi({ rec, messages: [], input: '', busy: false });
+  }
+
+  async function sendFocusAi() {
+    if (!focusAi || focusAi.busy) return;
+    const text = focusAi.input.trim();
+    if (!text) return;
+    const kind = explainKind || (module === 'medicine' ? 'medicine' : module === 'investigation' ? 'investigation' : module === 'disease' ? 'disease' : 'disease');
+    const label = (kind[0].toUpperCase() + kind.slice(1));
+    const userMsg = { role: 'user' as const, text };
+    setFocusAi({ ...focusAi, messages: [...focusAi.messages, userMsg], input: '', busy: true });
+    const prompt = [
+      `You are CLINICAL Rx's AI tutor. The student is asking about this specific ${label}: "${focusAi.rec?.name ?? ''}".`,
+      `Record details: ${JSON.stringify(focusAi.rec)}`,
+      `Student question: ${text}`,
+      'Answer thoroughly and at the student\'s level.',
+    ].join('\n');
+    const res = await runAiModule('tutor', prompt);
+    const aiMsg = { role: 'ai' as const, text: res.ok ? res.text : '⚠️ ' + res.error };
+    setFocusAi((f) => (f ? { ...f, messages: [...f.messages, aiMsg], busy: false } : f));
+  }
 
   function cardMenu(rec: any): CtxItem[] {
     const items: CtxItem[] = [];
@@ -93,31 +119,77 @@ export function EntityManager({ module, title, subtitle, icon, emptyText, emptyH
         subtitle={subtitle}
         action={<button className="btn-primary" onClick={openCreate}>＋ Add {title}</button>}
       />
-      <input className="input mb-4 max-w-sm" placeholder="🔍 Search…" value={query} onChange={(e) => setQuery(e.target.value)} />
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        <input className="input max-w-sm" placeholder="🔍 Search…" value={query} onChange={(e) => setQuery(e.target.value)} />
+        <div className="ml-auto flex gap-1.5">
+          <button
+            className={`rounded-lg px-3 py-1.5 text-xs font-medium ${view === 'cards' ? 'bg-brand-600 text-white' : 'bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-300'}`}
+            onClick={() => setView('cards')}
+            title="Card view"
+          >
+            🃏 Cards
+          </button>
+          <button
+            className={`rounded-lg px-3 py-1.5 text-xs font-medium ${view === 'list' ? 'bg-brand-600 text-white' : 'bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-300'}`}
+            onClick={() => setView('list')}
+            title="List view"
+          >
+            📋 List
+          </button>
+        </div>
+      </div>
 
       {filtered.length === 0 ? (
         <EmptyState icon={icon} title={emptyText} hint={emptyHint} actions={emptyActions} />
-      ) : (
+      ) : view === 'cards' ? (
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {filtered.map((rec) => (
-            <div key={rec.id} className="card flex cursor-default flex-col justify-between hover:border-brand-400" {...ctxHandlers(showMenu, cardMenu(rec))}>
+            <div
+              key={rec.id}
+              className="card flex cursor-pointer flex-col justify-between transition-colors hover:border-brand-400"
+              onClick={() => openFocusAi(rec)}
+              {...ctxHandlers(showMenu, cardMenu(rec))}
+            >
               {renderCard(rec)}
               <div className="mt-3 flex justify-end gap-2">
                 {explainKind && (
                   <button
                     className="btn-ghost !py-1 text-xs hover:text-brand-600"
-                    onClick={async () => {
+                    onClick={(e) => { e.stopPropagation(); void (async () => {
                       setExplain({ rec, text: '', loading: true });
-                      const res = await explainEntity(explainKind, rec);
+                      const res = await explainEntity(explainKind as any, rec);
                       import('../services/aiTools').then((m) => m.logAiTask('tutor', `Explain: ${rec?.name ?? ''}`, res.ok ? res.text : '⚠️ ' + res.error)).catch(() => {});
                       setExplain((ex) => (ex ? { rec, text: res.ok ? res.text : '', loading: false, error: res.ok ? undefined : res.error } : ex));
-                    }}
+                    })(); }}
                   >
                     🤖 Explain
                   </button>
                 )}
-                <button className="btn-secondary !py-1 text-xs" onClick={() => openEdit(rec)}>Edit</button>
-                <button className="btn-ghost !py-1 text-xs hover:text-red-500" onClick={() => remove(module, rec.id)}>Delete</button>
+                <button className="btn-secondary !py-1 text-xs" onClick={(e) => { e.stopPropagation(); openEdit(rec); }}>Edit</button>
+                <button className="btn-ghost !py-1 text-xs hover:text-red-500" onClick={(e) => { e.stopPropagation(); void remove(module, rec.id); }}>Delete</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="card divide-y divide-slate-100 dark:divide-slate-800">
+          {filtered.map((rec) => (
+            <div key={rec.id} className="flex cursor-pointer items-center justify-between gap-3 p-3 transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/60" onClick={() => openFocusAi(rec)} {...ctxHandlers(showMenu, cardMenu(rec))}>
+              <div className="min-w-0 flex-1">
+                <div className="truncate font-medium text-slate-800 dark:text-slate-100">{rec?.name || rec?.title || 'Untitled'}</div>
+                {rec?.what && <div className="truncate text-xs text-slate-400">{rec.what}</div>}
+              </div>
+              <div className="flex shrink-0 gap-1.5">
+                {explainKind && (
+                  <button className="btn-ghost !p-1 text-xs hover:text-brand-600" onClick={(e) => { e.stopPropagation(); void (async () => {
+                    setExplain({ rec, text: '', loading: true });
+                    const res = await explainEntity(explainKind as any, rec);
+                    import('../services/aiTools').then((m) => m.logAiTask('tutor', `Explain: ${rec?.name ?? ''}`, res.ok ? res.text : '⚠️ ' + res.error)).catch(() => {});
+                    setExplain((ex) => (ex ? { rec, text: res.ok ? res.text : '', loading: false, error: res.ok ? undefined : res.error } : ex));
+                  })(); }}>🤖</button>
+                )}
+                <button className="btn-ghost !p-1 text-xs" onClick={(e) => { e.stopPropagation(); openEdit(rec); }}>✏️</button>
+                <button className="btn-ghost !p-1 text-xs hover:text-red-500" onClick={(e) => { e.stopPropagation(); void remove(module, rec.id); }}>🗑</button>
               </div>
             </div>
           ))}
@@ -147,6 +219,45 @@ export function EntityManager({ module, title, subtitle, icon, emptyText, emptyH
           <div className="rounded-lg bg-red-50 p-3 text-sm text-red-700 dark:bg-red-900 dark:text-red-200">⚠️ {explain.error}</div>
         ) : (
           <div className="whitespace-pre-wrap rounded-lg bg-slate-50 p-4 text-sm leading-relaxed text-slate-700 dark:bg-slate-700 dark:text-slate-200">{explain?.text}</div>
+        )}
+      </Modal>
+
+      {/* Focused AI chat — opened by clicking a card */}
+      <Modal open={!!focusAi} onClose={() => setFocusAi(null)} title={`🤖 Ask AI about ${focusAi?.rec?.name ?? ''}`} wide>
+        {focusAi && (
+          <div className="flex h-[60vh] flex-col">
+            <div className="flex-1 space-y-3 overflow-y-auto p-1">
+              {focusAi.messages.length === 0 ? (
+                <div className="flex h-full flex-col items-center justify-center gap-2 text-center text-sm text-slate-400">
+                  <div className="text-3xl">🧠</div>
+                  <p>Ask anything about <strong>{focusAi.rec?.name}</strong> — it knows this record.</p>
+                  <p className="max-w-sm text-xs">Try: "Explain the mechanism", "What are the key nursing points?", "How would I counsel a patient on this?"</p>
+                </div>
+              ) : (
+                focusAi.messages.map((m, i) => (
+                  <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                    <div className={`max-w-[85%] whitespace-pre-wrap rounded-2xl px-4 py-2.5 text-sm ${m.role === 'user' ? 'bg-brand-600 text-white' : 'bg-slate-100 dark:bg-slate-700'}`}>
+                      {m.text}
+                    </div>
+                  </div>
+                ))
+              )}
+              {focusAi.busy && <div className="text-sm text-slate-400 animate-pulse">🤖 AI Tutor is thinking…</div>}
+            </div>
+            <div className="flex gap-2 border-t border-slate-200 pt-3 dark:border-slate-700">
+              <input
+                className="input flex-1"
+                placeholder="Ask about this…"
+                value={focusAi.input}
+                onChange={(e) => setFocusAi({ ...focusAi, input: e.target.value })}
+                onKeyDown={(e) => e.key === 'Enter' && void sendFocusAi()}
+                disabled={focusAi.busy}
+              />
+              <button className="btn-primary" onClick={() => void sendFocusAi()} disabled={focusAi.busy || !focusAi.input.trim()}>
+                {focusAi.busy ? '…' : '➤'}
+              </button>
+            </div>
+          </div>
         )}
       </Modal>
     </div>
