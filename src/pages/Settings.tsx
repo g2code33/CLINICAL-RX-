@@ -344,7 +344,19 @@ export function SettingsPage() {
                 </div>
                 <div className="grid gap-2 md:grid-cols-3">
                   <div><label className={label}>Provider</label><select className={input} value={cfg.provider} onChange={(e) => updateAi(draft, m.key, { provider: e.target.value as any }, saveSettings, setDraft)}><option value="openai">OpenAI</option><option value="anthropic">Anthropic</option><option value="openrouter">OpenRouter</option><option value="nvidia">NVIDIA NIM</option><option value="custom">Custom</option></select></div>
-                  <div><label className={label}>Model</label><input className={input} value={cfg.model} placeholder={modelPlaceholder(cfg.provider)} onChange={(e) => updateAi(draft, m.key, { model: e.target.value }, saveSettings, setDraft)} /></div>
+                  <div><label className={label}>Model</label>
+                    <input
+                      className={input}
+                      list={`models-${m.key}`}
+                      value={cfg.model}
+                      placeholder={modelPlaceholder(cfg.provider)}
+                      onChange={(e) => updateAi(draft, m.key, { model: e.target.value }, saveSettings, setDraft)}
+                      title="Pick a model or type your own"
+                    />
+                    <datalist id={`models-${m.key}`}>
+                      {modelsFor(cfg.provider).map((mo) => <option key={mo} value={mo} />)}
+                    </datalist>
+                  </div>
                   <div><label className={label}>API Key</label><div className="flex flex-wrap gap-1"><input type={showKeys[m.key] ? 'text' : 'password'} className="input min-w-40 flex-1" value={cfg.apiKey} placeholder="sk-…" onChange={(e) => updateAi(draft, m.key, { apiKey: e.target.value }, saveSettings, setDraft)} /><button className="btn-secondary shrink-0" onClick={() => setShowKeys({ ...showKeys, [m.key]: !showKeys[m.key] })}>{showKeys[m.key] ? '🙈' : '👁'}</button><button className="btn-secondary shrink-0" title="Use this key + provider for all AI sections (so every section works with one key)" onClick={() => applyKeyToAll(draft, m.key, saveSettings, setDraft, setStatus)}>⇄ All</button><button className="btn-secondary shrink-0" title="Test this API key with a tiny request" disabled={testBusy[m.key]} onClick={() => void testModuleKey(m.key, setTestBusy, setTestResult)}>{testBusy[m.key] ? 'Testing…' : '🔌 Test'}</button></div>
                   {testResult[m.key] && <div className={`mt-1 text-[11px] ${testResult[m.key].startsWith('✓') ? 'text-green-600' : 'text-red-500'}`}>{testResult[m.key]}</div>}
                   </div>
@@ -479,6 +491,21 @@ function applyKeyToAll(draft: Settings, key: string, saveSettings: any, setDraft
 
 function modelPlaceholder(provider: string): string {
   switch (provider) { case 'nvidia': return 'meta/llama-3.3-70b-instruct'; case 'anthropic': return 'claude-3-5-sonnet-latest'; case 'openrouter': return 'openai/gpt-4o-mini'; default: return 'gpt-4o-mini'; }
+}
+
+/** Available models per provider — users can pick from these or type their own. */
+const MODELS_BY_PROVIDER: Record<string, string[]> = {
+  openai: ['gpt-4o-mini', 'gpt-4o', 'gpt-4.1-mini', 'gpt-4.1', 'gpt-4-turbo', 'gpt-3.5-turbo', 'o3-mini', 'o4-mini'],
+  anthropic: ['claude-3-5-sonnet-latest', 'claude-3-5-haiku-latest', 'claude-3-7-sonnet-latest', 'claude-3-opus-latest', 'claude-3-haiku', 'claude-3-sonnet'],
+  openrouter: ['openai/gpt-4o-mini', 'openai/gpt-4o', 'anthropic/claude-3.5-sonnet', 'anthropic/claude-3.7-sonnet', 'google/gemini-2.0-flash', 'meta-llama/llama-3.3-70b-instruct', 'mistralai/mistral-small', 'deepseek/deepseek-chat'],
+  nvidia: ['meta/llama-3.3-70b-instruct', 'meta/llama-3.1-8b-instruct', 'mistralai/mistral-nemo-12b-instruct', 'google/gemma-2-27b-it', 'qwen/qwen-2.5-72b-instruct'],
+  custom: ['gpt-4o-mini', 'gpt-4o', 'llama-3.3-70b-instruct', 'claude-3-5-sonnet-latest'],
+};
+
+function modelsFor(provider: string): string[] {
+  const list = MODELS_BY_PROVIDER[provider] || MODELS_BY_PROVIDER.custom;
+  // Keep the user's current model visible at the top if it's not in the list.
+  return list;
 }
 
 async function updateAi(draft: Settings, key: string, patch: any, saveSettings: any, setDraft: any) {
