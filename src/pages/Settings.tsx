@@ -5,7 +5,7 @@ import { PageHeader, PasswordInput } from '../components/ui';
 import { Modal } from '../components/Modal';
 import { UpdatePanel } from '../components/UpdatePanel';
 import { AI_MODULES, newSettings } from '../services/defaults';
-import { loadSampleData } from '../services/demo';
+import { loadSampleData, removeSampleData } from '../services/demo';
 import { syncClient, DEFAULT_BACKEND_URL } from '../services/syncClient';
 import { hasElectronBridge } from '../db/adapter';
 import { syncNowFull, autoSyncOnLogin, getPendingCount, savePending } from '../services/syncEngine';
@@ -323,6 +323,7 @@ export function SettingsPage() {
             ) : null}
             <label className="btn-secondary w-full cursor-pointer">⬆ Import backup<input type="file" accept="application/json" className="hidden" onChange={(e) => e.target.files?.[0] && importBackup(e.target.files[0])} /></label>
             <button className="btn-secondary w-full" onClick={async () => { if (await loadSampleData()) setStatus('✓ Sample data loaded'); }}>🧪 Load sample data</button>
+            <button className="btn-secondary w-full !text-red-600" onClick={async () => { const n = await removeSampleData(); if (n) setStatus(`✓ Removed ${n} sample record(s)`); }}>🗑 Remove sample data</button>
             <button className="btn-secondary w-full !text-red-600" onClick={clearAll}>🗑 Clear all data</button>
           </div>
           <p className="mt-3 text-[11px] text-slate-400">Data is stored locally (SQLite on desktop, browser storage on web). Backups are portable between the two.</p>

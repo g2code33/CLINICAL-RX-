@@ -72,7 +72,7 @@ export async function loadSampleData() {
 
   const save = useData.getState().save;
   for (const { module, rec } of all) {
-    await save(module, rec as any);
+    await save(module, { ...(rec as any), sample: true } as any);
   }
 
   const profile = useData.getState().profile;
@@ -80,4 +80,45 @@ export async function loadSampleData() {
     await useData.getState().saveProfile({ ...profile, clinicalDay: 4 });
   }
   return true;
+}
+
+/** Remove all records that came from sample data (tagged sample:true, or the
+ *  known sample names as a fallback for records loaded before tagging). */
+export async function removeSampleData() {
+  const s = useData.getState();
+  if (!s.diseases.length && !s.medicines.length && !s.days.length) return 0;
+  if (!confirm('Remove all sample data? Your own records are kept.')) return 0;
+
+  const SAMPLE_DISEASES = ['Hypertension', 'Malaria', 'URTI', 'Type 2 Diabetes'];
+  const SAMPLE_MEDICINES = ['Amlodipine', 'Losartan', 'Artemether/Lumefantrine', 'Metformin', 'Paracetamol'];
+  const SAMPLE_INVESTIGATIONS = ['FBC', 'Malaria RDT', 'Blood pressure measurement', 'Fasting glucose'];
+  const SAMPLE_QUESTIONS = [
+    'Why was amlodipine chosen over an ACE inhibitor here?',
+    'What explains ankle edema with amlodipine?',
+    'When is IV artesunate indicated over oral ACT?',
+    'How does RAAS blockade reduce cardiovascular mortality?',
+  ];
+  const SAMPLE_LESSONS = ['Silent hypertension', 'Complete malaria ACT course'];
+
+  const isSample = (r: any, names: string[]) => (r?.sample === true) || names.includes(r?.name || r?.title || r?.text || '');
+
+  let removed = 0;
+  const remove = s.remove;
+  for (const d of s.diseases) if (isSample(d, SAMPLE_DISEASES)) { await remove('disease', d.id); removed++; }
+  for (const m of s.medicines) if (isSample(m, SAMPLE_MEDICINES)) { await remove('medicine', m.id); removed++; }
+  for (const i of s.investigations) if (isSample(i, SAMPLE_INVESTIGATIONS)) { await remove('investigation', i.id); removed++; }
+  for (const q of s.questions) if (isSample(q, SAMPLE_QUESTIONS)) { await remove('question', q.id); removed++; }
+  for (const l of s.lessons) if (isSample(l, SAMPLE_LESSONS)) { await remove('lesson', l.id); removed++; }
+  // Sample days: any day whose date is one of the last 4 and whose conditions
+  // are all sample conditions.
+  const sampleDayNames = new Set([...SAMPLE_DISEASES, ...SAMPLE_MEDICINES]);
+  for (const d of s.days) {
+    if (d.sample === true || (d.conditions.length && d.conditions.every((c) => sampleDayNames.has(c)))) {
+      await remove('day', d.id);
+      removed++;
+    }
+  }
+
+  s.setStatus(`✓ Removed ${removed} sample record(s)`);
+  return removed;
 }

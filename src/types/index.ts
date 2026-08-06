@@ -74,6 +74,7 @@ export interface ClinicalDay extends BaseRecord {
   lessons: string[];
   uncertainties: string[];
   topicsToResearch: string[];
+  sample?: boolean; // true when created from demo/sample data
 }
 
 export interface Disease extends BaseRecord {
