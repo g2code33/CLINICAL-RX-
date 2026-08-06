@@ -1,4 +1,3 @@
-import { useData } from '../stores/data';
 import type { QuizQuestion } from './aiTools';
 
 export interface BankQuestion extends QuizQuestion {
@@ -8,9 +7,17 @@ export interface BankQuestion extends QuizQuestion {
   addedAt: number;
 }
 
-const BANK_KEY = 'clinical-rx:question-bank';
+/** A labeled, dated group of imported questions (e.g. "Week 3 Pharmacology"). */
+export interface BankGroup {
+  id: string;
+  label: string;
+  createdAt: number; // auto-added import date
+  questions: BankQuestion[];
+}
 
-/** Load the saved question bank from localStorage. */
+const BANK_KEY = 'clinical-rx:question-bank';
+const GROUPS_KEY = 'clinical-rx:question-bank-groups';
+
 export function loadBank(): BankQuestion[] {
   try {
     const raw = localStorage.getItem(BANK_KEY);
@@ -21,13 +28,27 @@ export function loadBank(): BankQuestion[] {
     return [];
   }
 }
-
 export function saveBank(bank: BankQuestion[]) {
+  try { localStorage.setItem(BANK_KEY, JSON.stringify(bank)); } catch { /* ignore */ }
+}
+
+export function loadGroups(): BankGroup[] {
   try {
-    localStorage.setItem(BANK_KEY, JSON.stringify(bank));
+    const raw = localStorage.getItem(GROUPS_KEY);
+    if (!raw) return [];
+    const arr = JSON.parse(raw);
+    return Array.isArray(arr) ? arr : [];
   } catch {
-    /* ignore */
+    return [];
   }
+}
+export function saveGroups(groups: BankGroup[]) {
+  try { localStorage.setItem(GROUPS_KEY, JSON.stringify(groups)); } catch { /* ignore */ }
+}
+
+/** Total questions across groups + legacy flat bank. */
+export function totalQuestions(): number {
+  return loadGroups().reduce((n, g) => n + g.questions.length, 0) + loadBank().length;
 }
 
 function uid(): string {
@@ -51,7 +72,7 @@ export function normalizeItem(raw: any, category = 'Imported'): BankQuestion | n
   };
 }
 
-/** Parse a JSON string (either a single quiz object or an array of questions) into bank items. */
+/** Parse a JSON string into bank items (flat). */
 export function parseBankJson(text: string, category = 'Imported'): { ok: boolean; items: BankQuestion[]; error?: string } {
   try {
     const parsed = JSON.parse(text);
@@ -74,5 +95,45 @@ export function parseBankJson(text: string, category = 'Imported'): { ok: boolea
     return { ok: true, items };
   } catch (e: any) {
     return { ok: false, items: [], error: 'Invalid JSON: ' + (e?.message || 'parse error') };
+  }
+}
+
+/**
+ * Import questions as a labeled, dated GROUP. Returns the created group.
+ * Groups are the organized unit — label + auto date shown, click to open.
+ */
+export function createGroup(label: string, questions: BankQuestion[]): BankGroup {
+  const group: BankGroup = {
+    id: uid(),
+    label: label.trim() || `Imported ${new Date().toLocaleDateString()}`,
+    createdAt: Date.now(),
+    questions,
+  };
+  const groups = loadGroups();
+  groups.push(group);
+  saveGroups(groups);
+  return group;
+}
+
+/** Append questions into an existing group (keeps label + date). */
+export function addToGroup(groupId: string, questions: BankQuestion[]): BankGroup | null {
+  const groups = loadGroups();
+  const g = groups.find((x) => x.id === groupId);
+  if (!g) return null;
+  g.questions.push(...questions);
+  saveGroups(groups);
+  return g;
+}
+
+export function deleteGroup(groupId: string): void {
+  saveGroups(loadGroups().filter((g) => g.id !== groupId));
+}
+
+export function renameGroup(groupId: string, label: string): void {
+  const groups = loadGroups();
+  const g = groups.find((x) => x.id === groupId);
+  if (g) {
+    g.label = label.trim() || g.label;
+    saveGroups(groups);
   }
 }

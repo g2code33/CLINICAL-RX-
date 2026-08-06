@@ -2,217 +2,192 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { PageHeader, EmptyState, Pill } from '../components/ui';
 import { Modal } from '../components/Modal';
-import { loadBank, saveBank, parseBankJson, type BankQuestion } from '../services/questionBank';
-import { ViewToggle } from '../components/ViewToggle';
-
-const SAMPLE_JSON = `[
-  {
-    "question": "Which class is amlodipine?",
-    "options": ["CCB", "ACEi", "ARB", "Diuretic"],
-    "answer": 0,
-    "explanation": "Amlodipine is a dihydropyridine calcium channel blocker.",
-    "category": "Pharmacology",
-    "tags": ["antihypertensive"]
-  },
-  {
-    "question": "First-line antimalarial for uncomplicated P. falciparum?",
-    "options": ["Chloroquine", "Artemether/Lumefantrine", "Mefloquine", "Quinine"],
-    "answer": 1,
-    "explanation": "ACT (artemether/lumefantrine) is first-line for uncomplicated malaria.",
-    "category": "Therapeutics",
-    "tags": ["malaria"]
-  }
-]`;
+import {
+  loadGroups, saveGroups, loadBank, saveBank, parseBankJson,
+  createGroup, addToGroup, deleteGroup, renameGroup, totalQuestions,
+  type BankGroup, type BankQuestion,
+} from '../services/questionBank';
 
 export function QuestionBank() {
   const navigate = useNavigate();
-  const [bank, setBank] = useState<BankQuestion[]>(() => loadBank());
-  const [search, setSearch] = useState('');
-  const [cat, setCat] = useState('all');
-  const [view, setView] = useState<'cards' | 'list'>('cards');
+  const [groups, setGroups] = useState<BankGroup[]>(() => loadGroups());
+  const [openGroupId, setOpenGroupId] = useState<string | null>(null);
   const [importOpen, setImportOpen] = useState(false);
   const [jsonText, setJsonText] = useState('');
-  const [importCat, setImportCat] = useState('Imported');
+  const [groupLabel, setGroupLabel] = useState('');
+  const [importCat, setImportCat] = useState('General');
   const [msg, setMsg] = useState('');
   const [preview, setPreview] = useState<BankQuestion[] | null>(null);
+  const [renameId, setRenameId] = useState<string | null>(null);
+  const [renameVal, setRenameVal] = useState('');
 
-  const categories = Array.from(new Set(bank.map((b) => b.category).filter(Boolean)));
+  function refresh() { setGroups(loadGroups()); }
 
-  function refresh() {
-    setBank(loadBank());
-  }
+  const openGroup = groups.find((g) => g.id === openGroupId) || null;
+  const total = totalQuestions();
 
   function doImport() {
     const parsed = parseBankJson(jsonText, importCat);
-    if (!parsed.ok) {
-      setMsg('⚠️ ' + (parsed.error || 'Invalid'));
-      setPreview(null);
-      return;
-    }
+    if (!parsed.ok) { setMsg('⚠️ ' + (parsed.error || 'Invalid')); setPreview(null); return; }
     setPreview(parsed.items);
-    setMsg(`Found ${parsed.items.length} valid question(s). Review then confirm.`);
+    setMsg(`Found ${parsed.items.length} valid question(s). Label them, then confirm.`);
   }
 
   function confirmImport() {
     if (!preview || !preview.length) return;
-    const existing = loadBank();
-    saveBank([...existing, ...preview]);
-    setPreview(null);
-    setJsonText('');
-    setImportOpen(false);
-    setMsg('');
+    if (openGroup) {
+      // Append into the currently-open group (keeps its label + date).
+      addToGroup(openGroup.id, preview);
+    } else {
+      // Create a labeled, dated GROUP (organized unit).
+      createGroup(groupLabel, preview);
+    }
+    setPreview(null); setJsonText(''); setGroupLabel(''); setImportOpen(false); setMsg('');
     refresh();
   }
 
-  function remove(id: string) {
-    saveBank(bank.filter((b) => b.id !== id));
+  function removeQuestion(groupId: string, qid: string) {
+    const gs = loadGroups();
+    const g = gs.find((x) => x.id === groupId);
+    if (!g) return;
+    g.questions = g.questions.filter((q) => q.id !== qid);
+    saveGroups(gs);
     refresh();
   }
 
   function clearAll() {
-    if (confirm('Delete ALL question bank items?')) {
-      saveBank([]);
-      refresh();
-    }
+    if (!confirm('Delete ALL question bank groups?')) return;
+    saveGroups([]);
+    refresh();
   }
 
-  const ql = search.trim().toLowerCase();
-  const filtered = bank.filter((b) => {
-    if (cat !== 'all' && b.category !== cat) return false;
-    if (ql && !(b.question.toLowerCase().includes(ql) || b.tags.some((t) => t.toLowerCase().includes(ql)))) return false;
-    return true;
-  });
+  const fmtDate = (ts: number) => new Date(ts).toLocaleDateString();
 
   return (
     <div>
       <PageHeader
         title="Question Bank"
-        subtitle="Your personal bank of questions — neatly organized by category and tags. Start a quiz from these."
+        subtitle="Imported questions are organized into labeled, dated groups — click a group to open its questions."
         action={
-          <div className="flex flex-wrap gap-2">
-            <button className="btn-secondary" onClick={() => setImportOpen(true)}>⬆ Import JSON</button>
-            <button className="btn-primary" onClick={() => navigate('/quiz')}>Start Quiz →</button>
+          <div className="flex flex-wrap items-center gap-2">
+            <button className="btn-secondary" onClick={() => navigate('/quiz')}>📝 Go to Quiz</button>
+            <button className="btn-primary" onClick={() => setImportOpen(true)}>⬆ Import questions</button>
           </div>
         }
       />
 
-      <div className="mb-4 flex flex-wrap items-center gap-2">
-        <input className="input max-w-sm" placeholder="🔍 Search bank (question or tag)…" value={search} onChange={(e) => setSearch(e.target.value)} />
-        <select className="input max-w-[200px]" value={cat} onChange={(e) => setCat(e.target.value)}>
-          <option value="all">All categories</option>
-          {categories.map((c) => <option key={c} value={c}>{c}</option>)}
-        </select>
-        <span className="text-xs text-slate-400">{filtered.length} of {bank.length} shown</span>
-        {bank.length > 0 && <button className="btn-ghost !py-1 text-xs !text-red-500" onClick={clearAll}>Clear all</button>}
-      </div>
+      {msg && <div className="mb-4 rounded-lg bg-slate-50 p-3 text-sm dark:bg-slate-700">{msg}</div>}
 
-      {bank.length === 0 ? (
+      {groups.length === 0 ? (
         <EmptyState
           icon="🗂"
-          title="Question bank is empty"
-          hint="Import questions from a JSON file to build your own bank — then generate a quiz from them."
+          title="No question groups yet"
+          hint={`Import questions from a JSON file — they'll be labeled and dated automatically, then click to open. ${loadBank().length ? `(Also have ${loadBank().length} legacy question(s) from before groups — they still work in quizzes.)` : ''}`}
           actions={<button className="btn-primary" onClick={() => setImportOpen(true)}>⬆ Import JSON</button>}
         />
-      ) : filtered.length === 0 ? (
-        <EmptyState icon="🔍" title="No questions match" hint="Try a different search or category." />
-      ) : (
-        <>
-          <div className="mb-3 flex items-center justify-end">
-            <ViewToggle view={view} onChange={setView} />
+      ) : openGroup ? (
+        /* ---- Opened group: its questions ---- */
+        <div>
+          <div className="mb-3 flex items-center justify-between">
+            <div>
+              <button className="btn-ghost !p-0 text-sm text-brand-600 dark:text-brand-400" onClick={() => setOpenGroupId(null)}>← All groups</button>
+              <h2 className="mt-1 text-lg font-bold">{openGroup.label}</h2>
+              <div className="text-xs text-slate-400">📅 {fmtDate(openGroup.createdAt)} · {openGroup.questions.length} questions</div>
+            </div>
+            <div className="flex gap-2">
+              <button className="btn-secondary !py-1 text-xs" onClick={() => setImportOpen(true)}>＋ Add to group</button>
+              <button className="btn-ghost !py-1 text-xs text-red-500" onClick={() => { if (confirm('Delete this group?')) { deleteGroup(openGroup.id); refresh(); setOpenGroupId(null); } }}>🗑 Delete group</button>
+            </div>
           </div>
-          {view === 'cards' ? (
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-              {filtered.map((b) => (
-                <div key={b.id} className="card flex flex-col justify-between">
-                  <div>
-                    <div className="mb-2 flex flex-wrap items-center gap-1.5">
-                      <Pill color="brand">{b.category || 'General'}</Pill>
-                      {b.tags.map((t) => <Pill key={t} color="slate">#{t}</Pill>)}
-                    </div>
-                    <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">{b.question}</p>
-                    <div className="mt-2 space-y-0.5 text-xs text-slate-500 dark:text-slate-300">
-                      {b.options.map((o, oi) => (
-                        <div key={oi} className={oi === b.answer ? 'font-medium text-green-600' : ''}>
-                          {String.fromCharCode(65 + oi)}. {o} {oi === b.answer ? '✓' : ''}
-                        </div>
-                      ))}
-                    </div>
-                    {b.explanation && <div className="mt-2 text-xs text-slate-400">💡 {b.explanation}</div>}
-                  </div>
-                  <button className="btn-ghost !py-1 text-xs hover:!text-red-500" onClick={() => remove(b.id)}>Delete</button>
+          <div className="space-y-2">
+            {openGroup.questions.map((b) => (
+              <div key={b.id} className="card !p-3">
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <Pill color="brand">{b.category || 'General'}</Pill>
+                  {b.tags.map((t) => <Pill key={t} color="slate">#{t}</Pill>)}
                 </div>
-              ))}
-            </div>
-          ) : (
-            <div className="card divide-y divide-slate-100 dark:divide-slate-800">
-              {filtered.map((b) => (
-                <div key={b.id} className="flex items-start justify-between gap-3 p-3">
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      <Pill color="brand">{b.category || 'General'}</Pill>
-                      {b.tags.slice(0, 3).map((t) => <Pill key={t} color="slate">#{t}</Pill>)}
+                <p className="mt-1 text-sm font-semibold text-slate-800 dark:text-slate-100">{b.question}</p>
+                <div className="mt-2 space-y-0.5 text-xs text-slate-500 dark:text-slate-300">
+                  {b.options.map((o, oi) => (
+                    <div key={oi} className={oi === b.answer ? 'font-medium text-green-600' : ''}>
+                      {String.fromCharCode(65 + oi)}. {o} {oi === b.answer ? '✓' : ''}
                     </div>
-                    <p className="mt-1 text-sm font-medium text-slate-800 dark:text-slate-100">{b.question}</p>
-                    <p className="mt-0.5 text-xs text-slate-400">✓ {b.options[b.answer]}</p>
-                  </div>
-                  <button className="btn-ghost !p-1 text-xs hover:!text-red-500" onClick={() => remove(b.id)}>🗑</button>
+                  ))}
                 </div>
-              ))}
+                {b.explanation && <div className="mt-2 text-xs text-slate-400">💡 {b.explanation}</div>}
+                <div className="mt-2 flex items-center justify-between">
+                  <span className="text-[10px] text-slate-400">Added {fmtDate(b.addedAt)}</span>
+                  <button className="btn-ghost !p-1 text-xs hover:!text-red-500" onClick={() => removeQuestion(openGroup.id, b.id)}>Remove</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : (
+        /* ---- Group cards: label + date + count, click to open ---- */
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {groups.map((g) => (
+            <div key={g.id} className="card flex cursor-pointer flex-col justify-between transition-colors hover:border-brand-400" onClick={() => setOpenGroupId(g.id)}>
+              <div>
+                <div className="flex items-center justify-between">
+                  <h3 className="font-bold text-slate-800 dark:text-slate-100">{g.label}</h3>
+                  <span className="rounded-full bg-brand-100 px-2 py-0.5 text-[11px] font-semibold text-brand-700 dark:bg-brand-900 dark:text-brand-300">{g.questions.length}</span>
+                </div>
+                <div className="mt-1 text-xs text-slate-400">📅 {fmtDate(g.createdAt)}</div>
+                <p className="mt-2 line-clamp-2 text-sm text-slate-500 dark:text-slate-400">{g.questions[0]?.question || 'No questions'}</p>
+              </div>
+              <div className="mt-3 flex items-center justify-between">
+                <button className="btn-secondary !py-1 text-xs" onClick={(e) => { e.stopPropagation(); setRenameId(g.id); setRenameVal(g.label); }}>✏️ Rename</button>
+                <span className="text-xs text-brand-600 dark:text-brand-400">Open →</span>
+              </div>
             </div>
-          )}
-        </>
+          ))}
+        </div>
       )}
 
+      {/* Rename modal */}
+      <Modal open={!!renameId} onClose={() => setRenameId(null)} title="Rename group">
+        <div className="space-y-3">
+          <input className="input" value={renameVal} onChange={(e) => setRenameVal(e.target.value)} autoFocus />
+          <button className="btn-primary w-full" onClick={() => { if (renameId) renameGroup(renameId, renameVal); setRenameId(null); refresh(); }}>Rename ✓</button>
+        </div>
+      </Modal>
+
       {/* Import modal */}
-      <Modal open={importOpen} onClose={() => { setImportOpen(false); setJsonText(''); setPreview(null); setMsg(''); }} title="Import questions (JSON)" wide>
+      <Modal open={importOpen} onClose={() => { setImportOpen(false); setJsonText(''); setPreview(null); setMsg(''); setGroupLabel(''); }} title="Import questions (JSON)" wide>
         <div className="space-y-3">
           <div className="rounded-lg bg-slate-50 p-3 text-xs text-slate-500 dark:bg-slate-700 dark:text-slate-300">
             <p className="mb-1 font-semibold text-slate-600 dark:text-slate-200">📄 Accepted JSON format</p>
-            <p>Paste a JSON <strong>array of question objects</strong>, or an object with a <code>"questions"</code> array. Each question:</p>
-            <pre className="mt-1 whitespace-pre-wrap rounded bg-slate-100 p-2 text-[11px] dark:bg-slate-800">
-{`{
-  "question": "The question text",
-  "options": ["A", "B", "C", "D"],
-  "answer": 0,           // 0-based index of the correct option
-  "explanation": "Optional 1-line explanation",
-  "category": "Pharmacology",   // optional
-  "tags": ["malaria"]           // optional
-}`}
-            </pre>
-            <button className="mt-2 btn-ghost !p-0 text-xs text-brand-600" onClick={() => setJsonText(SAMPLE_JSON)}>Load sample JSON</button>
+            <p>Paste a JSON <strong>array of question objects</strong>, or an object with a <code>"questions"</code> array. Each question needs <code>question</code>, <code>options</code> (≥2), <code>answer</code> (0-based), optional <code>explanation</code>.</p>
           </div>
-
           <div>
-            <label className="label">Category for imported questions</label>
-            <input className="input" value={importCat} onChange={(e) => setImportCat(e.target.value)} placeholder="e.g. Pharmacology" />
+            <label className="label">Group label (shown on the card)</label>
+            <input className="input" value={groupLabel} onChange={(e) => setGroupLabel(e.target.value)} placeholder={openGroup ? `Add to "${openGroup.label}"` : 'e.g. Week 3 — Pharmacology'} />
           </div>
-
-          <textarea
-            className="input"
-            rows={8}
-            value={jsonText}
-            onChange={(e) => setJsonText(e.target.value)}
-            placeholder='Paste your JSON here, e.g. [{"question":"...","options":["A","B"],"answer":0}]'
-          />
-
-          {msg && <div className="rounded-lg bg-slate-50 p-2 text-sm text-slate-600 dark:bg-slate-700 dark:text-slate-200">{msg}</div>}
-
-          {preview && preview.length > 0 && (
-            <div className="max-h-48 space-y-1 overflow-y-auto rounded-lg border border-slate-200 p-2 dark:border-slate-700">
+          {!openGroup && (
+            <div>
+              <label className="label">Default category</label>
+              <input className="input" value={importCat} onChange={(e) => setImportCat(e.target.value)} placeholder="e.g. Pharmacology" />
+            </div>
+          )}
+          <div>
+            <label className="label">JSON</label>
+            <textarea className="input min-h-32 font-mono text-xs" value={jsonText} onChange={(e) => setJsonText(e.target.value)} placeholder='[{"question":"...","options":["A","B"],"answer":0}]' />
+          </div>
+          <div className="flex justify-end gap-2">
+            <button className="btn-secondary" onClick={() => setImportOpen(false)}>Cancel</button>
+            <button className="btn-secondary" onClick={doImport}>Preview</button>
+            {preview && (
+              <button className="btn-primary" onClick={confirmImport}>✓ Confirm import ({preview.length})</button>
+            )}
+          </div>
+          {preview && (
+            <div className="max-h-40 space-y-1 overflow-y-auto rounded-lg border border-slate-200 p-2 dark:border-slate-700">
               {preview.map((p, i) => (
-                <div key={i} className="text-xs text-slate-600 dark:text-slate-300">• {p.question} <span className="text-slate-400">({p.options.length} options)</span></div>
+                <div key={i} className="truncate text-xs text-slate-500 dark:text-slate-300">{i + 1}. {p.question}</div>
               ))}
             </div>
           )}
-
-          <div className="flex justify-end gap-2">
-            <button className="btn-secondary" onClick={() => setImportOpen(false)}>Cancel</button>
-            {preview && preview.length > 0 ? (
-              <button className="btn-primary" onClick={confirmImport}>✓ Confirm import ({preview.length})</button>
-            ) : (
-              <button className="btn-primary" onClick={doImport} disabled={!jsonText.trim()}>Preview</button>
-            )}
-          </div>
         </div>
       </Modal>
     </div>
