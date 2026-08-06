@@ -97,7 +97,8 @@ export function Quiz() {
         setTimeLeft((t) => {
           if (t <= 1) {
             clearInterval(timerRef.current);
-            setSubmitted(true);
+            // Time's up — auto-submit AND save (so the quiz isn't lost).
+            void submit();
             return 0;
           }
           return t - 1;
@@ -176,6 +177,19 @@ export function Quiz() {
     setReviewOpen(false);
     setHistoryOpen(false);
     setSetupOpen(true);
+  }
+
+  /** Close the current quiz and return to the quiz home (history stays). */
+  function exitQuiz() {
+    setQuiz(null);
+    setAnswers([]);
+    setSubmitted(false);
+    setCurrent(0);
+    setSavedId(null);
+    setTimeLeft(0);
+    setStreamText('');
+    setReviewOpen(false);
+    setHistoryOpen(false);
   }
 
   /** Re-quiz: build a fresh session from the given questions (optionally only the wrong ones). */
@@ -327,6 +341,9 @@ export function Quiz() {
                   <button className="btn-secondary !py-1 text-xs" onClick={() => startRetry({ title: quiz.title, questions: quiz.questions, answers }, false)} title="Re-take the same quiz">
                     ↻ Same quiz
                   </button>
+                  <button className="btn-ghost !py-1 text-xs text-red-500 hover:text-red-700" onClick={exitQuiz} title="Close quiz and return to the quiz home">
+                    ✕ Exit quiz
+                  </button>
                 </div>
               )}
             </div>
@@ -405,6 +422,7 @@ export function Quiz() {
               <button className="btn-secondary" onClick={() => setReviewOpen(true)}>Review all</button>
               <button className="btn-secondary" onClick={startFresh}>＋ New Quiz</button>
               <button className="btn-primary" onClick={share}>📤 Share</button>
+              <button className="btn-ghost !py-1 text-xs text-red-500 hover:text-red-700" onClick={exitQuiz}>✕ Exit</button>
             </div>
             <button className="btn-secondary" disabled={current === quiz.questions.length - 1} onClick={() => setCurrent((c) => c + 1)}>Next ›</button>
           </div>
