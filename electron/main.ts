@@ -8,6 +8,9 @@ let mainWindow: BrowserWindow | null = null;
 // Set true when the app should really quit (update install, explicit quit)
 // instead of hiding to the background.
 let allowQuit = false;
+// True while an update is being installed — the window close/hide handlers
+// must not interfere with quitAndInstall.
+let installing = false;
 
 const UPDATE_OWNER = 'g2code33';
 const UPDATE_REPO = 'CLINICAL-RX-';
@@ -181,14 +184,23 @@ function initIpc() {
   ipcMain.handle('update:install', async () => {
     if (!app.isPackaged) return { ok: false, reason: 'dev' };
     try {
-      // Quit & install. Use app.relaunch() BEFORE quitting so the app is
-      // guaranteed to re-open after the installer finishes (isForceRunAfter
-      // alone is unreliable, and the hide-on-close handler can swallow the
-      // relaunch). Relaunch args include the original ones.
+      // Quit & install. quitAndInstall(isSilent=false, isForceRunAfter=true)
+      // is the DOCUMENTED way to relaunch after install:
+      //  - NSIS on Windows: runs the installer, then re-opens the app
+      //  - AppImage on Linux: swaps the binary and re-runs
+      // (The previous app.relaunch()+quitAndInstall(false,false) combo can
+      //  race with the installer on Windows and doesn't work on .deb.)
+      // We set allowQuit FIRST so the hide-on-close handler lets it quit,
+      // then quitAndInstall handles the relaunch itself.
       setTimeout(() => {
-        app.relaunch();
         allowQuit = true;
-        autoUpdater.quitAndInstall(false, false);
+        installing = true;
+        // quitAndInstall(false, true) closes windows, quits the app, runs the
+        // installer, then relaunches the new version. Setting allowQuit +
+        // installing stops our hide-on-close handler from intercepting, so the
+        // process exits cleanly and the single-instance lock is released for
+        // the relaunched instance.
+        autoUpdater.quitAndInstall(false, true);
       }, 1000);
       return { ok: true };
     } catch (e: any) {
@@ -229,6 +241,11 @@ app.on('window-all-closed', () => {
   // On Linux/Windows, close = hide (keep working). Real quit only via the app
   // menu / update install / allowQuit.
   if (process.platform === 'darwin') return;
+  if (installing) {
+    // quitAndInstall manages the quit + relaunch — do nothing here so the
+    // installer can take over and re-open the app.
+    return;
+  }
   if (!allowQuit) {
     // keep process alive; the window can be re-opened via the dock/taskbar
     return;
