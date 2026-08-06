@@ -3,6 +3,25 @@ apply plugin: 'com.android.application'
 android {
     namespace = "com.clinicalrx.app"
     compileSdk = rootProject.ext.compileSdkVersion
+
+    // Release signing: when CI injects a keystore (android/app/release-keystore.p12
+    // decoded from the ANDROID_KEYSTORE_BASE64 secret), the release APK is signed
+    // with it so in-place updates work across versions. Without it, release builds
+    // fall back to the debug key so the APK is still installable (sideload).
+    def hasReleaseKeystore = file('release-keystore.p12').exists()
+
+    signingConfigs {
+        release {
+            if (hasReleaseKeystore) {
+                storeFile file('release-keystore.p12')
+                storePassword System.getenv('ANDROID_KEYSTORE_PASSWORD') ?: 'changeit'
+                keyAlias System.getenv('ANDROID_KEY_ALIAS') ?: 'clinicalrx'
+                keyPassword System.getenv('ANDROID_KEY_PASSWORD') ?: 'changeit'
+                storeType 'PKCS12'
+            }
+        }
+    }
+
     defaultConfig {
         applicationId "com.clinicalrx.app"
         minSdkVersion rootProject.ext.minSdkVersion
@@ -20,6 +39,13 @@ android {
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            if (hasReleaseKeystore) {
+                signingConfig signingConfigs.release
+            } else {
+                // No keystore available (local dev without secrets) — sign with
+                // the debug key so the APK is still installable.
+                signingConfig signingConfigs.debug
+            }
         }
     }
 }

@@ -6,7 +6,27 @@ with **Capacitor** (`@capacitor/core` + `@capacitor/android`). The native
 
 ---
 
-## One-time setup
+## 🚀 Easiest way: download the APK from GitHub Releases
+
+Since **v1.4.3**, every push to `main` automatically builds an Android APK
+and attaches it to the release:
+
+1. Go to the latest release:
+   https://github.com/g2code33/CLINICAL-RX-/releases/latest
+2. Download **`clinical-rx-<version>.apk`**
+3. Copy it to your phone (or download directly on the phone) and tap it to
+   install. Allow *"install unknown apps"* for your browser/file manager.
+
+No Android Studio, no local build needed. ✅
+
+> ⚠️ Without signing secrets the APK is signed with the debug key — installing
+> a newer debug-signed APK over an old one requires **uninstalling first**
+> (your local data resets). Add the signing secrets (below) to enable proper
+> in-place updates.
+
+---
+
+## One-time setup (local builds with Android Studio)
 
 1. Install **Android Studio** (with the Android SDK).
 2. From Android Studio: **SDK Manager** → install
@@ -94,3 +114,37 @@ fresh bundle from `android/app/src/main/assets/public`.
 - *`cap` command not found* → `npm install` first, or use `npx cap ...`.
 - *WebView shows blank screen* → run `npm run mobile:build` again (stale
   `android/app/src/main/assets/public` is gitignored and must be re-copied).
+- *CI APK is missing from a release* → check the *Build & Release Desktop App*
+  run for that push; the Android steps run on the `ubuntu-latest` leg and the
+  APK upload prints what it did. Re-push (or re-run the workflow) to retry.
+
+---
+
+## Optional: signed release builds (recommended for updates)
+
+Add these **repository secrets** (Settings → Secrets and variables → Actions)
+on GitHub:
+
+| Secret | Value |
+|---|---|
+| `ANDROID_KEYSTORE_BASE64` | base64 of a PKCS12 keystore |
+| `ANDROID_KEYSTORE_PASSWORD` | keystore password |
+| `ANDROID_KEY_ALIAS` | key alias |
+| `ANDROID_KEY_PASSWORD` | key password |
+
+When set, CI signs the release APK with that key — stable across versions,
+so users can update in place without uninstalling.
+
+Generate a keystore locally (needs a JDK — e.g. via Android Studio's built-in
+JBR, or `brew install openjdk` / `apt install openjdk-17-jdk`):
+
+```bash
+keytool -genkey -v -keystore clinicalrx-release.jks \
+  -alias clinicalrx -keyalg RSA -keysize 2048 -validity 10000 \
+  -storepass "CHANGE_ME" -keypass "CHANGE_ME" \
+  -dname "CN=ClinicalRx, O=ClinicalRx, C=GH"
+base64 -w0 clinicalrx-release.jks   # → paste into ANDROID_KEYSTORE_BASE64
+```
+
+(For a PKCS12 `.p12` instead of `.jks`, add `-storetype PKCS12` — the CI
+expects PKCS12.)
