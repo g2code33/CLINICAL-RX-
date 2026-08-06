@@ -1,5 +1,6 @@
 import { useData } from '../stores/data';
 import { aiChat, type AiChatOpts, type AiResult } from './ai';
+import { useTasks, type TaskKind } from '../stores/tasks';
 import type { AiModuleConfig } from '../types';
 
 export type AiModuleKey =
@@ -149,6 +150,27 @@ export function aiReady(key: AiModuleKey): boolean {
   return !!cfg && cfg.enabled && !!cfg.apiKey;
 }
 
+/**
+ * Run an AI call in the GLOBAL task store so it:
+ *  - survives navigation (component unmount) — the work continues and the
+ *    result is saved into the section chat even if the user left the page
+ *  - exposes live progress (Arena-style indicator) via useTasks from anywhere
+ */
+export async function runTaskInBackground(
+  kind: TaskKind,
+  section: string,
+  label: string,
+  fn: (onToken: (t: string) => void) => Promise<AiResult>
+): Promise<AiResult> {
+  const { useTasks: tasks } = await import('../stores/tasks');
+  const st = tasks.getState();
+  const taskId = st.startTask({ kind, section, label });
+  const result = await fn((t) => st.appendStream(taskId, t));
+  if (result.ok) st.finishTask(taskId, result.text);
+  else st.failTask(taskId, result.error);
+  return result;
+}
+
 /** Run any configured AI module with standard context + cross-section memory. */
 export async function runAiModule(
   key: AiModuleKey,
@@ -165,7 +187,12 @@ export async function runAiModule(
   // avoid duplication.
   const memory = buildMemoryContext(key, opts.excludeSessionId, 24);
   const system = `You are CLINICAL Rx, a clinical learning assistant.\n${studentContext()}\n${memory ? memory + '\n' : ''}${extraContext}`.trim();
-  return aiChat(cfg, system, userPrompt, opts);
+  // Every AI module runs in the global task store — it survives navigation
+  // and exposes live progress for the Arena-style indicator.
+  const label = MODULE_LABEL[key] || key;
+  return runTaskInBackground(key as TaskKind, key, label, (onToken) =>
+    aiChat(cfg, system, userPrompt, { ...opts, onToken: opts.onToken || onToken })
+  );
 }
 
 // ---- Semantic helpers used by the UI ----

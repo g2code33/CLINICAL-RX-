@@ -10,6 +10,7 @@ import { CommandPalette } from './CommandPalette';
 import { UpdateBadge } from './UpdateBadge';
 import { UndoToast } from './UndoToast';
 import { ContextMenuProvider } from './ContextMenu';
+import { TaskIndicator } from './TaskIndicator';
 
 const NAV = [
   { to: '/', icon: '🏠', label: 'Home' },
@@ -186,6 +187,7 @@ export function Layout({ children }: { children: ReactNode }) {
       <ShortcutHelp />
       <CommandPalette />
       <UndoToast />
+      <TaskIndicator />
     </div>
     </ContextMenuProvider>
   );

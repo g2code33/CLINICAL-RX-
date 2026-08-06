@@ -15,7 +15,7 @@ export interface AiChatOpts {
   history?: AiHistoryItem[];
   /** Images (data URLs) attached to the CURRENT user message (AI vision). */
   images?: string[];
-  /** Cap on generated tokens (default 1400). */
+  /** Cap on generated tokens (default 1100 — fast but full). */
   maxTokens?: number;
   /** Sampling temperature (default 0.7). */
   temperature?: number;
@@ -119,7 +119,7 @@ export async function aiChat(cfg: AiModuleConfig, system: string, user: string, 
   if (!apiKey) return { ok: false, error: 'API key looks empty — add one in Settings → AI.' };
 
   const model = (cfg.model || defaultModelFor(cfg)).trim() || defaultModelFor(cfg);
-  const maxTokens = opts.maxTokens ?? 1400;
+  const maxTokens = opts.maxTokens ?? 1100;
   const temperature = opts.temperature ?? 0.7;
   const timeoutMs = opts.timeoutMs ?? 120000;
   const history = opts.history ?? [];
