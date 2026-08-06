@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { NavLink } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { NavLink, useLocation } from 'react-router-dom';
 import type { ReactNode } from 'react';
 import { useData } from '../stores/data';
 import { useUi } from '../stores/ui';
@@ -42,6 +42,8 @@ const MOBILE_NAV = [
 ];
 
 export function Layout({ children }: { children: ReactNode }) {
+  const location = useLocation();
+  useEffect(() => { setMobileNavOpen(false); }, [location.pathname]);
   const status = useData((s) => s.status);
   const profile = useData((s) => s.profile);
   const searchOpen = useUi((s) => s.searchOpen);
@@ -54,6 +56,7 @@ export function Layout({ children }: { children: ReactNode }) {
   const syncing = useData((s) => s.settings?.onlineAccount?.syncing);
   const pending = useData((s) => s.removed.length); // lightweight re-render driver
   const [beepOn, setBeepOn] = useState(true);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   return (
     <ContextMenuProvider>
@@ -116,13 +119,14 @@ export function Layout({ children }: { children: ReactNode }) {
 
       <main className="flex min-h-0 flex-1 flex-col">
         {/* Top bar */}
-        <div className="flex items-center justify-between gap-2 border-b border-slate-200 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-800 lg:px-6 lg:py-3">
+        <div className="relative flex items-center justify-between gap-2 border-b border-slate-200 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-800 lg:px-6 lg:py-3">
           <div className="flex min-w-0 items-center gap-2">
-            {/* Hamburger: show/hide sidebar (desktop only) */}
+            {/* Hamburger: on mobile opens the nav dropdown; on desktop
+                toggles the sidebar */}
             <button
               className="btn-ghost !px-2 !py-1 text-lg leading-none"
-              onClick={() => setSidebarOpen(!sidebarOpen)}
-              title={sidebarOpen ? 'Hide sidebar' : 'Show sidebar'}
+              onClick={() => (window.innerWidth < 1024 ? setMobileNavOpen(!mobileNavOpen) : setSidebarOpen(!sidebarOpen))}
+              title="Menu"
             >
               ☰
             </button>
@@ -161,35 +165,35 @@ export function Layout({ children }: { children: ReactNode }) {
               Clinical Day {profile?.clinicalDay ?? 1} · {profile?.site}
             </div>
           </div>
+
+          {/* Mobile nav dropdown — opens under the hamburger, hides after a tap */}
+          {mobileNavOpen && (
+            <div className="absolute left-0 right-0 top-full z-40 border-b border-slate-200 bg-white shadow-xl dark:border-slate-700 dark:bg-slate-800 lg:hidden">
+              <nav className="grid grid-cols-2 gap-1 p-2">
+                {NAV.map((n) => (
+                  <NavLink
+                    key={n.to}
+                    to={n.to}
+                    end={n.to === '/'}
+                    onClick={() => setMobileNavOpen(false)}
+                    className={({ isActive }) =>
+                      `flex items-center gap-2 rounded-lg px-3 py-2.5 text-sm ${
+                        isActive ? 'bg-brand-600 font-semibold text-white' : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-700'
+                      }`
+                    }
+                  >
+                    <span className="text-lg">{n.icon}</span>
+                    {n.label}
+                  </NavLink>
+                ))}
+              </nav>
+            </div>
+          )}
         </div>
 
         {/* Content — tighter on mobile, comfortable on desktop */}
-        <div className="flex-1 overflow-y-auto p-2.5 pb-24 sm:p-4 lg:p-8 lg:pb-8">{children}</div>
+        <div className="flex-1 overflow-y-auto p-2.5 sm:p-4 lg:p-8">{children}</div>
       </main>
-
-      {/* Mobile bottom nav — modern: bigger touch targets, active pill */}
-      <nav className="flex shrink-0 items-stretch justify-around border-t border-slate-200 bg-white pb-[env(safe-area-inset-bottom)] dark:border-slate-700 dark:bg-slate-800 lg:hidden">
-        {MOBILE_NAV.map((n) => (
-          <NavLink
-            key={n.to}
-            to={n.to}
-            end={n.to === '/'}
-            className={({ isActive }) =>
-              `relative flex flex-1 flex-col items-center justify-center gap-0.5 py-2 min-h-[3.5rem] ${
-                isActive ? 'text-brand-600 dark:text-brand-300' : 'text-slate-500 dark:text-slate-400'
-              }`
-            }
-          >
-            {({ isActive }) => (
-              <>
-                {isActive && <span className="absolute top-0 h-0.5 w-8 rounded-full bg-brand-500" />}
-                <span className={`text-xl leading-none ${isActive ? 'scale-110' : ''} transition-transform`}>{n.icon}</span>
-                <span className="text-[11px] font-medium">{n.label}</span>
-              </>
-            )}
-          </NavLink>
-        ))}
-      </nav>
 
       <SearchModal open={searchOpen} onClose={() => setSearchOpen(false)} />
       <ShortcutHelp />
