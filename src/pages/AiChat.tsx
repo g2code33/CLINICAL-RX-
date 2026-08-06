@@ -477,16 +477,16 @@ export function AiChat() {
                   </div>
                 </div>
               ))}
-              {showStreaming && (
+              {thisBusy && (
                 <div className="flex justify-start">
-                  <div className="max-w-[85%] whitespace-pre-wrap rounded-2xl bg-slate-100 px-4 py-2.5 text-sm dark:bg-slate-700">
-                    {streaming.text}
-                    <span className="ml-0.5 inline-block h-3.5 w-1.5 animate-pulse bg-slate-400 align-middle" />
+                  <div className="w-full max-w-[92%]">
+                    <AiThinking
+                      moduleLabel={aiModuleLabel(active.module)}
+                      live={showStreaming ? streaming.text : undefined}
+                      detail={showStreaming ? undefined : `Working on: ${currentSession?.title || active.placeholder}`}
+                    />
                   </div>
                 </div>
-              )}
-              {thisBusy && !showStreaming && (
-                <AiThinking moduleLabel={aiModuleLabel(active.module)} />
               )}
               <div ref={bottomRef} />
             </div>

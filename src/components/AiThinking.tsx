@@ -7,7 +7,7 @@ import { useData } from '../stores/data';
  * pulses, and a progress bar fills. Keeps users engaged instead of a plain
  * "thinking…" spinner.
  */
-export function AiThinking({ moduleLabel, detail }: { moduleLabel: string; detail?: string }) {
+export function AiThinking({ moduleLabel, detail, live }: { moduleLabel: string; detail?: string; live?: string }) {
   const [elapsed, setElapsed] = useState(0);
 
   useEffect(() => {
@@ -39,6 +39,13 @@ export function AiThinking({ moduleLabel, detail }: { moduleLabel: string; detai
       </div>
       {detail ? (
         <p className="mb-2 text-xs text-slate-500 dark:text-slate-400">{detail}</p>
+      ) : null}
+      {live ? (
+        <div className="mb-2 max-h-32 overflow-y-auto rounded-lg bg-white/70 p-2.5 text-xs leading-relaxed text-slate-700 dark:bg-slate-800/60 dark:text-slate-200">
+          <span className="mr-1 font-semibold text-brand-600 dark:text-brand-300">Live preview:</span>
+          {live}
+          <span className="ml-0.5 inline-block h-3 w-0.5 animate-pulse bg-brand-400 align-middle" />
+        </div>
       ) : null}
       <div className="space-y-1">
         {steps.map((st, i) => {

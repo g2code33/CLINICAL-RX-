@@ -294,7 +294,7 @@ export function Quiz() {
             <h2 className="text-lg font-bold">Generating your quiz…</h2>
             {streamText && <span className="text-xs text-slate-400">streaming…</span>}
           </div>
-          <AiThinking moduleLabel="AI Question Generator" detail={streamText ? 'Live preview: ' + streamText.slice(0, 200) : 'Building questions from your clinical exposure…'} />
+          <AiThinking moduleLabel="AI Question Generator" live={streamText || undefined} detail={!streamText ? 'Building questions from your clinical exposure…' : undefined} />
         </div>
       ) : quiz ? (
         <div className="space-y-4">
