@@ -2,12 +2,23 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, viewport-fit=cover" />
     <meta name="theme-color" content="#23704c" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="mobile-web-app-capable" content="yes" />
     <link rel="icon" type="image/png" href="./v2.PNG" />
     <link rel="apple-touch-icon" href="./v2.PNG" />
     <link rel="manifest" href="./manifest.webmanifest" />
     <title>Clinical Rx</title>
+    <style>
+      /* Mobile-first: comfortable touch targets + readable base size */
+      html { -webkit-text-size-adjust: 100%; }
+      @media (max-width: 640px) {
+        body { font-size: 16px; }
+        button, a, input, select, textarea { touch-action: manipulation; }
+      }
+    </style>
   </head>
   <body>
     <div id="root"></div>

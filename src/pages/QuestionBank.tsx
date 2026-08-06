@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { PageHeader, EmptyState, Pill } from '../components/ui';
 import { Modal } from '../components/Modal';
 import { loadBank, saveBank, parseBankJson, type BankQuestion } from '../services/questionBank';
+import { ViewToggle } from '../components/ViewToggle';
 
 const SAMPLE_JSON = `[
   {
@@ -28,6 +29,7 @@ export function QuestionBank() {
   const [bank, setBank] = useState<BankQuestion[]>(() => loadBank());
   const [search, setSearch] = useState('');
   const [cat, setCat] = useState('all');
+  const [view, setView] = useState<'cards' | 'list'>('cards');
   const [importOpen, setImportOpen] = useState(false);
   const [jsonText, setJsonText] = useState('');
   const [importCat, setImportCat] = useState('Imported');
@@ -114,28 +116,51 @@ export function QuestionBank() {
       ) : filtered.length === 0 ? (
         <EmptyState icon="🔍" title="No questions match" hint="Try a different search or category." />
       ) : (
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {filtered.map((b) => (
-            <div key={b.id} className="card flex flex-col justify-between">
-              <div>
-                <div className="mb-2 flex flex-wrap items-center gap-1.5">
-                  <Pill color="brand">{b.category || 'General'}</Pill>
-                  {b.tags.map((t) => <Pill key={t} color="slate">#{t}</Pill>)}
-                </div>
-                <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">{b.question}</p>
-                <div className="mt-2 space-y-0.5 text-xs text-slate-500 dark:text-slate-300">
-                  {b.options.map((o, oi) => (
-                    <div key={oi} className={oi === b.answer ? 'font-medium text-green-600' : ''}>
-                      {String.fromCharCode(65 + oi)}. {o} {oi === b.answer ? '✓' : ''}
+        <>
+          <div className="mb-3 flex items-center justify-end">
+            <ViewToggle view={view} onChange={setView} />
+          </div>
+          {view === 'cards' ? (
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+              {filtered.map((b) => (
+                <div key={b.id} className="card flex flex-col justify-between">
+                  <div>
+                    <div className="mb-2 flex flex-wrap items-center gap-1.5">
+                      <Pill color="brand">{b.category || 'General'}</Pill>
+                      {b.tags.map((t) => <Pill key={t} color="slate">#{t}</Pill>)}
                     </div>
-                  ))}
+                    <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">{b.question}</p>
+                    <div className="mt-2 space-y-0.5 text-xs text-slate-500 dark:text-slate-300">
+                      {b.options.map((o, oi) => (
+                        <div key={oi} className={oi === b.answer ? 'font-medium text-green-600' : ''}>
+                          {String.fromCharCode(65 + oi)}. {o} {oi === b.answer ? '✓' : ''}
+                        </div>
+                      ))}
+                    </div>
+                    {b.explanation && <div className="mt-2 text-xs text-slate-400">💡 {b.explanation}</div>}
+                  </div>
+                  <button className="btn-ghost !py-1 text-xs hover:!text-red-500" onClick={() => remove(b.id)}>Delete</button>
                 </div>
-                {b.explanation && <div className="mt-2 text-xs text-slate-400">💡 {b.explanation}</div>}
-              </div>
-              <button className="btn-ghost !py-1 text-xs hover:!text-red-500" onClick={() => remove(b.id)}>Delete</button>
+              ))}
             </div>
-          ))}
-        </div>
+          ) : (
+            <div className="card divide-y divide-slate-100 dark:divide-slate-800">
+              {filtered.map((b) => (
+                <div key={b.id} className="flex items-start justify-between gap-3 p-3">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <Pill color="brand">{b.category || 'General'}</Pill>
+                      {b.tags.slice(0, 3).map((t) => <Pill key={t} color="slate">#{t}</Pill>)}
+                    </div>
+                    <p className="mt-1 text-sm font-medium text-slate-800 dark:text-slate-100">{b.question}</p>
+                    <p className="mt-0.5 text-xs text-slate-400">✓ {b.options[b.answer]}</p>
+                  </div>
+                  <button className="btn-ghost !p-1 text-xs hover:!text-red-500" onClick={() => remove(b.id)}>🗑</button>
+                </div>
+              ))}
+            </div>
+          )}
+        </>
       )}
 
       {/* Import modal */}

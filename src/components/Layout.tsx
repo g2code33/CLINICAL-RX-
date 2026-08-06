@@ -29,11 +29,13 @@ const NAV = [
   { to: '/settings', icon: '⚙️', label: 'Settings' },
 ];
 
-// Shown in the mobile bottom bar (keep it short).
+// Shown in the mobile bottom bar (keep it short, modern touch targets).
 const MOBILE_NAV = [
   { to: '/', icon: '🏠', label: 'Home' },
   { to: '/clinical', icon: '📋', label: 'Days' },
+  { to: '/diseases', icon: '🦠', label: 'Conditions' },
   { to: '/medicines', icon: '💊', label: 'Medicines' },
+  { to: '/quiz', icon: '📝', label: 'Quiz' },
   { to: '/bundles', icon: '📦', label: 'Bundles' },
   { to: '/ai', icon: '🤖', label: 'AI' },
 ];
@@ -160,11 +162,11 @@ export function Layout({ children }: { children: ReactNode }) {
           </div>
         </div>
 
-        {/* Content */}
-        <div className="flex-1 overflow-y-auto p-3 sm:p-4 lg:p-8">{children}</div>
+        {/* Content — tighter on mobile, comfortable on desktop */}
+        <div className="flex-1 overflow-y-auto p-2.5 pb-24 sm:p-4 lg:p-8 lg:pb-8">{children}</div>
       </main>
 
-      {/* Mobile bottom nav */}
+      {/* Mobile bottom nav — modern: bigger touch targets, active pill */}
       <nav className="flex shrink-0 items-stretch justify-around border-t border-slate-200 bg-white pb-[env(safe-area-inset-bottom)] dark:border-slate-700 dark:bg-slate-800 lg:hidden">
         {MOBILE_NAV.map((n) => (
           <NavLink
@@ -172,13 +174,18 @@ export function Layout({ children }: { children: ReactNode }) {
             to={n.to}
             end={n.to === '/'}
             className={({ isActive }) =>
-              `flex flex-1 flex-col items-center gap-0.5 py-2 text-[10px] font-medium ${
+              `relative flex flex-1 flex-col items-center justify-center gap-0.5 py-2 min-h-[3.5rem] ${
                 isActive ? 'text-brand-600 dark:text-brand-300' : 'text-slate-500 dark:text-slate-400'
               }`
             }
           >
-            <span className="text-lg leading-none">{n.icon}</span>
-            {n.label}
+            {({ isActive }) => (
+              <>
+                {isActive && <span className="absolute top-0 h-0.5 w-8 rounded-full bg-brand-500" />}
+                <span className={`text-xl leading-none ${isActive ? 'scale-110' : ''} transition-transform`}>{n.icon}</span>
+                <span className="text-[11px] font-medium">{n.label}</span>
+              </>
+            )}
           </NavLink>
         ))}
       </nav>

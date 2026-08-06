@@ -5,6 +5,7 @@ import { TagInput } from '../components/Modal';
 import { newDay, todayIso } from '../services/defaults';
 import { CloudSyncPrompt } from '../components/CloudSyncPrompt';
 import { dayToMarkdown, dayToPdf, daysToCsv, downloadText } from '../services/export';
+import { ViewToggle } from '../components/ViewToggle';
 import { scanForPhi, privacyWarning } from '../services/privacy';
 
 const SECTIONS: Array<{ key: 'conditions' | 'medicines' | 'investigations' | 'observations' | 'lessons' | 'uncertainties' | 'topicsToResearch'; label: string; icon: string }> = [
@@ -26,6 +27,7 @@ export function ClinicalDays() {
     const today = days.find((d) => d.date === todayIso());
     return (today?.id ?? days[0]?.id ?? null);
   });
+  const [view, setView] = useState<'cards' | 'list'>('cards');
   const day = days.find((d) => d.id === selected) ?? null;
 
   async function addDay() {
@@ -80,19 +82,46 @@ export function ClinicalDays() {
         <EmptyState icon="📋" title="No clinical days yet" hint="Start today's log to begin capturing conditions, medicines, investigations and lessons." />
       ) : (
         <div className="grid gap-6 lg:grid-cols-[240px_1fr]">
-          <div className="space-y-2">
-            {days.map((d) => (
-              <button
-                key={d.id}
-                onClick={() => setSelected(d.id)}
-                className={`w-full rounded-lg border px-3 py-2.5 text-left text-sm transition-colors ${
-                  d.id === selected ? 'border-brand-500 bg-brand-50 dark:bg-brand-900' : 'border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-800'
-                }`}
-              >
-                <div className="font-semibold">📅 Clinical Day {d.dayNumber}</div>
-                <div className="text-xs text-slate-400">{d.date} · {d.site}</div>
-              </button>
-            ))}
+          <div>
+            <div className="mb-2 flex items-center justify-between">
+              <span className="text-xs font-semibold text-slate-400">{days.length} days</span>
+              <ViewToggle view={view} onChange={setView} />
+            </div>
+            {view === 'cards' ? (
+              <div className="grid grid-cols-2 gap-2 lg:grid-cols-1">
+                {days.map((d) => (
+                  <button
+                    key={d.id}
+                    onClick={() => setSelected(d.id)}
+                    className={`rounded-xl border p-3 text-left transition-colors ${
+                      d.id === selected ? 'border-brand-500 bg-brand-50 dark:bg-brand-900' : 'border-slate-200 bg-white hover:border-brand-300 dark:border-slate-700 dark:bg-slate-800'
+                    }`}
+                  >
+                    <div className="text-lg">📅</div>
+                    <div className="mt-1 font-semibold">Day {d.dayNumber}</div>
+                    <div className="text-[11px] text-slate-400">{d.date}</div>
+                    <div className="mt-1 flex flex-wrap gap-1">
+                      {d.conditions.slice(0, 2).map((c) => <span key={c} className="rounded bg-brand-50 px-1 py-0.5 text-[10px] dark:bg-brand-900">{c}</span>)}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {days.map((d) => (
+                  <button
+                    key={d.id}
+                    onClick={() => setSelected(d.id)}
+                    className={`w-full rounded-lg border px-3 py-2.5 text-left text-sm transition-colors ${
+                      d.id === selected ? 'border-brand-500 bg-brand-50 dark:bg-brand-900' : 'border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-800'
+                    }`}
+                  >
+                    <div className="font-semibold">📅 Clinical Day {d.dayNumber}</div>
+                    <div className="text-xs text-slate-400">{d.date} · {d.site}</div>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
           {day && (

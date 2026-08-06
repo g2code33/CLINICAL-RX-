@@ -7,6 +7,7 @@ import { bundleToMarkdown, bundleToJson, bundleToPdf, downloadText, copyToClipbo
 import { scanForPhi, privacyWarning } from '../services/privacy';
 import { aiChat } from '../services/ai';
 import { CloudSyncPrompt } from '../components/CloudSyncPrompt';
+import { ViewToggle } from '../components/ViewToggle';
 import type { Bundle } from '../types';
 
 type Filter = 'all' | 'days' | 'weeks' | 'merged';
@@ -36,6 +37,7 @@ export function Bundles() {
   const setStatus = useData((s) => s.setStatus);
   const [filter, setFilter] = useState<Filter>('all');
   const [query, setQuery] = useState('');
+  const [view, setView] = useState<'cards' | 'list'>('cards');
   const [createOpen, setCreateOpen] = useState(false);
   const [selected, setSelected] = useState<string[]>([]);
   const [viewing, setViewing] = useState<Bundle | null>(null);
@@ -174,6 +176,9 @@ export function Bundles() {
 
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <input className="input max-w-sm" placeholder="🔍 Search bundles…" value={query} onChange={(e) => setQuery(e.target.value)} />
+        <div className="ml-auto flex items-center gap-2">
+          <ViewToggle view={view} onChange={setView} />
+        </div>
         <div className="flex gap-1.5">
           {(['all', 'days', 'weeks', 'merged'] as Filter[]).map((f) => (
             <button
@@ -189,6 +194,27 @@ export function Bundles() {
 
       {filtered.length === 0 ? (
         <EmptyState icon="📦" title="No bundles here" hint={hasAuto || hasManual ? 'Try a different filter, or create a bundle.' : 'Generate an auto bundle or press + Create Bundle to get started.'} />
+      ) : view === 'list' ? (
+        <div className="card divide-y divide-slate-100 dark:divide-slate-800">
+          {filtered.map((b) => (
+            <div key={b.id} className="flex cursor-pointer items-center justify-between gap-3 p-3 transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/60" onClick={() => setViewing(b)}>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <Pill color={b.type.startsWith('auto') ? 'green' : b.type === 'merged' ? 'slate' : 'amber'}>{TYPE_LABEL[b.type]}</Pill>
+                  <span className="truncate font-medium text-slate-800 dark:text-slate-100">{b.title}</span>
+                </div>
+                <div className="mt-0.5 text-xs text-slate-400">{b.periodStart} → {b.periodEnd}</div>
+              </div>
+              <input
+                type="checkbox"
+                checked={selected.includes(b.id)}
+                onClick={(e) => e.stopPropagation()}
+                onChange={(e) => setSelected(e.target.checked ? [...selected, b.id] : selected.filter((x) => x !== b.id))}
+                className="h-4 w-4 shrink-0 accent-brand-600"
+              />
+            </div>
+          ))}
+        </div>
       ) : (
         <div className="space-y-8">
           {/* DAYS section */}

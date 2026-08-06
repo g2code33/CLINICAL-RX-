@@ -43,3 +43,16 @@ body {
 ::-webkit-scrollbar { width: 10px; height: 10px; }
 ::-webkit-scrollbar-thumb { @apply rounded-full bg-slate-300 dark:bg-slate-600; }
 ::-webkit-scrollbar-track { background: transparent; }
+
+/* ---- Mobile modernization ---- */
+@media (max-width: 640px) {
+  /* Prevent iOS double-tap zoom on buttons/links; smooth touch */
+  button, a, input, select, textarea { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+  /* Card padding lighter on small screens so content breathes */
+  .card { @apply p-3.5; }
+  /* Slightly smaller page titles on phones */
+  h1 { font-size: 1.4rem !important; }
+  /* Sticky bottom nav safe-area handled in Layout; give inputs room */
+  input, select, textarea { font-size: 16px; }
+}
+
