@@ -25,6 +25,17 @@ export function Quiz() {
   const save = useData((s) => s.save);
   const remove = useData((s) => s.remove);
   const savedQuizzes = useData((s) => s.quizzes);
+  const weeklyQuizzes = savedQuizzes.filter((q) => q.weekly);
+  const manualQuizzes = savedQuizzes.filter((q) => !q.weekly);
+  const [weeklyBusy, setWeeklyBusy] = useState(false);
+
+  async function genWeeklyNow() {
+    setWeeklyBusy(true);
+    const { mondayOf, generateWeeklyQuiz } = await import('../services/weeklyQuiz');
+    const monday = mondayOf(new Date().toISOString().slice(0, 10));
+    await generateWeeklyQuiz(monday, 10);
+    setWeeklyBusy(false);
+  }
 
   const [quiz, setQuiz] = useState<QuizType | null>(null);
   const [answers, setAnswers] = useState<number[]>([]);
@@ -517,23 +528,66 @@ export function Quiz() {
         {savedQuizzes.length === 0 ? (
           <p className="text-sm text-slate-400">No quizzes saved yet. Submit a quiz and it will be stored here forever for review.</p>
         ) : (
-          <div className="space-y-2">
-            {savedQuizzes.map((q) => {
-              const p = q.total ? Math.round((q.score / q.total) * 100) : 0;
-              return (
-                <div key={q.id} className="flex cursor-default items-center gap-3 rounded-lg border border-slate-200 p-3 dark:border-slate-700" {...ctxHandlers(showMenu, historyMenu(q))}>
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate text-sm font-semibold">{q.title}</div>
-                    <div className="text-xs text-slate-400">{q.date} · {q.total} questions · {Math.round(q.durationSeconds / 60)} min</div>
-                  </div>
-                  <Pill color={p >= 70 ? 'green' : p >= 50 ? 'amber' : 'red'}>{q.score}/{q.total} ({p}%)</Pill>
-                  <button className="btn-secondary !py-1 text-xs" onClick={() => openHistory(q.id)}>Review</button>
-                  <button className="btn-secondary !py-1 text-xs" onClick={() => startRetry(q, true)} title="Re-quiz only wrong answers">🔁 Wrong</button>
-                  <button className="btn-secondary !py-1 text-xs" onClick={() => startRetry(q, false)} title="Re-take the same quiz">↻ Same</button>
-                  <button className="btn-ghost !py-1 text-xs text-red-500" onClick={() => void deleteHistory(q.id)}>🗑</button>
+          <div className="space-y-6">
+            {/* Weekly auto quizzes */}
+            {weeklyQuizzes.length > 0 && (
+              <div>
+                <div className="mb-2 flex items-center gap-2">
+                  <h3 className="text-sm font-bold">📅 Weekly quizzes</h3>
+                  <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-500 dark:bg-slate-700 dark:text-slate-300">{weeklyQuizzes.length} week(s)</span>
+                  <button
+                    className="ml-auto btn-secondary !py-1 text-xs"
+                    onClick={genWeeklyNow}
+                    disabled={weeklyBusy}
+                    title="Generate a quiz for this week's clinical data"
+                  >
+                    {weeklyBusy ? 'Generating…' : '＋ Generate this week'}
+                  </button>
                 </div>
-              );
-            })}
+                <div className="space-y-2">
+                  {weeklyQuizzes.map((q) => {
+                    const p = q.total ? Math.round((q.score / q.total) * 100) : 0;
+                    return (
+                      <div key={q.id} className="flex cursor-default items-center gap-3 rounded-lg border border-brand-200 p-3 dark:border-brand-800" {...ctxHandlers(showMenu, historyMenu(q))}>
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate text-sm font-semibold">{q.title}</div>
+                          <div className="text-xs text-slate-400">Week of {q.weekStart} · {q.total} questions · {Math.round(q.durationSeconds / 60)} min</div>
+                        </div>
+                        <Pill color={p >= 70 ? 'green' : p >= 50 ? 'amber' : 'red'}>{q.score}/{q.total} ({p}%)</Pill>
+                        <button className="btn-secondary !py-1 text-xs" onClick={() => openHistory(q.id)}>Take / Review</button>
+                        <button className="btn-secondary !py-1 text-xs" onClick={() => startRetry(q, true)} title="Re-quiz only wrong answers">🔁 Wrong</button>
+                        <button className="btn-ghost !py-1 text-xs text-red-500" onClick={() => void deleteHistory(q.id)}>🗑</button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Manual / your quizzes */}
+            {manualQuizzes.length > 0 && (
+              <div>
+                <h3 className="mb-2 text-sm font-bold">📝 Your quizzes</h3>
+                <div className="space-y-2">
+                  {manualQuizzes.map((q) => {
+                    const p = q.total ? Math.round((q.score / q.total) * 100) : 0;
+                    return (
+                      <div key={q.id} className="flex cursor-default items-center gap-3 rounded-lg border border-slate-200 p-3 dark:border-slate-700" {...ctxHandlers(showMenu, historyMenu(q))}>
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate text-sm font-semibold">{q.title}</div>
+                          <div className="text-xs text-slate-400">{q.date} · {q.total} questions · {Math.round(q.durationSeconds / 60)} min</div>
+                        </div>
+                        <Pill color={p >= 70 ? 'green' : p >= 50 ? 'amber' : 'red'}>{q.score}/{q.total} ({p}%)</Pill>
+                        <button className="btn-secondary !py-1 text-xs" onClick={() => openHistory(q.id)}>Review</button>
+                        <button className="btn-secondary !py-1 text-xs" onClick={() => startRetry(q, true)} title="Re-quiz only wrong answers">🔁 Wrong</button>
+                        <button className="btn-secondary !py-1 text-xs" onClick={() => startRetry(q, false)} title="Re-take the same quiz">↻ Same</button>
+                        <button className="btn-ghost !py-1 text-xs text-red-500" onClick={() => void deleteHistory(q.id)}>🗑</button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </div>
         )}
       </Modal>

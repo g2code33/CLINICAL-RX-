@@ -255,6 +255,8 @@ export interface SavedQuiz extends BaseRecord {
   score: number;
   total: number;
   durationSeconds: number;
+  weekly?: boolean; // true for auto-generated weekly quizzes
+  weekStart?: string; // yyyy-mm-dd Monday of the covered week
 }
 
 // ---- Calendar reminders (persisted, synced, desktop notifications) ----

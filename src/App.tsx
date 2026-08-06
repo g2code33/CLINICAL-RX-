@@ -87,6 +87,13 @@ export default function App() {
     return () => window.removeEventListener('online', onOnline);
   }, [ready]);
 
+  // Auto weekly quizzes: generate a quiz for every completed week that
+  // doesn't have one yet (appears under 📅 Weekly quizzes in the Quiz tab).
+  useEffect(() => {
+    if (!ready) return;
+    import('./services/weeklyQuiz').then((m) => m.runAutoWeeklyQuizzes()).catch(() => {});
+  }, [ready]);
+
   const settings = useData((s) => s.settings);
   useEffect(() => {
     const root = document.documentElement;
