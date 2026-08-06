@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { NavLink, useLocation } from 'react-router-dom';
+import { useState } from 'react';
+import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import type { ReactNode } from 'react';
 import { useData } from '../stores/data';
 import { useUi } from '../stores/ui';
@@ -23,28 +23,27 @@ const NAV = [
   { to: '/questions', icon: '❓', label: 'Questions' },
   { to: '/revision', icon: '📚', label: 'Revision' },
   { to: '/quiz', icon: '📝', label: 'Quiz' },
-  { to: '/question-bank', icon: '🗂', label: 'Question Bank' },
+  { to: '/question-bank', icon: '🗂️', label: 'Question Bank' },
   { to: '/bundles', icon: '📦', label: 'Bundles' },
   { to: '/progress', icon: '📊', label: 'Progress' },
   { to: '/ai', icon: '🤖', label: 'AI' },
   { to: '/settings', icon: '⚙️', label: 'Settings' },
 ];
 
-// Shown in the mobile bottom bar (keep it short, modern touch targets).
-const MOBILE_NAV = [
+// Clean & modern bottom navigation for mobile (most used items)
+const BOTTOM_NAV = [
   { to: '/', icon: '🏠', label: 'Home' },
   { to: '/clinical', icon: '📋', label: 'Days' },
-  { to: '/diseases', icon: '🦠', label: 'Conditions' },
-  { to: '/medicines', icon: '💊', label: 'Medicines' },
+  { to: '/diseases', icon: '🦠', label: 'Diseases' },
+  { to: '/medicines', icon: '💊', label: 'Meds' },
   { to: '/quiz', icon: '📝', label: 'Quiz' },
-  { to: '/bundles', icon: '📦', label: 'Bundles' },
   { to: '/ai', icon: '🤖', label: 'AI' },
 ];
 
 export function Layout({ children }: { children: ReactNode }) {
   const location = useLocation();
-  useEffect(() => { setMobileNavOpen(false); }, [location.pathname]);
-  const status = useData((s) => s.status);
+  const navigate = useNavigate();
+  
   const profile = useData((s) => s.profile);
   const searchOpen = useUi((s) => s.searchOpen);
   const setSearchOpen = useUi((s) => s.setSearchOpen);
@@ -52,156 +51,225 @@ export function Layout({ children }: { children: ReactNode }) {
   const setPaletteOpen = useUi((s) => s.setPaletteOpen);
   const sidebarOpen = useUi((s) => s.sidebarOpen);
   const setSidebarOpen = useUi((s) => s.setSidebarOpen);
+  
   const connected = useData((s) => s.settings?.onlineAccount?.connected);
   const syncing = useData((s) => s.settings?.onlineAccount?.syncing);
-  const pending = useData((s) => s.removed.length); // lightweight re-render driver
+  const pending = useData((s) => s.removed.length);
+
   const [beepOn, setBeepOn] = useState(true);
-  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+
+  // Close drawer when route changes (important for mobile UX)
+  const handleNavClick = (to: string) => {
+    setDrawerOpen(false);
+    // Small delay so the animation feels smooth
+    setTimeout(() => {
+      navigate(to);
+    }, 80);
+  };
+
+  const isActive = (path: string) => location.pathname === path || (path === '/' && location.pathname === '/');
 
   return (
     <ContextMenuProvider>
-    <div className="flex h-screen flex-col bg-slate-50 text-slate-800 dark:bg-slate-900 dark:text-slate-100 lg:flex-row">
-      {/* Desktop sidebar — full width when open, slim icon rail when the
-          hamburger hides it (icons stay visible & clickable) */}
-      {sidebarOpen ? (
-        <aside className="flex w-64 shrink-0 flex-col border-r border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-800">
-          <div className="flex items-center gap-2.5 border-b border-slate-200 px-4 py-4 dark:border-slate-700">
-            <img src="./v2.PNG" alt="CLINICAL Rx" className="h-10 w-10 rounded-lg object-cover" />
-            <div>
-              <div className="text-base font-extrabold tracking-tight text-brand-700 dark:text-brand-300">CLINICAL Rx</div>
-              <div className="text-xs text-slate-400">Clinical Companion</div>
-            </div>
-          </div>
-          <nav className="flex flex-1 flex-col justify-start gap-1 overflow-y-auto p-2">
-            {NAV.map((n) => (
-              <NavLink
-                key={n.to}
-                to={n.to}
-                end={n.to === '/'}
-                className={({ isActive }) =>
-                  `flex items-center gap-3 rounded-lg px-3 py-2.5 text-[15px] transition-colors ${
-                    isActive
-                      ? 'bg-brand-600 font-semibold text-white'
-                      : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-700'
-                  }`
-                }
-              >
-                <span className="text-lg">{n.icon}</span>
-                {n.label}
-              </NavLink>
-            ))}
-          </nav>
-        </aside>
-      ) : (
-        <aside className="flex w-16 shrink-0 flex-col border-r border-slate-200 bg-white py-2 dark:border-slate-700 dark:bg-slate-800">
-          <div className="mb-2 flex justify-center">
-            <img src="./v2.PNG" alt="CLINICAL Rx" className="h-9 w-9 rounded-lg object-cover" />
-          </div>
-          <nav className="flex flex-1 flex-col items-stretch gap-1 px-1.5">
-            {NAV.map((n) => (
-              <NavLink
-                key={n.to}
-                to={n.to}
-                end={n.to === '/'}
-                title={n.label}
-                className={({ isActive }) =>
-                  `flex min-h-11 flex-1 items-center justify-center rounded-lg text-[22px] transition-colors ${
-                    isActive ? 'bg-brand-600' : 'hover:bg-slate-100 dark:hover:bg-slate-700'
-                  }`
-                }
-              >
-                <span>{n.icon}</span>
-              </NavLink>
-            ))}
-          </nav>
-        </aside>
-      )}
-
-      <main className="flex min-h-0 flex-1 flex-col">
-        {/* Top bar */}
-        <div className="relative flex items-center justify-between gap-2 border-b border-slate-200 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-800 lg:px-6 lg:py-3">
-          <div className="flex min-w-0 items-center gap-2">
-            {/* Hamburger: on mobile opens the nav dropdown; on desktop
-                toggles the sidebar */}
+      <div className="flex h-screen flex-col bg-slate-50 text-slate-800 dark:bg-slate-900 dark:text-slate-100">
+        
+        {/* ========== TOP HEADER (Mobile + Desktop) ========== */}
+        <header className="sticky top-0 z-50 flex h-14 items-center justify-between border-b border-slate-200 bg-white/95 px-4 backdrop-blur-lg dark:border-slate-700 dark:bg-slate-900/95 lg:h-16 lg:px-6">
+          <div className="flex items-center gap-3">
+            {/* Hamburger Menu */}
             <button
-              className="btn-ghost !px-2 !py-1 text-lg leading-none"
-              onClick={() => (window.innerWidth < 1024 ? setMobileNavOpen(!mobileNavOpen) : setSidebarOpen(!sidebarOpen))}
-              title="Menu"
+              onClick={() => setDrawerOpen(!drawerOpen)}
+              className="flex h-10 w-10 items-center justify-center rounded-xl text-2xl text-slate-600 active:bg-slate-100 dark:text-slate-300 dark:active:bg-slate-800 lg:hidden"
+              aria-label="Open menu"
             >
               ☰
             </button>
-            <img src="./v2.PNG" alt="CLINICAL Rx" className="h-7 w-7 rounded-lg object-cover" />
-            <div className="truncate text-sm font-medium text-slate-500 dark:text-slate-300">
-              {/* Live status dot: green = cloud connected, amber = syncing/pending,
-                  slate = local-only. Click toggles the 'beep' pulse on/off. */}
-              <button
-                className="inline-flex items-center gap-1.5"
-                onClick={() => setBeepOn((v) => !v)}
-                title={beepOn ? 'Status beep on — click to silence' : 'Status beep off — click to enable'}
-              >
-                <span
-                  className={`inline-block h-2.5 w-2.5 rounded-full ${
-                    connected ? 'bg-green-500' : syncing ? 'bg-amber-500' : pending > 0 ? 'bg-amber-400' : 'bg-slate-400'
-                  } ${beepOn && (connected || syncing || pending > 0) ? 'animate-pulse' : ''}`}
-                />
-                <span className="hidden sm:inline">{connected ? '☁️ Cloud' : syncing ? 'Syncing…' : pending > 0 ? 'Local · pending' : 'Local'}</span>
-                <span className="hidden sm:inline text-slate-300 dark:text-slate-500">{beepOn ? '🔔' : '🔕'}</span>
-              </button>
+
+            {/* Logo */}
+            <div className="flex items-center gap-2.5">
+              <img src="./v2.PNG" alt="CLINICAL Rx" className="h-8 w-8 rounded-2xl ring-1 ring-slate-200 dark:ring-slate-700" />
+              <div className="hidden sm:block">
+                <div className="text-lg font-extrabold tracking-tighter text-brand-700 dark:text-brand-300">CLINICAL Rx</div>
+                <div className="text-[10px] -mt-1 text-slate-400">v1.3.6</div>
+              </div>
             </div>
           </div>
-          <div className="flex shrink-0 items-center gap-2 lg:gap-3">
+
+          {/* Right side actions */}
+          <div className="flex items-center gap-1.5">
+            {/* Status indicator */}
+            <button 
+              onClick={() => setBeepOn(!beepOn)}
+              className="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition active:bg-slate-100 dark:active:bg-slate-800"
+            >
+              <div className={`h-2.5 w-2.5 rounded-full ${
+                connected ? 'bg-emerald-500' : syncing ? 'bg-amber-500' : pending > 0 ? 'bg-amber-400' : 'bg-slate-400'
+              } ${beepOn && (connected || syncing || pending > 0) ? 'animate-pulse' : ''}`} />
+              <span className="hidden text-slate-500 dark:text-slate-400 sm:inline">
+                {connected ? 'Cloud' : syncing ? 'Syncing' : 'Local'}
+              </span>
+            </button>
+
             <UpdateBadge />
             <SyncIndicator />
-            <button className="btn-ghost !py-1 text-sm" onClick={() => setSearchOpen(true)} title="Global search (Ctrl/⌘+K)">
+
+            <button 
+              onClick={() => setSearchOpen(true)} 
+              className="btn-ghost hidden h-9 w-9 items-center justify-center text-lg lg:flex"
+            >
               🔍
             </button>
-            <button className="btn-ghost !px-2 !py-1 text-sm" onClick={() => setHelpOpen(true)} title="Keyboard shortcuts (?)">
+            
+            <button 
+              onClick={() => setHelpOpen(true)} 
+              className="btn-ghost hidden h-9 w-9 items-center justify-center text-lg lg:flex"
+            >
               ?
             </button>
-            <button className="btn-ghost !px-2 !py-1 text-sm lg:hidden" onClick={() => setPaletteOpen(true)} title="Command palette (Ctrl+P)">
-              ⌘
-            </button>
-            <div className="hidden text-xs text-slate-400 lg:block">
-              Clinical Day {profile?.clinicalDay ?? 1} · {profile?.site}
+
+            <div className="hidden items-center gap-2 pl-2 text-xs text-slate-500 lg:flex">
+              Day {profile?.clinicalDay ?? 1}
             </div>
           </div>
+        </header>
 
-          {/* Mobile nav dropdown — opens under the hamburger, hides after a tap */}
-          {mobileNavOpen && (
-            <div className="absolute left-0 right-0 top-full z-40 border-b border-slate-200 bg-white shadow-xl dark:border-slate-700 dark:bg-slate-800 lg:hidden">
-              <nav className="grid grid-cols-2 gap-1 p-2">
-                {NAV.map((n) => (
-                  <NavLink
-                    key={n.to}
-                    to={n.to}
-                    end={n.to === '/'}
-                    onClick={() => setMobileNavOpen(false)}
-                    className={({ isActive }) =>
-                      `flex items-center gap-2 rounded-lg px-3 py-2.5 text-sm ${
-                        isActive ? 'bg-brand-600 font-semibold text-white' : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-700'
-                      }`
-                    }
+        {/* ========== SLIDE-IN DRAWER (Mobile) ========== */}
+        {drawerOpen && (
+          <>
+            {/* Backdrop */}
+            <div 
+              className="fixed inset-0 z-[60] bg-black/60 lg:hidden" 
+              onClick={() => setDrawerOpen(false)}
+            />
+            
+            {/* Drawer Panel */}
+            <div className="fixed inset-y-0 left-0 z-[70] w-80 max-w-[85%] transform bg-white shadow-2xl transition-transform duration-300 dark:bg-slate-900 lg:hidden">
+              <div className="flex h-full flex-col">
+                {/* Drawer Header */}
+                <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4 dark:border-slate-700">
+                  <div className="flex items-center gap-3">
+                    <img src="./v2.PNG" alt="Logo" className="h-9 w-9 rounded-xl" />
+                    <div>
+                      <div className="font-bold text-lg">CLINICAL Rx</div>
+                      <div className="text-xs text-slate-400">Clinical Companion</div>
+                    </div>
+                  </div>
+                  <button 
+                    onClick={() => setDrawerOpen(false)}
+                    className="text-3xl text-slate-400 hover:text-slate-600"
                   >
-                    <span className="text-lg">{n.icon}</span>
-                    {n.label}
-                  </NavLink>
-                ))}
-              </nav>
+                    ×
+                  </button>
+                </div>
+
+                {/* Navigation Links */}
+                <div className="flex-1 overflow-y-auto py-2">
+                  {NAV.map((item) => (
+                    <button
+                      key={item.to}
+                      onClick={() => handleNavClick(item.to)}
+                      className={`flex w-full items-center gap-4 px-6 py-[17px] text-left transition-all active:bg-slate-100 dark:active:bg-slate-800 ${
+                        isActive(item.to) 
+                          ? 'bg-brand-50 text-brand-700 font-semibold dark:bg-brand-950 dark:text-brand-300' 
+                          : 'text-slate-700 dark:text-slate-300'
+                      }`}
+                    >
+                      <span className="text-2xl w-8">{item.icon}</span>
+                      <span className="text-[15px]">{item.label}</span>
+                    </button>
+                  ))}
+                </div>
+
+                {/* Drawer Footer */}
+                <div className="border-t border-slate-200 p-5 text-center text-xs text-slate-400 dark:border-slate-700">
+                  clinicalrx30.vercel.app
+                </div>
+              </div>
             </div>
-          )}
+          </>
+        )}
+
+        {/* ========== DESKTOP SIDEBAR (lg+) ========== */}
+        <div className="hidden lg:flex">
+          <aside className="flex w-60 shrink-0 flex-col border-r border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900">
+            <div className="flex items-center gap-3 px-5 py-5 border-b border-slate-200 dark:border-slate-700">
+              <img src="./v2.PNG" alt="Logo" className="h-9 w-9 rounded-2xl" />
+              <div>
+                <div className="font-bold tracking-tight">CLINICAL Rx</div>
+                <div className="text-[10px] text-slate-400">v1.3.6</div>
+              </div>
+            </div>
+
+            <nav className="flex-1 space-y-0.5 p-3 overflow-auto">
+              {NAV.map((item) => (
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  end={item.to === '/'}
+                  className={({ isActive: active }) =>
+                    `flex items-center gap-3.5 px-4 py-3 text-sm font-medium rounded-2xl transition-all ${
+                      active 
+                        ? 'bg-brand-600 text-white shadow-sm' 
+                        : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'
+                    }`
+                  }
+                >
+                  <span className="text-xl">{item.icon}</span>
+                  <span>{item.label}</span>
+                </NavLink>
+              ))}
+            </nav>
+          </aside>
         </div>
 
-        {/* Content — tighter on mobile, comfortable on desktop */}
-        <div className="flex-1 overflow-y-auto p-2.5 sm:p-4 lg:p-8">{children}</div>
-      </main>
+        {/* ========== MAIN CONTENT ========== */}
+        <main className="flex-1 overflow-auto pb-20 lg:pb-0">
+          <div className="max-w-7xl mx-auto px-4 py-5 lg:px-8 lg:py-8">
+            {children}
+          </div>
+        </main>
 
-      <SearchModal open={searchOpen} onClose={() => setSearchOpen(false)} />
-      <ShortcutHelp />
-      <CommandPalette />
-      <UndoToast />
-      <TaskIndicator />
-      <NotificationBanner />
-    </div>
+        {/* ========== FIXED BOTTOM NAV (Mobile only) ========== */}
+        <nav className="fixed bottom-0 left-0 right-0 z-50 border-t border-slate-200 bg-white/95 backdrop-blur-xl dark:border-slate-700 dark:bg-slate-900/95 lg:hidden">
+          <div className="flex items-center justify-around px-1 py-1.5">
+            {BOTTOM_NAV.map((item) => (
+              <NavLink
+                key={item.to}
+                to={item.to}
+                end={item.to === '/'}
+                className={({ isActive: active }) =>
+                  `flex flex-col items-center justify-center px-4 py-1.5 text-center transition-all active:scale-95 rounded-xl min-w-[58px] ${
+                    active 
+                      ? 'text-brand-600' 
+                      : 'text-slate-500 dark:text-slate-400'
+                  }`
+                }
+              >
+                <span className="text-2xl mb-0.5">{item.icon}</span>
+                <span className="text-[10px] font-medium tracking-tight">{item.label}</span>
+              </NavLink>
+            ))}
+            
+            {/* More button opens full drawer */}
+            <button 
+              onClick={() => setDrawerOpen(true)}
+              className="flex flex-col items-center justify-center px-4 py-1.5 text-center text-slate-500 dark:text-slate-400 active:scale-95 rounded-xl min-w-[58px]"
+            >
+              <span className="text-2xl mb-0.5">⋯</span>
+              <span className="text-[10px] font-medium tracking-tight">More</span>
+            </button>
+          </div>
+        </nav>
+
+        {/* Modals */}
+        <SearchModal open={searchOpen} onClose={() => setSearchOpen(false)} />
+        <ShortcutHelp />
+        <CommandPalette />
+        <UndoToast />
+        <TaskIndicator />
+        <NotificationBanner />
+      </div>
     </ContextMenuProvider>
   );
 }
