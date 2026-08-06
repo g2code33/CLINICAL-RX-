@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import type { ReactNode } from 'react';
+import pkg from '../../package.json';
 import { useData } from '../stores/data';
 import { useUi } from '../stores/ui';
 import { SearchModal } from './SearchModal';
@@ -12,6 +13,8 @@ import { UndoToast } from './UndoToast';
 import { ContextMenuProvider } from './ContextMenu';
 import { TaskIndicator } from './TaskIndicator';
 import { NotificationBanner } from './NotificationBanner';
+
+const APP_VERSION = pkg.version;
 
 const NAV = [
   { to: '/', icon: '🏠', label: 'Home' },
@@ -30,178 +33,297 @@ const NAV = [
   { to: '/settings', icon: '⚙️', label: 'Settings' },
 ];
 
-// Shown in the mobile bottom bar (keep it short, modern touch targets).
-const MOBILE_NAV = [
+// Fixed bottom navigation — the 6 most-used destinations + "More" (opens the drawer).
+const BOTTOM_NAV = [
   { to: '/', icon: '🏠', label: 'Home' },
   { to: '/clinical', icon: '📋', label: 'Days' },
-  { to: '/diseases', icon: '🦠', label: 'Conditions' },
-  { to: '/medicines', icon: '💊', label: 'Medicines' },
+  { to: '/diseases', icon: '🦠', label: 'Diseases' },
+  { to: '/medicines', icon: '💊', label: 'Meds' },
   { to: '/quiz', icon: '📝', label: 'Quiz' },
-  { to: '/bundles', icon: '📦', label: 'Bundles' },
   { to: '/ai', icon: '🤖', label: 'AI' },
 ];
 
 export function Layout({ children }: { children: ReactNode }) {
   const location = useLocation();
-  useEffect(() => { setMobileNavOpen(false); }, [location.pathname]);
-  const status = useData((s) => s.status);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+
   const profile = useData((s) => s.profile);
   const searchOpen = useUi((s) => s.searchOpen);
   const setSearchOpen = useUi((s) => s.setSearchOpen);
   const setHelpOpen = useUi((s) => s.setHelpOpen);
   const setPaletteOpen = useUi((s) => s.setPaletteOpen);
-  const sidebarOpen = useUi((s) => s.sidebarOpen);
-  const setSidebarOpen = useUi((s) => s.setSidebarOpen);
   const connected = useData((s) => s.settings?.onlineAccount?.connected);
   const syncing = useData((s) => s.settings?.onlineAccount?.syncing);
   const pending = useData((s) => s.removed.length); // lightweight re-render driver
+
   const [beepOn, setBeepOn] = useState(true);
-  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+
+  // Safety net: the drawer always closes on route change (also covers taps on
+  // drawer links, which close immediately via onClick for a snappy feel).
+  useEffect(() => {
+    setDrawerOpen(false);
+  }, [location.pathname]);
+
+  // While the drawer is open: lock body scroll + close on Escape.
+  useEffect(() => {
+    if (!drawerOpen) return;
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setDrawerOpen(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => {
+      document.body.style.overflow = prevOverflow;
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [drawerOpen]);
 
   return (
     <ContextMenuProvider>
-    <div className="flex h-screen flex-col bg-slate-50 text-slate-800 dark:bg-slate-900 dark:text-slate-100 lg:flex-row">
-      {/* Desktop sidebar — full width when open, slim icon rail when the
-          hamburger hides it (icons stay visible & clickable) */}
-      {sidebarOpen ? (
-        <aside className="flex w-64 shrink-0 flex-col border-r border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-800">
-          <div className="flex items-center gap-2.5 border-b border-slate-200 px-4 py-4 dark:border-slate-700">
-            <img src="./v2.PNG" alt="CLINICAL Rx" className="h-10 w-10 rounded-lg object-cover" />
-            <div>
-              <div className="text-base font-extrabold tracking-tight text-brand-700 dark:text-brand-300">CLINICAL Rx</div>
-              <div className="text-xs text-slate-400">Clinical Companion</div>
+      <div className="app-shell flex flex-col overflow-hidden bg-slate-50 text-slate-800 dark:bg-slate-900 dark:text-slate-100 lg:flex-row">
+        {/* ================= DESKTOP SIDEBAR (lg+) ================= */}
+        <aside className="hidden w-64 shrink-0 flex-col border-r border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900 lg:flex">
+          <div className="flex items-center gap-3 border-b border-slate-200 px-5 py-5 dark:border-slate-700">
+            <img src="./v2.PNG" alt="CLINICAL Rx logo" className="h-9 w-9 rounded-xl object-cover" />
+            <div className="min-w-0">
+              <div className="truncate text-base font-extrabold tracking-tight text-brand-700 dark:text-brand-300">
+                CLINICAL Rx
+              </div>
+              <div className="text-[11px] text-slate-400">v{APP_VERSION} · Clinical Companion</div>
             </div>
           </div>
-          <nav className="flex flex-1 flex-col justify-start gap-1 overflow-y-auto p-2">
+          <nav className="flex-1 space-y-0.5 overflow-y-auto p-3">
             {NAV.map((n) => (
               <NavLink
                 key={n.to}
                 to={n.to}
                 end={n.to === '/'}
                 className={({ isActive }) =>
-                  `flex items-center gap-3 rounded-lg px-3 py-2.5 text-[15px] transition-colors ${
+                  `flex items-center gap-3.5 rounded-xl px-3.5 py-2.5 text-[15px] font-medium transition-all duration-150 ${
                     isActive
-                      ? 'bg-brand-600 font-semibold text-white'
-                      : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-700'
+                      ? 'bg-brand-600 text-white shadow-sm shadow-brand-600/20'
+                      : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'
                   }`
                 }
               >
-                <span className="text-lg">{n.icon}</span>
-                {n.label}
+                <span className="text-lg leading-none">{n.icon}</span>
+                <span className="truncate">{n.label}</span>
               </NavLink>
             ))}
           </nav>
-        </aside>
-      ) : (
-        <aside className="flex w-16 shrink-0 flex-col border-r border-slate-200 bg-white py-2 dark:border-slate-700 dark:bg-slate-800">
-          <div className="mb-2 flex justify-center">
-            <img src="./v2.PNG" alt="CLINICAL Rx" className="h-9 w-9 rounded-lg object-cover" />
+          <div className="border-t border-slate-200 px-5 py-3 text-[11px] text-slate-400 dark:border-slate-700">
+            Offline-first · works without internet
           </div>
-          <nav className="flex flex-1 flex-col items-stretch gap-1 px-1.5">
-            {NAV.map((n) => (
-              <NavLink
-                key={n.to}
-                to={n.to}
-                end={n.to === '/'}
-                title={n.label}
-                className={({ isActive }) =>
-                  `flex min-h-11 flex-1 items-center justify-center rounded-lg text-[22px] transition-colors ${
-                    isActive ? 'bg-brand-600' : 'hover:bg-slate-100 dark:hover:bg-slate-700'
-                  }`
-                }
-              >
-                <span>{n.icon}</span>
-              </NavLink>
-            ))}
-          </nav>
         </aside>
-      )}
 
-      <main className="flex min-h-0 flex-1 flex-col">
-        {/* Top bar */}
-        <div className="relative flex items-center justify-between gap-2 border-b border-slate-200 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-800 lg:px-6 lg:py-3">
-          <div className="flex min-w-0 items-center gap-2">
-            {/* Hamburger: on mobile opens the nav dropdown; on desktop
-                toggles the sidebar */}
-            <button
-              className="btn-ghost !px-2 !py-1 text-lg leading-none"
-              onClick={() => (window.innerWidth < 1024 ? setMobileNavOpen(!mobileNavOpen) : setSidebarOpen(!sidebarOpen))}
-              title="Menu"
-            >
-              ☰
-            </button>
-            <img src="./v2.PNG" alt="CLINICAL Rx" className="h-7 w-7 rounded-lg object-cover" />
-            <div className="truncate text-sm font-medium text-slate-500 dark:text-slate-300">
-              {/* Live status dot: green = cloud connected, amber = syncing/pending,
-                  slate = local-only. Click toggles the 'beep' pulse on/off. */}
+        {/* ================= MAIN COLUMN ================= */}
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+          {/* -------- Top header (mobile + desktop) -------- */}
+          <header className="relative z-30 flex h-14 shrink-0 items-center justify-between gap-2 border-b border-slate-200 bg-white/95 px-3 backdrop-blur dark:border-slate-700 dark:bg-slate-900/95 sm:px-4 lg:h-16 lg:px-6">
+            <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+              {/* Hamburger — mobile only, opens the slide-in drawer */}
               <button
-                className="inline-flex items-center gap-1.5"
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-2xl leading-none text-slate-600 transition active:scale-95 active:bg-slate-100 dark:text-slate-300 dark:active:bg-slate-800 lg:hidden"
+                onClick={() => setDrawerOpen(true)}
+                aria-label="Open navigation menu"
+              >
+                ☰
+              </button>
+
+              <img src="./v2.PNG" alt="CLINICAL Rx" className="h-8 w-8 shrink-0 rounded-xl object-cover" />
+              <div className="flex min-w-0 items-baseline gap-2">
+                <span className="truncate text-[15px] font-extrabold tracking-tight text-brand-700 dark:text-brand-300 sm:text-lg">
+                  CLINICAL Rx
+                </span>
+                <span className="hidden rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-500 dark:bg-slate-800 dark:text-slate-400 sm:inline">
+                  v{APP_VERSION}
+                </span>
+              </div>
+            </div>
+
+            <div className="flex shrink-0 items-center gap-1 lg:gap-2">
+              {/* Live status: green = cloud connected, amber = syncing/pending, slate = local-only.
+                  Click toggles the pulse "beep". */}
+              <button
+                className="flex items-center gap-1.5 rounded-full px-2 py-1.5 text-xs font-medium transition active:bg-slate-100 dark:active:bg-slate-800 sm:px-3"
                 onClick={() => setBeepOn((v) => !v)}
                 title={beepOn ? 'Status beep on — click to silence' : 'Status beep off — click to enable'}
               >
                 <span
-                  className={`inline-block h-2.5 w-2.5 rounded-full ${
-                    connected ? 'bg-green-500' : syncing ? 'bg-amber-500' : pending > 0 ? 'bg-amber-400' : 'bg-slate-400'
+                  className={`h-2.5 w-2.5 rounded-full ${
+                    connected ? 'bg-emerald-500' : syncing ? 'bg-amber-500' : pending > 0 ? 'bg-amber-400' : 'bg-slate-400'
                   } ${beepOn && (connected || syncing || pending > 0) ? 'animate-pulse' : ''}`}
                 />
-                <span className="hidden sm:inline">{connected ? '☁️ Cloud' : syncing ? 'Syncing…' : pending > 0 ? 'Local · pending' : 'Local'}</span>
-                <span className="hidden sm:inline text-slate-300 dark:text-slate-500">{beepOn ? '🔔' : '🔕'}</span>
+                <span className="hidden text-slate-500 dark:text-slate-400 sm:inline">
+                  {connected ? 'Cloud' : syncing ? 'Syncing' : pending > 0 ? 'Pending' : 'Local'}
+                </span>
               </button>
-            </div>
-          </div>
-          <div className="flex shrink-0 items-center gap-2 lg:gap-3">
-            <UpdateBadge />
-            <SyncIndicator />
-            <button className="btn-ghost !py-1 text-sm" onClick={() => setSearchOpen(true)} title="Global search (Ctrl/⌘+K)">
-              🔍
-            </button>
-            <button className="btn-ghost !px-2 !py-1 text-sm" onClick={() => setHelpOpen(true)} title="Keyboard shortcuts (?)">
-              ?
-            </button>
-            <button className="btn-ghost !px-2 !py-1 text-sm lg:hidden" onClick={() => setPaletteOpen(true)} title="Command palette (Ctrl+P)">
-              ⌘
-            </button>
-            <div className="hidden text-xs text-slate-400 lg:block">
-              Clinical Day {profile?.clinicalDay ?? 1} · {profile?.site}
-            </div>
-          </div>
 
-          {/* Mobile nav dropdown — opens under the hamburger, hides after a tap */}
-          {mobileNavOpen && (
-            <div className="absolute left-0 right-0 top-full z-40 border-b border-slate-200 bg-white shadow-xl dark:border-slate-700 dark:bg-slate-800 lg:hidden">
-              <nav className="grid grid-cols-2 gap-1 p-2">
-                {NAV.map((n) => (
-                  <NavLink
-                    key={n.to}
-                    to={n.to}
-                    end={n.to === '/'}
-                    onClick={() => setMobileNavOpen(false)}
-                    className={({ isActive }) =>
-                      `flex items-center gap-2 rounded-lg px-3 py-2.5 text-sm ${
-                        isActive ? 'bg-brand-600 font-semibold text-white' : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-700'
-                      }`
-                    }
-                  >
-                    <span className="text-lg">{n.icon}</span>
-                    {n.label}
-                  </NavLink>
-                ))}
-              </nav>
+              <UpdateBadge />
+              <SyncIndicator />
+
+              <button
+                className="btn-ghost hidden h-9 w-9 items-center justify-center !px-0 !py-0 text-lg lg:flex"
+                onClick={() => setSearchOpen(true)}
+                title="Global search (Ctrl/⌘+K)"
+              >
+                🔍
+              </button>
+              <button
+                className="btn-ghost hidden h-9 w-9 items-center justify-center !px-0 !py-0 text-lg lg:flex"
+                onClick={() => setHelpOpen(true)}
+                title="Keyboard shortcuts (?)"
+              >
+                ?
+              </button>
+              <button
+                className="btn-ghost hidden h-9 w-9 items-center justify-center !px-0 !py-0 text-base lg:flex"
+                onClick={() => setPaletteOpen(true)}
+                title="Command palette (Ctrl+P)"
+              >
+                ⌘
+              </button>
+
+              <div className="hidden whitespace-nowrap text-xs text-slate-400 lg:block">
+                Day {profile?.clinicalDay ?? 1}
+                {profile?.site ? ` · ${profile.site}` : ''}
+              </div>
             </div>
-          )}
+          </header>
+
+          {/* -------- Content -------- */}
+          <main className="flex-1 overflow-y-auto">
+            <div className="mx-auto w-full max-w-7xl px-4 py-4 pb-24 sm:px-6 lg:px-8 lg:py-8 lg:pb-10">
+              {children}
+            </div>
+          </main>
         </div>
 
-        {/* Content — tighter on mobile, comfortable on desktop */}
-        <div className="flex-1 overflow-y-auto p-2.5 sm:p-4 lg:p-8">{children}</div>
-      </main>
+        {/* ================= MOBILE SLIDE-IN DRAWER ================= */}
+        <div
+          className={`fixed inset-0 z-[60] transition-opacity duration-300 lg:hidden ${
+            drawerOpen ? 'opacity-100' : 'pointer-events-none opacity-0'
+          }`}
+          aria-hidden={!drawerOpen}
+        >
+          {/* Backdrop */}
+          <div
+            className={`absolute inset-0 bg-black/60 backdrop-blur-[2px] transition-opacity duration-300 ${
+              drawerOpen ? 'opacity-100' : 'opacity-0'
+            }`}
+            onClick={() => setDrawerOpen(false)}
+          />
 
-      <SearchModal open={searchOpen} onClose={() => setSearchOpen(false)} />
-      <ShortcutHelp />
-      <CommandPalette />
-      <UndoToast />
-      <TaskIndicator />
-      <NotificationBanner />
-    </div>
+          {/* Panel — slides in from the left */}
+          <aside
+            className={`absolute inset-y-0 left-0 flex w-80 max-w-[85%] transform flex-col bg-white shadow-2xl transition-transform duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] dark:bg-slate-900 ${
+              drawerOpen ? 'translate-x-0' : '-translate-x-full'
+            }`}
+            style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}
+          >
+            {/* Drawer header */}
+            <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4 dark:border-slate-700">
+              <div className="flex min-w-0 items-center gap-3">
+                <img src="./v2.PNG" alt="CLINICAL Rx logo" className="h-9 w-9 shrink-0 rounded-xl object-cover" />
+                <div className="min-w-0">
+                  <div className="truncate text-base font-extrabold tracking-tight text-brand-700 dark:text-brand-300">
+                    CLINICAL Rx
+                  </div>
+                  <div className="text-[11px] text-slate-400">
+                    v{APP_VERSION} · Clinical Companion
+                  </div>
+                </div>
+              </div>
+              <button
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-2xl leading-none text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800"
+                onClick={() => setDrawerOpen(false)}
+                aria-label="Close menu"
+              >
+                ×
+              </button>
+            </div>
+
+            {/* Drawer nav — tapping any item closes the drawer automatically */}
+            <nav className="flex-1 overflow-y-auto py-2">
+              {NAV.map((n) => (
+                <NavLink
+                  key={n.to}
+                  to={n.to}
+                  end={n.to === '/'}
+                  onClick={() => setDrawerOpen(false)}
+                  className={({ isActive }) =>
+                    `flex w-full items-center gap-4 px-5 py-[15px] text-left transition-all duration-150 active:scale-[0.98] ${
+                      isActive
+                        ? 'bg-brand-50 font-semibold text-brand-700 dark:bg-brand-950 dark:text-brand-300'
+                        : 'text-slate-700 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-800'
+                    }`
+                  }
+                >
+                  <span className="w-8 shrink-0 text-center text-xl leading-none">{n.icon}</span>
+                  <span className="truncate text-[15px]">{n.label}</span>
+                  {location.pathname === n.to && (
+                    <span className="ml-auto h-2 w-2 shrink-0 rounded-full bg-brand-600" />
+                  )}
+                </NavLink>
+              ))}
+            </nav>
+
+            {/* Drawer footer */}
+            <div className="border-t border-slate-200 px-5 py-4 text-center text-xs text-slate-400 dark:border-slate-700">
+              <div className="font-medium">CLINICAL Rx · v{APP_VERSION}</div>
+              <div className="mt-0.5">Offline-first clinical companion</div>
+            </div>
+          </aside>
+        </div>
+
+        {/* ================= FIXED BOTTOM NAV (mobile only) ================= */}
+        <nav
+          className="fixed bottom-0 left-0 right-0 z-40 border-t border-slate-200 bg-white/95 backdrop-blur-xl dark:border-slate-700 dark:bg-slate-900/95 lg:hidden"
+          style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 6px)' }}
+        >
+          <div className="flex items-stretch justify-around gap-0.5 px-1 pt-1.5">
+            {BOTTOM_NAV.map((n) => (
+              <NavLink
+                key={n.to}
+                to={n.to}
+                end={n.to === '/'}
+                className={({ isActive }) =>
+                  `flex min-w-[54px] flex-1 flex-col items-center justify-center gap-0.5 rounded-xl px-1 py-1.5 transition-all duration-150 active:scale-95 ${
+                    isActive
+                      ? 'bg-brand-50 text-brand-700 dark:bg-brand-950 dark:text-brand-300'
+                      : 'text-slate-400 active:bg-slate-100 dark:text-slate-500 dark:active:bg-slate-800'
+                  }`
+                }
+              >
+                <span className="text-[21px] leading-none">{n.icon}</span>
+                <span className="text-[9.5px] font-semibold tracking-tight">{n.label}</span>
+              </NavLink>
+            ))}
+
+            {/* "More" opens the full drawer */}
+            <button
+              className={`flex min-w-[54px] flex-1 flex-col items-center justify-center gap-0.5 rounded-xl px-1 py-1.5 transition-all duration-150 active:scale-95 ${
+                drawerOpen
+                  ? 'bg-brand-50 text-brand-700 dark:bg-brand-950 dark:text-brand-300'
+                  : 'text-slate-400 active:bg-slate-100 dark:text-slate-500 dark:active:bg-slate-800'
+              }`}
+              onClick={() => setDrawerOpen(true)}
+            >
+              <span className="text-[21px] leading-none">⋯</span>
+              <span className="text-[9.5px] font-semibold tracking-tight">More</span>
+            </button>
+          </div>
+        </nav>
+
+        {/* Modals & overlays */}
+        <SearchModal open={searchOpen} onClose={() => setSearchOpen(false)} />
+        <ShortcutHelp />
+        <CommandPalette />
+        <UndoToast />
+        <TaskIndicator />
+        <NotificationBanner />
+      </div>
     </ContextMenuProvider>
   );
 }
