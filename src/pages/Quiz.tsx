@@ -68,6 +68,14 @@ export function Quiz() {
   // task internally; this one is what Quiz uses to adopt on return.
   const myTask = tasks.find((t) => t.kind === 'quiz' && t.status === 'running') || tasks.find((t) => t.kind === 'quiz');
 
+  // Generation state comes from the GLOBAL task store, not component state —
+  // so it survives navigation. If the user left the tab mid-generation and
+  // comes back, `loading` has reset but myTask still shows what's happening
+  // (and the finished quiz is adopted below).
+  const generating = loading || myTask?.status === 'running';
+  const pendingDone = !quiz && myTask?.status === 'done';
+  const liveText = streamText || myTask?.streamText || '';
+
   // Adopt a finished quiz task when it completes (even if we were on another
   // tab) or surface its error.
   useEffect(() => {
@@ -91,6 +99,11 @@ export function Quiz() {
           }
         }
       } catch { /* ignore parse issues */ }
+      // Drop any other finished 'quiz' tasks left behind by earlier runs.
+      useTasks
+        .getState()
+        .tasks.filter((t) => t.kind === 'quiz' && t.id !== myTask.id && t.status !== 'running')
+        .forEach((t) => clearTask(t.id));
     } else if (myTask?.status === 'error') {
       setLoading(false);
       setStatus('⚠️ ' + (myTask.error || 'Could not generate a quiz.'));
@@ -128,6 +141,12 @@ export function Quiz() {
   async function start() {
     if (!aiReady('questionGen')) {
       setStatus('⚠️ Enable the AI Question Generator and add an API key in Settings → AI first.');
+      return;
+    }
+    // Don't stack up duplicate generations if one is already running (e.g.
+    // the user left the tab and came back while it was still working).
+    if (tasks.some((t) => t.kind === 'quiz' && t.status === 'running')) {
+      setStatus('ℹ️ A quiz is already generating — it will appear here as soon as it is ready.');
       return;
     }
     setLoading(true);
@@ -177,6 +196,9 @@ export function Quiz() {
     setActiveQuizId(draft.id);
     // Log this generation to the Questions section (AI → Questions).
     import('../services/aiTools').then((m) => m.logAiTask('questionGen', `Generate ${count} quiz question(s)${focus ? ' on ' + focus : ''}`, `Quiz "${q.title}" generated — ${q.questions.length} questions`)).catch(() => {});
+    // If the user is on another tab (or the app is in the background), let
+    // them know the quiz is ready — in-app banner + desktop notification.
+    import('../services/reminders').then((m) => m.broadcastReminder('✅ Quiz ready', `"${q.title}" — ${q.questions.length} questions. Open the Quiz tab to take it.`)).catch(() => {});
     setQuiz(q);
     setAnswers(new Array(q.questions.length).fill(-1));
     setTimeLeft(q.questions.length * 60); // 60s per question
@@ -354,22 +376,7 @@ export function Quiz() {
         }
       />
 
-      {!quiz && !loading ? (
-        <EmptyState
-          icon="📝"
-          title="No quiz yet"
-          hint="Generate a timed multiple-choice exam from your recorded conditions, medicines, investigations and questions — results are saved automatically for review anytime."
-          actions={<button className="btn-primary" onClick={startFresh}>＋ Create a Quiz</button>}
-        />
-      ) : loading ? (
-        <div className="card max-w-2xl">
-          <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-lg font-bold">Generating your quiz…</h2>
-            {streamText && <span className="text-xs text-slate-400">streaming…</span>}
-          </div>
-          <AiThinking moduleLabel="AI Question Generator" live={streamText || undefined} detail={!streamText ? 'Building questions from your clinical exposure…' : undefined} />
-        </div>
-      ) : quiz ? (
+      {quiz ? (
         <div className="space-y-4">
           {/* Exam header */}
           <div className="card flex flex-wrap items-center justify-between gap-3">
@@ -486,7 +493,40 @@ export function Quiz() {
             <button className="btn-secondary" disabled={current === quiz.questions.length - 1} onClick={() => setCurrent((c) => c + 1)}>Next ›</button>
           </div>
         </div>
-      ) : null}
+      ) : generating || pendingDone ? (
+        <div className="card max-w-2xl">
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="text-lg font-bold">{pendingDone ? 'Finalizing your quiz…' : 'Generating your quiz…'}</h2>
+            {liveText && <span className="text-xs text-slate-400">streaming…</span>}
+          </div>
+          <AiThinking
+            moduleLabel="AI Question Generator"
+            live={liveText || undefined}
+            detail={!liveText ? (pendingDone ? 'Opening your finished quiz…' : 'Building questions from your clinical exposure…') : undefined}
+          />
+          {myTask?.streamText && (
+            <p className="mt-3 max-h-24 overflow-y-auto rounded-lg bg-slate-50 p-3 text-[11px] leading-relaxed text-slate-500 dark:bg-slate-800 dark:text-slate-400">
+              {myTask.streamText.slice(-400)}
+            </p>
+          )}
+        </div>
+      ) : myTask?.status === 'error' ? (
+        <EmptyState
+          icon="⚠️"
+          title="Quiz generation failed"
+          hint={myTask.error || 'Check your AI key / connection and try again.'}
+          actions={
+            <button className="btn-primary" onClick={startFresh}>＋ Try again</button>
+          }
+        />
+      ) : (
+        <EmptyState
+          icon="📝"
+          title="No quiz yet"
+          hint="Generate a timed multiple-choice exam from your recorded conditions, medicines, investigations and questions — results are saved automatically for review anytime."
+          actions={<button className="btn-primary" onClick={startFresh}>＋ Create a Quiz</button>}
+        />
+      )}
 
       {/* Setup modal */}
       <Modal open={setupOpen} onClose={() => setSetupOpen(false)} title="Create Quiz">

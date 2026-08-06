@@ -191,7 +191,15 @@ export async function runAiModule(
   // and exposes live progress for the Arena-style indicator.
   const label = MODULE_LABEL[key] || key;
   return runTaskInBackground(key as TaskKind, key, label, (onToken) =>
-    aiChat(cfg, system, userPrompt, { ...opts, onToken: opts.onToken || onToken })
+    aiChat(cfg, system, userPrompt, {
+      ...opts,
+      // Chain tokens to BOTH the global task (so the indicator stays live
+      // even after the page unmounts) AND the caller's own stream callback.
+      onToken: (t) => {
+        onToken(t);
+        opts.onToken?.(t);
+      },
+    })
   );
 }
 
