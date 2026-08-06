@@ -5,6 +5,9 @@ import { SqliteKV } from './db/database';
 
 let store: SqliteKV | null = null;
 let mainWindow: BrowserWindow | null = null;
+// Set true when the app should really quit (update install, explicit quit)
+// instead of hiding to the background.
+let allowQuit = false;
 
 const UPDATE_OWNER = 'g2code33';
 const UPDATE_REPO = 'CLINICAL-RX-';
@@ -178,10 +181,15 @@ function initIpc() {
   ipcMain.handle('update:install', async () => {
     if (!app.isPackaged) return { ok: false, reason: 'dev' };
     try {
-      // Wait a beat for the IPC response to flush, then quit & install.
-      // isForceRunAfter=true relaunches the app automatically after the
-      // installer finishes — the user shouldn't have to open it manually.
-      setTimeout(() => autoUpdater.quitAndInstall(false, true), 1000);
+      // Quit & install. Use app.relaunch() BEFORE quitting so the app is
+      // guaranteed to re-open after the installer finishes (isForceRunAfter
+      // alone is unreliable, and the hide-on-close handler can swallow the
+      // relaunch). Relaunch args include the original ones.
+      setTimeout(() => {
+        app.relaunch();
+        allowQuit = true;
+        autoUpdater.quitAndInstall(false, false);
+      }, 1000);
       return { ok: true };
     } catch (e: any) {
       return { ok: false, reason: 'error', message: e?.message || 'Install failed' };
@@ -216,7 +224,6 @@ if (!gotLock) {
 // long-running AI tasks (quiz generation, bundle enrichment, chat replies)
 // finish even if the user closes the window. A single window is re-shown on
 // relaunch.
-let allowQuit = false;
 app.on('before-quit', () => { allowQuit = true; });
 app.on('window-all-closed', () => {
   // On Linux/Windows, close = hide (keep working). Real quit only via the app
