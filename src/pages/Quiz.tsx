@@ -52,6 +52,7 @@ export function Quiz() {
   const [bankCount, setBankCount] = useState(10);
   const [streamText, setStreamText] = useState('');
   const [savedId, setSavedId] = useState<string | null>(null); // reviewing a saved quiz
+  const [activeQuizId, setActiveQuizId] = useState<string | null>(null); // auto-saved in-progress quiz
   const timerRef = useRef<any>(null);
   const bank = loadBank();
   const showMenu = useContextMenu();
@@ -162,12 +163,24 @@ export function Quiz() {
     // Persist the result into our task so the adopt effect picks it up on
     // return, and also adopt immediately (we're still mounted).
     finishTask(taskId, JSON.stringify({ title: q.title, questions: q.questions }));
+    // AUTO-SAVE immediately as a saved quiz (work in progress) so it's never
+    // lost — even if the user exits without submitting. It gets updated on
+    // submit/exit with answers + score.
+    const draft = newSavedQuiz({
+      title: q.title,
+      questions: q.questions,
+      answers: new Array(q.questions.length).fill(-1),
+      score: 0,
+      durationSeconds: q.questions.length * 60,
+    });
+    await save('quiz', draft);
+    setActiveQuizId(draft.id);
     // Log this generation to the Questions section (AI → Questions).
     import('../services/aiTools').then((m) => m.logAiTask('questionGen', `Generate ${count} quiz question(s)${focus ? ' on ' + focus : ''}`, `Quiz "${q.title}" generated — ${q.questions.length} questions`)).catch(() => {});
     setQuiz(q);
     setAnswers(new Array(q.questions.length).fill(-1));
     setTimeLeft(q.questions.length * 60); // 60s per question
-    setStatus(`✓ Quiz ready — ${q.questions.length} questions`);
+    setStatus(`✓ Quiz saved & ready — ${q.questions.length} questions`);
     // NOTE: do NOT clearTask here — if the user navigated away, the adopt
     // effect (which runs on return) needs the finished task to pick up.
     // The effect clears it after adopting.
@@ -206,12 +219,23 @@ export function Quiz() {
   }
 
   /** Close the current quiz and return to the quiz home (history stays). */
-  function exitQuiz() {
+  async function exitQuiz() {
+    // If a quiz is still in progress (not submitted), save it as-is so it's
+    // not lost — the user can reopen, reattempt or retry-wrong anytime.
+    if (quiz && !submitted) {
+      const existing = activeQuizId ? savedQuizzes.find((q) => q.id === activeQuizId) : null;
+      const rec = existing
+        ? { ...existing, answers, updatedAt: Date.now() }
+        : newSavedQuiz({ title: quiz.title, questions: quiz.questions, answers, score: 0, durationSeconds: Math.round(quiz.questions.length * 60) });
+      await save('quiz', rec);
+      setStatus(`✓ Quiz saved (in progress) — resume anytime`);
+    }
     setQuiz(null);
     setAnswers([]);
     setSubmitted(false);
     setCurrent(0);
     setSavedId(null);
+    setActiveQuizId(null);
     setTimeLeft(0);
     setStreamText('');
     setReviewOpen(false);
@@ -253,7 +277,10 @@ export function Quiz() {
     setSubmitted(true);
     clearInterval(timerRef.current);
     const duration = Math.max(0, Math.round(((quiz.questions.length * 60) - timeLeft)));
-    // Persist the completed quiz so it can be reviewed anytime.
+    // Update the SAME auto-saved record (created at generation) with the
+    // user's answers + score, so it stays one entry in History. If for some
+    // reason it wasn't saved yet, create it now.
+    const existing = activeQuizId ? savedQuizzes.find((q) => q.id === activeQuizId) : null;
     const rec = newSavedQuiz({
       title: quiz.title,
       questions: quiz.questions,
@@ -261,25 +288,31 @@ export function Quiz() {
       score,
       durationSeconds: duration,
     });
-    await save('quiz', rec);
-    setSavedId(rec.id);
+    const final = existing
+      ? { ...existing, ...rec, answers, score, total: quiz.questions.length, updatedAt: Date.now() }
+      : rec;
+    await save('quiz', final);
+    setSavedId(final.id);
+    setActiveQuizId(final.id);
     setStatus(`✓ Quiz saved & submitted — ${score}/${quiz.questions.length}`);
   }
 
   function openHistory(id: string) {
     const rec = savedQuizzes.find((q) => q.id === id);
     if (!rec) return;
+    const inProgress = !rec.answers || rec.answers.every((a) => a === -1);
     setQuiz({
       title: rec.title,
       questions: rec.questions,
     });
     setAnswers(rec.answers);
-    setSubmitted(true);
+    setSubmitted(!inProgress); // in-progress quizzes resume as a live attempt
     setCurrent(0);
     setSavedId(rec.id);
-    setTimeLeft(0);
+    setActiveQuizId(rec.id);
+    setTimeLeft(inProgress ? rec.questions.length * 60 : 0);
     setHistoryOpen(false);
-    setStatus(`Reviewing "${rec.title}" (${rec.score}/${rec.total})`);
+    setStatus(inProgress ? `▶ Continuing "${rec.title}"` : `Reviewing "${rec.title}" (${rec.score}/${rec.total})`);
   }
 
   async function deleteHistory(id: string) {
@@ -571,14 +604,19 @@ export function Quiz() {
                 <div className="space-y-2">
                   {manualQuizzes.map((q) => {
                     const p = q.total ? Math.round((q.score / q.total) * 100) : 0;
+                    const inProgress = !q.answers || q.answers.every((a) => a === -1);
                     return (
                       <div key={q.id} className="flex cursor-default items-center gap-3 rounded-lg border border-slate-200 p-3 dark:border-slate-700" {...ctxHandlers(showMenu, historyMenu(q))}>
                         <div className="min-w-0 flex-1">
                           <div className="truncate text-sm font-semibold">{q.title}</div>
                           <div className="text-xs text-slate-400">{q.date} · {q.total} questions · {Math.round(q.durationSeconds / 60)} min</div>
                         </div>
-                        <Pill color={p >= 70 ? 'green' : p >= 50 ? 'amber' : 'red'}>{q.score}/{q.total} ({p}%)</Pill>
-                        <button className="btn-secondary !py-1 text-xs" onClick={() => openHistory(q.id)}>Review</button>
+                        {inProgress ? (
+                          <Pill color="amber">⏳ In progress</Pill>
+                        ) : (
+                          <Pill color={p >= 70 ? 'green' : p >= 50 ? 'amber' : 'red'}>{q.score}/{q.total} ({p}%)</Pill>
+                        )}
+                        <button className="btn-secondary !py-1 text-xs" onClick={() => openHistory(q.id)}>{inProgress ? '▶ Continue' : 'Review'}</button>
                         <button className="btn-secondary !py-1 text-xs" onClick={() => startRetry(q, true)} title="Re-quiz only wrong answers">🔁 Wrong</button>
                         <button className="btn-secondary !py-1 text-xs" onClick={() => startRetry(q, false)} title="Re-take the same quiz">↻ Same</button>
                         <button className="btn-ghost !py-1 text-xs text-red-500" onClick={() => void deleteHistory(q.id)}>🗑</button>
