@@ -74,6 +74,14 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       # ----- Android APK (ubuntu leg only) -----
+      # Capacitor CLI 8 requires Node >= 22 — switch to Node 22 for the
+      # Android steps only (the desktop pipeline stays on Node 20).
+      - name: Set up Node 22 (Capacitor)
+        if: matrix.os == 'ubuntu-latest'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
       - name: Set up JDK 17
         if: matrix.os == 'ubuntu-latest'
         uses: actions/setup-java@v4
@@ -156,6 +164,14 @@ jobs:
           EP_GH_IGNORE_TIME: 'true'
 
       # ----- Android APK (ubuntu leg only) -----
+      # Capacitor CLI 8 requires Node >= 22 — switch to Node 22 for the
+      # Android steps only (the desktop pipeline stays on Node 20).
+      - name: Set up Node 22 (Capacitor)
+        if: matrix.os == 'ubuntu-latest'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
       - name: Set up JDK 17
         if: matrix.os == 'ubuntu-latest'
         uses: actions/setup-java@v4
