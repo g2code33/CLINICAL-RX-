@@ -37,6 +37,17 @@ export function notify(title: string, body: string): void {
   }
 }
 
+/**
+ * Broadcast a reminder: in-app banner (any page) + desktop notification +
+ * sound, so the user is aware no matter where they are.
+ */
+export function broadcastReminder(title: string, body: string): void {
+  // In-app banner + sound via the global store.
+  import('../stores/notifications').then((m) => m.useNotifs.getState().push(title, body)).catch(() => {});
+  // Desktop/system notification.
+  notify(title, body);
+}
+
 /** Check every minute whether a reminder is due; fire + mark done. */
 export function startReminderWatcher(): () => void {
   let lastChecked = Date.now();
@@ -52,7 +63,7 @@ export function startReminderWatcher(): () => void {
       const key = `${r.id}:${iso}:${hhmm}`;
       if ((useData as any).__fired?.[key]) continue;
       (useData as any).__fired = { ...((useData as any).__fired || {}), [key]: true };
-      notify(`⏰ ${r.title}`, r.note || `Reminder for ${iso} at ${hhmm}`);
+      broadcastReminder(`⏰ ${r.title}`, r.note || `Reminder for ${iso} at ${hhmm}`);
       void useData.getState().save('reminder', { ...r, done: true, updatedAt: Date.now() });
     }
     lastChecked = Date.now();

@@ -11,6 +11,7 @@ import { UpdateBadge } from './UpdateBadge';
 import { UndoToast } from './UndoToast';
 import { ContextMenuProvider } from './ContextMenu';
 import { TaskIndicator } from './TaskIndicator';
+import { NotificationBanner } from './NotificationBanner';
 
 const NAV = [
   { to: '/', icon: '🏠', label: 'Home' },
@@ -195,6 +196,7 @@ export function Layout({ children }: { children: ReactNode }) {
       <CommandPalette />
       <UndoToast />
       <TaskIndicator />
+      <NotificationBanner />
     </div>
     </ContextMenuProvider>
   );
