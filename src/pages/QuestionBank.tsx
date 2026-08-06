@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { PageHeader, EmptyState, Pill } from '../components/ui';
 import { Modal } from '../components/Modal';
+import { ViewToggle } from '../components/ViewToggle';
 import {
   loadGroups, saveGroups, loadBank, saveBank, parseBankJson,
   createGroup, addToGroup, deleteGroup, renameGroup, totalQuestions,
@@ -20,6 +21,7 @@ export function QuestionBank() {
   const [preview, setPreview] = useState<BankQuestion[] | null>(null);
   const [renameId, setRenameId] = useState<string | null>(null);
   const [renameVal, setRenameVal] = useState('');
+  const [view, setView] = useState<'cards' | 'list'>('cards');
 
   function refresh() { setGroups(loadGroups()); }
 
@@ -124,25 +126,48 @@ export function QuestionBank() {
           </div>
         </div>
       ) : (
-        /* ---- Group cards: label + date + count, click to open ---- */
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {groups.map((g) => (
-            <div key={g.id} className="card flex cursor-pointer flex-col justify-between transition-colors hover:border-brand-400" onClick={() => setOpenGroupId(g.id)}>
-              <div>
-                <div className="flex items-center justify-between">
-                  <h3 className="font-bold text-slate-800 dark:text-slate-100">{g.label}</h3>
-                  <span className="rounded-full bg-brand-100 px-2 py-0.5 text-[11px] font-semibold text-brand-700 dark:bg-brand-900 dark:text-brand-300">{g.questions.length}</span>
+        <>
+          <div className="mb-3 flex items-center justify-between">
+            <span className="text-xs font-semibold text-slate-400">{groups.length} group(s) · {total} question(s)</span>
+            <ViewToggle view={view} onChange={setView} />
+          </div>
+          {view === 'cards' ? (
+            /* ---- Group cards: label + date + count, click to open ---- */
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+              {groups.map((g) => (
+                <div key={g.id} className="card flex cursor-pointer flex-col justify-between transition-colors hover:border-brand-400" onClick={() => setOpenGroupId(g.id)}>
+                  <div>
+                    <div className="flex items-center justify-between">
+                      <h3 className="font-bold text-slate-800 dark:text-slate-100">{g.label}</h3>
+                      <span className="rounded-full bg-brand-100 px-2 py-0.5 text-[11px] font-semibold text-brand-700 dark:bg-brand-900 dark:text-brand-300">{g.questions.length}</span>
+                    </div>
+                    <div className="mt-1 text-xs text-slate-400">📅 {fmtDate(g.createdAt)}</div>
+                    <p className="mt-2 line-clamp-2 text-sm text-slate-500 dark:text-slate-400">{g.questions[0]?.question || 'No questions'}</p>
+                  </div>
+                  <div className="mt-3 flex items-center justify-between">
+                    <button className="btn-secondary !py-1 text-xs" onClick={(e) => { e.stopPropagation(); setRenameId(g.id); setRenameVal(g.label); }}>✏️ Rename</button>
+                    <span className="text-xs text-brand-600 dark:text-brand-400">Open →</span>
+                  </div>
                 </div>
-                <div className="mt-1 text-xs text-slate-400">📅 {fmtDate(g.createdAt)}</div>
-                <p className="mt-2 line-clamp-2 text-sm text-slate-500 dark:text-slate-400">{g.questions[0]?.question || 'No questions'}</p>
-              </div>
-              <div className="mt-3 flex items-center justify-between">
-                <button className="btn-secondary !py-1 text-xs" onClick={(e) => { e.stopPropagation(); setRenameId(g.id); setRenameVal(g.label); }}>✏️ Rename</button>
-                <span className="text-xs text-brand-600 dark:text-brand-400">Open →</span>
-              </div>
+              ))}
             </div>
-          ))}
-        </div>
+          ) : (
+            /* ---- Group LIST: each group a separate row ---- */
+            <div className="card divide-y divide-slate-100 dark:divide-slate-800">
+              {groups.map((g) => (
+                <div key={g.id} className="flex cursor-pointer items-center gap-3 p-3 transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/60" onClick={() => setOpenGroupId(g.id)}>
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate font-medium text-slate-800 dark:text-slate-100">{g.label}</div>
+                    <div className="mt-0.5 truncate text-xs text-slate-400">📅 {fmtDate(g.createdAt)} · {g.questions.length} questions</div>
+                  </div>
+                  <span className="rounded-full bg-brand-100 px-2 py-0.5 text-[11px] font-semibold text-brand-700 dark:bg-brand-900 dark:text-brand-300">{g.questions.length}</span>
+                  <button className="btn-ghost !p-1 text-xs" onClick={(e) => { e.stopPropagation(); setRenameId(g.id); setRenameVal(g.label); }} title="Rename">✏️</button>
+                  <button className="btn-ghost !p-1 text-xs text-brand-600 dark:text-brand-400" onClick={() => setOpenGroupId(g.id)} title="Open">Open →</button>
+                </div>
+              ))}
+            </div>
+          )}
+        </>
       )}
 
       {/* Rename modal */}
