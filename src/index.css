@@ -56,3 +56,11 @@ body {
   input, select, textarea { font-size: 16px; }
 }
 
+/* App shell fills the viewport; on mobile browsers prefer the "dynamic"
+   viewport height so the fixed bottom nav never gets hidden behind the
+   browser chrome. */
+.app-shell { height: 100vh; }
+@supports (height: 100dvh) {
+  .app-shell { height: 100dvh; }
+}
+
