@@ -8,6 +8,7 @@ import { copyToClipboard } from '../services/export';
 import { loadBank } from '../services/questionBank';
 import { useContextMenu, ctxHandlers, type CtxItem } from '../components/ContextMenu';
 import { AiThinking } from '../components/AiThinking';
+import { useTasks } from '../stores/tasks';
 import { newSavedQuiz } from '../services/defaults';
 import type { SavedQuiz } from '../types';
 
@@ -43,6 +44,43 @@ export function Quiz() {
   const timerRef = useRef<any>(null);
   const bank = loadBank();
   const showMenu = useContextMenu();
+  // Global task store: the generation continues even when the component
+  // unmounts (user navigates away); the result is picked up on return.
+  const tasks = useTasks((s) => s.tasks);
+  const appendStream = useTasks((s) => s.appendStream);
+  const clearTask = useTasks((s) => s.clearTask);
+  const myTask = tasks.find((t) => t.kind === 'quiz');
+
+  // Adopt a finished quiz task when it completes (even if we were on another
+  // tab) or surface its error.
+  useEffect(() => {
+    if (myTask?.status === 'done' && myTask.resultText) {
+      try {
+        const start = myTask.resultText.indexOf('{');
+        const end = myTask.resultText.lastIndexOf('}');
+        if (start >= 0 && end > start) {
+          const parsed = JSON.parse(myTask.resultText.slice(start, end + 1));
+          const qs = Array.isArray(parsed.questions) ? parsed.questions : [];
+          if (qs.length) {
+            setQuiz({ title: parsed.title || 'CLINICAL Rx Quiz', questions: qs as QuizType['questions'] });
+            setAnswers(new Array(qs.length).fill(-1));
+            setSubmitted(false);
+            setCurrent(0);
+            setSavedId(null);
+            setTimeLeft(qs.length * 60);
+            setLoading(false);
+            setStatus(`✓ Quiz ready — ${qs.length} questions`);
+            clearTask(myTask.id);
+          }
+        }
+      } catch { /* ignore parse issues */ }
+    } else if (myTask?.status === 'error') {
+      setLoading(false);
+      setStatus('⚠️ ' + (myTask.error || 'Could not generate a quiz.'));
+      clearTask(myTask.id);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [myTask?.status, myTask?.resultText, myTask?.error]);
 
   function historyMenu(q: SavedQuiz): CtxItem[] {
     return [
@@ -82,8 +120,18 @@ export function Quiz() {
     setSavedId(null);
     setStreamText('');
     setStatus('🤖 Generating quiz from your clinical exposure…');
+
+    // generateQuiz -> runAiModule -> runTaskInBackground ALREADY runs the
+    // work in the global task store, so it continues even if the component
+    // unmounts (user navigates away). We just stream tokens into the task
+    // store too, and adopt the result on return via the useEffect above.
     const q = await generateQuiz(focus, count, {
-      onToken: (t) => setStreamText((s) => (s + t).slice(-500)),
+      onToken: (t) => {
+        setStreamText((s) => (s + t).slice(-500));
+        // appendStream to any running quiz task (mirror the live stream).
+        const run = useTasks.getState().tasks.find((tk) => tk.kind === 'quiz' && tk.status === 'running');
+        if (run) appendStream(run.id, t);
+      },
     });
     setLoading(false);
     if (!q) {
