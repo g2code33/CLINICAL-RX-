@@ -47,9 +47,14 @@ export function Quiz() {
   // Global task store: the generation continues even when the component
   // unmounts (user navigates away); the result is picked up on return.
   const tasks = useTasks((s) => s.tasks);
+  const startTask = useTasks((s) => s.startTask);
   const appendStream = useTasks((s) => s.appendStream);
+  const finishTask = useTasks((s) => s.finishTask);
+  const failTask = useTasks((s) => s.failTask);
   const clearTask = useTasks((s) => s.clearTask);
-  const myTask = tasks.find((t) => t.kind === 'quiz');
+  // Our own quiz task (kind 'quiz') — the AI layer creates a 'questionGen'
+  // task internally; this one is what Quiz uses to adopt on return.
+  const myTask = tasks.find((t) => t.kind === 'quiz' && t.status === 'running') || tasks.find((t) => t.kind === 'quiz');
 
   // Adopt a finished quiz task when it completes (even if we were on another
   // tab) or surface its error.
@@ -122,29 +127,39 @@ export function Quiz() {
     setStreamText('');
     setStatus('🤖 Generating quiz from your clinical exposure…');
 
-    // generateQuiz -> runAiModule -> runTaskInBackground ALREADY runs the
-    // work in the global task store, so it continues even if the component
-    // unmounts (user navigates away). We just stream tokens into the task
-    // store too, and adopt the result on return via the useEffect above.
+    // Create OUR quiz task (kind 'quiz') so it survives unmount and can be
+    // adopted when the user returns. generateQuiz also creates a
+    // 'questionGen' task internally (shown by the left indicator) — that's
+    // fine; this one carries the final result back to the page.
+    const taskId = startTask({
+      kind: 'quiz',
+      section: 'questionGen',
+      label: `Generating ${count}-question quiz${focus ? ' on ' + focus : ''}`,
+    });
     const q = await generateQuiz(focus, count, {
       onToken: (t) => {
         setStreamText((s) => (s + t).slice(-500));
-        // appendStream to any running quiz task (mirror the live stream).
-        const run = useTasks.getState().tasks.find((tk) => tk.kind === 'quiz' && tk.status === 'running');
-        if (run) appendStream(run.id, t);
+        appendStream(taskId, t);
       },
     });
     setLoading(false);
     if (!q) {
+      failTask(taskId, 'Could not generate a quiz. Check your AI key / connection.');
       setStatus('⚠️ Could not generate a quiz. Check your AI key / connection.');
       return;
     }
+    // Persist the result into our task so the adopt effect picks it up on
+    // return, and also adopt immediately (we're still mounted).
+    finishTask(taskId, JSON.stringify({ title: q.title, questions: q.questions }));
     // Log this generation to the Questions section (AI → Questions).
     import('../services/aiTools').then((m) => m.logAiTask('questionGen', `Generate ${count} quiz question(s)${focus ? ' on ' + focus : ''}`, `Quiz "${q.title}" generated — ${q.questions.length} questions`)).catch(() => {});
     setQuiz(q);
     setAnswers(new Array(q.questions.length).fill(-1));
     setTimeLeft(q.questions.length * 60); // 60s per question
     setStatus(`✓ Quiz ready — ${q.questions.length} questions`);
+    // NOTE: do NOT clearTask here — if the user navigated away, the adopt
+    // effect (which runs on return) needs the finished task to pick up.
+    // The effect clears it after adopting.
   }
 
   function startFromBank() {
