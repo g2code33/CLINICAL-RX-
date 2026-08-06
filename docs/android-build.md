@@ -30,9 +30,11 @@ No Android Studio, no local build needed. ✅
 
 1. Install **Android Studio** (with the Android SDK).
 2. From Android Studio: **SDK Manager** → install
-   - *Android SDK Platform 35* (or the version in `android/variables.gradle`)
+   - *Android SDK Platform 36* (or the version in `android/variables.gradle`)
    - *Android SDK Build-Tools*
    - Accept the licenses when prompted.
+3. **JDK 21** — Capacitor 8's Android build compiles with Java 21. Android
+   Studio's bundled JBR is 21, or set `JAVA_HOME` to a JDK 21 install.
 
 ---
 
