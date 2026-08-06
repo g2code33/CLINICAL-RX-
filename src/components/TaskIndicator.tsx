@@ -1,4 +1,5 @@
 import { useTasks } from '../stores/tasks';
+import { useShallow } from 'zustand/react/shallow';
 
 /**
  * Floating Arena-style activity indicator. Shows whatever the AI is doing
@@ -6,7 +7,10 @@ import { useTasks } from '../stores/tasks';
  * Mounted once in the Layout, so it's visible from anywhere in the app.
  */
 export function TaskIndicator() {
-  const tasks = useTasks((s) => s.tasks.filter((t) => t.status === 'running'));
+  // IMPORTANT: select the raw array and filter AFTER (or use useShallow) —
+  // selecting s.tasks.filter(...) creates a new array every render, which
+  // makes zustand re-render forever (React error #185, blank black screen).
+  const tasks = useTasks(useShallow((s) => s.tasks.filter((t) => t.status === 'running')));
 
   if (tasks.length === 0) return null;
 

@@ -1,4 +1,5 @@
 import { useNotifs } from '../stores/notifications';
+import { useShallow } from 'zustand/react/shallow';
 
 /**
  * Global broadcast banner — shows reminders (and any app notification) on
@@ -7,7 +8,7 @@ import { useNotifs } from '../stores/notifications';
  * mobile-safe placement.
  */
 export function NotificationBanner() {
-  const notifications = useNotifs((s) => s.notifications.slice(0, 3));
+  const notifications = useNotifs(useShallow((s) => s.notifications.slice(0, 3)));
   const dismiss = useNotifs((s) => s.dismiss);
   const soundOn = useNotifs((s) => s.soundOn);
   const setSound = useNotifs((s) => s.setSound);
