@@ -20,6 +20,7 @@ import {
   updateStage,
 } from '../services/academic';
 import type { AcademicStage } from '../types';
+import { useConfirm } from '../components/ui/primitives';
 
 const STATUS_META: Record<AcademicStage['status'], { icon: string; label: string; pill: string }> = {
   completed: { icon: '✓', label: 'Completed', pill: 'green' },
@@ -327,6 +328,7 @@ function PromoteModal({ open, onClose }: { open: boolean; onClose: () => void })
 // ---------------- Manage journey ----------------
 
 function ManageModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const { confirm, confirmDialog } = useConfirm();
   const stages = useData((s) => s.academicStages);
   const ordered = useMemo(() => allStages(), [stages]);
   const [level, setLevel] = useState('');
@@ -346,6 +348,7 @@ function ManageModal({ open, onClose }: { open: boolean; onClose: () => void }) 
 
   return (
     <Modal open={open} onClose={onClose} title="⚙ Manage Journey" wide>
+      {confirmDialog}
       <div className="space-y-4">
         <div>
           <div className="label">Academic stages</div>
@@ -383,7 +386,14 @@ function ManageModal({ open, onClose }: { open: boolean; onClose: () => void }) 
                 <button
                   className="btn-ghost !px-2 !py-1 text-xs text-red-600"
                   onClick={async () => {
-                    if (!confirm(`Remove ${s.name} from your journey? Records stamped with it are not deleted.`)) return;
+                    const ok = await confirm({
+                      title: `Remove ${s.name}?`,
+                      message: 'This level will no longer appear in your journey timeline.',
+                      note: 'Records already stamped with this level are NOT deleted — their academic history is permanent.',
+                      confirmLabel: 'Remove level',
+                      destructive: true,
+                    });
+                    if (!ok) return;
                     await deleteStage(s.id);
                   }}
                 >

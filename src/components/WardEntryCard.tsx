@@ -3,6 +3,7 @@ import { WARD_ENTRY_META } from '../services/defaults';
 import { deleteEntry, entryHeading, updateEntry } from '../services/wardRounds';
 import { askAboutEntry, canRunAi, EXPLAIN_MODES, type ExplainMode } from '../services/wardAi';
 import type { WardEntry } from '../types';
+import { useConfirm } from './ui/primitives';
 
 function timeOf(ts: number): string {
   return new Date(ts).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
@@ -26,6 +27,7 @@ export function WardEntryCard({
   onToggleSelect?: (v: boolean) => void;
   onChanged?: () => void;
 }) {
+  const { confirm, confirmDialog } = useConfirm();
   const meta = WARD_ENTRY_META[entry.type];
   const [editing, setEditing] = useState(false);
   const [title, setTitle] = useState(entry.title);
@@ -43,7 +45,14 @@ export function WardEntryCard({
   }
 
   async function remove() {
-    if (!confirm('Delete this capture? This cannot be undone from here (use Undo in the toast).')) return;
+    const ok = await confirm({
+      title: 'Delete this capture?',
+      message: 'The ward round capture will be removed from your records.',
+      note: 'You can undo this from the toast that appears immediately afterwards.',
+      confirmLabel: 'Delete capture',
+      destructive: true,
+    });
+    if (!ok) return;
     await deleteEntry(entry.id);
     onChanged?.();
   }
@@ -68,6 +77,8 @@ export function WardEntryCard({
   }
 
   return (
+    <>
+      {confirmDialog}
     <div
       className={`rounded-xl border p-3 transition-colors ${
         selected ? 'border-brand-500 bg-brand-50 dark:bg-brand-950' : 'border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-800'
@@ -236,5 +247,6 @@ export function WardEntryCard({
         </div>
       )}
     </div>
+    </>
   );
 }

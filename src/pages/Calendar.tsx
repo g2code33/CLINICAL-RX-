@@ -96,8 +96,8 @@ export function CalendarPage() {
           <div className="mb-3 flex items-center justify-between">
             <h2 className="text-lg font-bold">{MONTHS[view.month]} {view.year}</h2>
             <div className="flex gap-2">
-              <button className="btn-secondary !px-3" onClick={prev}>‹</button>
-              <button className="btn-secondary !px-3" onClick={next}>›</button>
+              <button className="btn-secondary !px-3" onClick={prev} aria-label="Previous month" title="Previous month"><span aria-hidden="true">‹</span></button>
+              <button className="btn-secondary !px-3" onClick={next} aria-label="Next month" title="Next month"><span aria-hidden="true">›</span></button>
             </div>
           </div>
           <div className="grid grid-cols-7 gap-1">

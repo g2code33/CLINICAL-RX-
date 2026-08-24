@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useData } from '../stores/data';
 import { PageHeader, EmptyState } from './ui';
+import { useConfirm } from './ui/primitives';
 import { Modal, TagInput } from './Modal';
 import { explainEntity, runAiModule } from '../services/aiTools';
 import type { ModuleType } from '../types';
@@ -53,6 +54,8 @@ export function EntityManager({ module, title, subtitle, icon, emptyText, emptyH
   const [query, setQuery] = useState('');
   const [explain, setExplain] = useState<{ rec: any; text: string; loading: boolean; error?: string } | null>(null);
   const [focusAi, setFocusAi] = useState<{ rec: any; messages: Array<{ role: 'user' | 'ai'; text: string }>; input: string; busy: boolean } | null>(null);
+  // Themed confirmation instead of window.confirm (§34).
+  const { confirm, confirmDialog } = useConfirm();
   const [view, setView] = useState<'cards' | 'list'>('cards');
   const [filter, setFilter] = useState<LearningFilter>({});
   const [formError, setFormError] = useState('');
@@ -125,8 +128,16 @@ export function EntityManager({ module, title, subtitle, icon, emptyText, emptyH
       danger: true,
       onClick: () => {
         const label = String(rec?.name ?? 'this record');
-        if (!confirm(`Delete "${label}"?\n\nThis removes the record and its direct relationships. Your unrelated learning notes are NOT deleted.`)) return;
-        void softDelete(module, rec.id);
+        void (async () => {
+          const ok = await confirm({
+            title: `Delete "${label}"?`,
+            message: 'This removes the record and its direct relationships.',
+            note: 'Your unrelated learning notes are NOT deleted.',
+            confirmLabel: 'Delete',
+            destructive: true,
+          });
+          if (ok) void softDelete(module, rec.id);
+        })();
       },
     });
     return items;
@@ -165,6 +176,7 @@ export function EntityManager({ module, title, subtitle, icon, emptyText, emptyH
 
   return (
     <div>
+      {confirmDialog}
       <PageHeader
         title={title}
         subtitle={subtitle}

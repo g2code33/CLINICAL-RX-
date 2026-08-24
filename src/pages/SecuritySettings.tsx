@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { PageHeader } from '../components/ui';
+import { Tabs } from '../components/ui/primitives';
 import { useData } from '../stores/data';
 import {
   autoLockMinutes,
@@ -50,17 +51,7 @@ export default function SecuritySettings() {
         }
       />
 
-      <div className="flex flex-wrap gap-1">
-        {TABS.map((t) => (
-          <button
-            key={t.key}
-            className={`rounded-full px-3 py-1 text-xs ${tab === t.key ? 'bg-brand-600 text-white' : 'bg-slate-100 dark:bg-slate-700'}`}
-            onClick={() => setTab(t.key)}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
+      <Tabs items={TABS} active={tab} onChange={setTab} ariaLabel="Security and privacy sections" />
 
       {msg && <div className="card text-sm">{msg}</div>}
 

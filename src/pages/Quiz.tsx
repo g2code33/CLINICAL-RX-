@@ -11,6 +11,7 @@ import { AiThinking } from '../components/AiThinking';
 import { useTasks } from '../stores/tasks';
 import { newSavedQuiz } from '../services/defaults';
 import type { SavedQuiz } from '../types';
+import { useConfirm } from '../components/ui/primitives';
 
 function fmtTime(ts: number): string {
   const d = new Date(ts);
@@ -21,6 +22,7 @@ function fmtTime(ts: number): string {
 }
 
 export function Quiz() {
+  const { confirm, confirmDialog } = useConfirm();
   const setStatus = useData((s) => s.setStatus);
   const save = useData((s) => s.save);
   const remove = useData((s) => s.remove);
@@ -338,7 +340,13 @@ export function Quiz() {
   }
 
   async function deleteHistory(id: string) {
-    if (!confirm('Delete this saved quiz?')) return;
+    const ok = await confirm({
+      title: 'Delete this saved quiz?',
+      message: 'The quiz and its saved attempt history will be removed.',
+      confirmLabel: 'Delete quiz',
+      destructive: true,
+    });
+    if (!ok) return;
     await remove('quiz', id);
     if (savedId === id) startFresh();
   }
@@ -365,6 +373,7 @@ export function Quiz() {
 
   return (
     <div>
+      {confirmDialog}
       <PageHeader
         title="AI Quiz"
         subtitle="Timed exams from your clinical exposure — every result is saved and reviewable anytime. Tap a question number to jump straight to it."

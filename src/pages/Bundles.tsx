@@ -185,14 +185,19 @@ export function Bundles() {
         <div className="ml-auto flex items-center gap-2">
           <ViewToggle view={view} onChange={setView} />
         </div>
-        <div className="flex gap-1.5">
+        {/* Bundle type is a real tablist so the separation between automatic,
+            manual and merged bundles is unambiguous (§12). */}
+        <div className="flex gap-1.5" role="tablist" aria-label="Bundle type">
           {(['all', 'days', 'weeks', 'merged'] as Filter[]).map((f) => (
             <button
               key={f}
+              role="tab"
+              aria-selected={filter === f}
               onClick={() => setFilter(f)}
-              className={`rounded-full px-3 py-1 text-xs font-medium ${filter === f ? 'bg-brand-600 text-white' : 'bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-200'}`}
+              className={`focus-ring rounded-full px-3 py-1 text-xs font-medium transition-colors ${filter === f ? 'bg-brand-600 text-white' : 'bg-slate-200 text-slate-600 hover:bg-slate-300 dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-slate-600'}`}
             >
-              {f === 'days' ? '📅 Days' : f === 'weeks' ? '🗓 Weeks' : f === 'merged' ? '🔗 Merged' : 'All'}
+              <span aria-hidden="true">{f === 'days' ? '📅' : f === 'weeks' ? '🗓' : f === 'merged' ? '🔗' : '📦'}</span>{' '}
+              {f === 'days' ? 'Days' : f === 'weeks' ? 'Weeks' : f === 'merged' ? 'Merged' : 'All'}
             </button>
           ))}
         </div>

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { PageHeader, EmptyState, Pill } from '../components/ui';
 import { Modal } from '../components/Modal';
 import { ViewToggle } from '../components/ViewToggle';
+import { useConfirm } from '../components/ui/primitives';
 import {
   loadGroups, saveGroups, loadBank, saveBank, parseBankJson,
   createGroup, addToGroup, deleteGroup, renameGroup, totalQuestions,
@@ -10,6 +11,7 @@ import {
 } from '../services/questionBank';
 
 export function QuestionBank() {
+  const { confirm, confirmDialog } = useConfirm();
   const navigate = useNavigate();
   const [groups, setGroups] = useState<BankGroup[]>(() => loadGroups());
   const [openGroupId, setOpenGroupId] = useState<string | null>(null);
@@ -57,8 +59,15 @@ export function QuestionBank() {
     refresh();
   }
 
-  function clearAll() {
-    if (!confirm('Delete ALL question bank groups?')) return;
+  async function clearAll() {
+    const ok = await confirm({
+      title: 'Delete every question group?',
+      message: 'All question bank groups and their questions will be removed.',
+      note: 'This cannot be undone. Your learning notes are not affected.',
+      confirmLabel: 'Delete all groups',
+      destructive: true,
+    });
+    if (!ok) return;
     saveGroups([]);
     refresh();
   }
@@ -67,6 +76,7 @@ export function QuestionBank() {
 
   return (
     <div>
+      {confirmDialog}
       <PageHeader
         title="Question Bank"
         subtitle="Imported questions are organized into labeled, dated groups — click a group to open its questions."
@@ -98,7 +108,15 @@ export function QuestionBank() {
             </div>
             <div className="flex gap-2">
               <button className="btn-secondary !py-1 text-xs" onClick={() => setImportOpen(true)}>＋ Add to group</button>
-              <button className="btn-ghost !py-1 text-xs text-red-500" onClick={() => { if (confirm('Delete this group?')) { deleteGroup(openGroup.id); refresh(); setOpenGroupId(null); } }}>🗑 Delete group</button>
+              <button className="btn-ghost !py-1 text-xs text-red-500" onClick={async () => {
+                const ok = await confirm({
+                  title: 'Delete this group?',
+                  message: `"${openGroup.label}" and its questions will be removed.`,
+                  confirmLabel: 'Delete group',
+                  destructive: true,
+                });
+                if (ok) { deleteGroup(openGroup.id); refresh(); setOpenGroupId(null); }
+              }}>🗑 Delete group</button>
             </div>
           </div>
           <div className="space-y-2">

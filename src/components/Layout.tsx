@@ -13,6 +13,7 @@ import { UndoToast } from './UndoToast';
 import { ContextMenuProvider } from './ContextMenu';
 import { TaskIndicator } from './TaskIndicator';
 import { NotificationBanner } from './NotificationBanner';
+import { Toaster, OfflineIndicator } from './Toaster';
 import { ModeSplash } from './ModeSplash';
 
 const APP_VERSION = pkg.version;
@@ -156,10 +157,12 @@ export function Layout({ children }: { children: ReactNode }) {
 
   return (
     <ContextMenuProvider>
+      {/* First tab stop: lets keyboard users jump straight past the nav (§27). */}
+      <a href="#main-content" className="skip-link">Skip to main content</a>
       <div className="app-shell flex flex-col overflow-hidden bg-slate-50 text-slate-800 dark:bg-slate-900 dark:text-slate-100 lg:flex-row">
         {/* ================= DESKTOP SIDEBAR (lg+) ================= */}
         {sidebarOpen ? (
-          <aside className="hidden w-64 shrink-0 flex-col border-r border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900 lg:flex">
+          <aside aria-label="Primary navigation" className="hidden w-64 shrink-0 flex-col border-r border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900 lg:flex">
             <div className="flex items-center gap-3 border-b border-slate-200 px-5 py-5 dark:border-slate-700">
               <img src="./v2.PNG" alt="CLINICAL Rx logo" className="h-9 w-9 shrink-0 rounded-xl object-cover" />
               <div className="min-w-0">
@@ -327,7 +330,7 @@ export function Layout({ children }: { children: ReactNode }) {
           </header>
 
           {/* -------- Content -------- */}
-          <main className="flex-1 overflow-y-auto">
+          <main id="main-content" tabIndex={-1} className="flex-1 overflow-y-auto outline-none" aria-label="Main content">
             <div className="mx-auto w-full max-w-7xl px-4 py-4 pb-24 sm:px-6 lg:px-8 lg:py-8 lg:pb-10">
               {children}
             </div>
@@ -457,6 +460,8 @@ export function Layout({ children }: { children: ReactNode }) {
         <UndoToast />
         <TaskIndicator />
         <NotificationBanner />
+        <Toaster />
+        <OfflineIndicator />
         {splash && <ModeSplash mode={splash} onDone={() => setSplash(null)} />}
       </div>
     </ContextMenuProvider>

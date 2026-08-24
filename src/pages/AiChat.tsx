@@ -8,6 +8,7 @@ import { AiThinking } from '../components/AiThinking';
 import { runAiModule, aiReady, aiModuleLabel, analyzeLearning, generateQuestions, revisionCoach, organizeNote } from '../services/aiTools';
 import type { AiModuleKey, RunOpts } from '../services/aiTools';
 import type { ChatSession } from '../types';
+import { useConfirm } from '../components/ui/primitives';
 
 type Mode = 'chat' | 'explain' | 'analyze' | 'organize' | 'questions' | 'revision';
 
@@ -30,6 +31,7 @@ function fmtTime(ts: number): string {
 
 export function AiChat() {
   const [mode, setMode] = useState<Mode>('chat');
+  const { confirm, confirmDialog } = useConfirm();
   const [activeId, setActiveId] = useState<string | null>(null);
   const [input, setInput] = useState('');
   // Busy state is PER SECTION — one AI working must never block another.
@@ -129,7 +131,14 @@ export function AiChat() {
   }
 
   async function deleteSession(id: string) {
-    if (!confirm('Delete this chat? This cannot be undone.')) return;
+    const ok = await confirm({
+      title: 'Delete this chat?',
+      message: 'The conversation and its messages will be removed.',
+      note: 'Your learning notes and clinical records are not affected.',
+      confirmLabel: 'Delete chat',
+      destructive: true,
+    });
+    if (!ok) return;
     await remove('chat', id);
     if (activeId === id) setActiveId(null);
   }
@@ -338,6 +347,7 @@ export function AiChat() {
 
   return (
     <div className="flex h-full flex-col">
+      {confirmDialog}
       <PageHeader
         title="Ask Clinical AI"
         subtitle="Each section is independent with its own saved chats — but every section remembers your other conversations across the app."

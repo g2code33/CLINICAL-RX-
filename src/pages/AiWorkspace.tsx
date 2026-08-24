@@ -17,6 +17,7 @@ import {
   type AiConversation,
 } from '../services/aiConversations';
 import { grantConfirmation, runTool, type ToolOutcome } from '../services/aiToolRegistry';
+import { useConfirm } from '../components/ui/primitives';
 
 /**
  * 💬 AI WORKSPACE
@@ -74,6 +75,7 @@ export default function AiWorkspace() {
 
   const [persona, setPersona] = useState<AiPersona>((params.get('m') as AiPersona) || 'general');
   const [convId, setConvId] = useState<string | null>(null);
+  const { confirm, confirmDialog } = useConfirm();
   const [conv, setConv] = useState<AiConversation | null>(null);
   const [list, setList] = useState<AiConversation[]>(() => loadConversations());
   const [convQuery, setConvQuery] = useState('');
@@ -214,6 +216,7 @@ export default function AiWorkspace() {
 
   return (
     <div className="space-y-4">
+      {confirmDialog}
       <PageHeader
         title="🤖 AI Workspace"
         subtitle="Your records are the source of truth — every answer shows what it used."
@@ -253,8 +256,9 @@ export default function AiWorkspace() {
                   {PERSONAS[c.module]?.icon ?? '💬'} {c.title}
                 </button>
                 <button
-                  className="opacity-0 group-hover:opacity-100"
-                  title="Rename"
+                  className="opacity-0 focus-ring group-hover:opacity-100 focus-visible:opacity-100"
+                  title="Rename conversation"
+                  aria-label={`Rename conversation ${c.title}`}
                   onClick={() => {
                     const t = window.prompt('Rename conversation', c.title);
                     if (t) {
@@ -263,13 +267,20 @@ export default function AiWorkspace() {
                     }
                   }}
                 >
-                  ✏️
+                  <span aria-hidden="true">✏️</span>
                 </button>
                 <button
-                  className="opacity-0 group-hover:opacity-100"
-                  title="Delete"
-                  onClick={() => {
-                    if (!window.confirm(`Delete "${c.title}"?`)) return;
+                  className="opacity-0 focus-ring group-hover:opacity-100 focus-visible:opacity-100"
+                  title="Delete conversation"
+                  aria-label={`Delete conversation ${c.title}`}
+                  onClick={async () => {
+                    const ok = await confirm({
+                      title: `Delete "${c.title}"?`,
+                      message: 'This conversation and its messages will be removed.',
+                      confirmLabel: 'Delete',
+                      destructive: true,
+                    });
+                    if (!ok) return;
                     deleteConversation(c.id);
                     if (c.id === convId) {
                       setConvId(null);
@@ -278,7 +289,7 @@ export default function AiWorkspace() {
                     setList(loadConversations());
                   }}
                 >
-                  🗑
+                  <span aria-hidden="true">🗑</span>
                 </button>
               </div>
             ))}
@@ -289,8 +300,14 @@ export default function AiWorkspace() {
             </button>
             <button
               className="underline"
-              onClick={() => {
-                if (convId && window.confirm('Clear all messages in this conversation?')) {
+              onClick={async () => {
+                const ok = await confirm({
+                  title: 'Clear this conversation?',
+                  message: 'All messages in this conversation will be removed. The conversation itself stays.',
+                  confirmLabel: 'Clear messages',
+                  destructive: true,
+                });
+                if (convId && ok) {
                   clearConversation(convId);
                   refresh(convId);
                 }
@@ -306,21 +323,43 @@ export default function AiWorkspace() {
 
         {/* Chat */}
         <section className="card flex min-h-[60vh] flex-col">
-          <div className="mb-2 flex flex-wrap gap-1">
+          {/* AI module selector (§21). The active module is stated in words as
+              well as colour, so it is obvious and screen-reader friendly. */}
+          <div className="mb-2 flex flex-wrap gap-1" role="tablist" aria-label="AI module">
             {(Object.keys(PERSONAS) as AiPersona[]).map((k) => (
               <button
                 key={k}
-                className={`rounded-full px-3 py-1 text-xs ${
-                  k === persona ? 'bg-brand-600 text-white' : 'bg-slate-100 dark:bg-slate-700'
+                role="tab"
+                aria-selected={k === persona}
+                className={`focus-ring rounded-full px-3 py-1 text-xs transition-colors ${
+                  k === persona
+                    ? 'bg-brand-600 text-white'
+                    : 'bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600'
                 }`}
                 onClick={() => {
                   setPersona(k);
                   setConvId(null);
                 }}
               >
-                {PERSONAS[k].icon} {PERSONAS[k].label}
+                <span aria-hidden="true">{PERSONAS[k].icon}</span> {PERSONAS[k].label}
+                {k === persona && <span className="sr-only"> (active)</span>}
               </button>
             ))}
+          </div>
+
+          {/* Active module + provider, stated plainly (§21, §22). */}
+          <div className="mb-2 flex flex-wrap items-center gap-2 text-xs">
+            <span className="rounded-full bg-brand-100 px-2 py-0.5 font-medium text-brand-800 dark:bg-brand-900 dark:text-brand-200">
+              {def.icon} {def.label}
+            </span>
+            <span className="opacity-75">
+              {status.effective === 'local'
+                ? '💻 Local AI'
+                : status.effective === 'cloud'
+                  ? '☁️ Cloud AI'
+                  : '⚪ No provider'}
+            </span>
+            {status.effective !== 'none' && <span className="opacity-60">· {status.online ? 'Online' : 'Offline'}</span>}
           </div>
 
           <p className="mb-2 text-xs opacity-70">{def.system.slice(0, 160)}…</p>
@@ -358,6 +397,29 @@ export default function AiWorkspace() {
                     </span>
                   )}
                 </div>
+                {m.role === 'assistant' && !m.error && (
+                  <div className="mt-1 flex flex-wrap gap-2 text-[11px]">
+                    <button
+                      className="opacity-60 underline hover:opacity-100 focus-ring"
+                      onClick={() => void navigator.clipboard?.writeText(m.content)}
+                      aria-label="Copy this answer"
+                    >
+                      Copy
+                    </button>
+                    {/* Regenerate re-asks the preceding question. */}
+                    <button
+                      className="opacity-60 underline hover:opacity-100 focus-ring"
+                      onClick={() => {
+                        const idx = conv?.messages.findIndex((x) => x.id === m.id) ?? -1;
+                        const prior = idx > 0 ? conv?.messages[idx - 1] : null;
+                        if (prior?.role === 'user') void send(prior.content);
+                      }}
+                      aria-label="Ask this question again"
+                    >
+                      Regenerate
+                    </button>
+                  </div>
+                )}
                 {m.role === 'assistant' && m.sources?.length ? <SourceList sources={m.sources} /> : null}
               </div>
             ))}

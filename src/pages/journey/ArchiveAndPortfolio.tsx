@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { PageHeader } from '../../components/ui';
+import { Tabs } from '../../components/ui/primitives';
 import { useData } from '../../stores/data';
 import { allStages } from '../../services/academic';
 import { stageArchive, portfolioRecords, exportableRecords, CAREER_MODULES } from '../../services/career';
@@ -91,16 +92,20 @@ export function AcademicArchive() {
       />
 
       <div className="card">
-        <div className="flex flex-wrap gap-1">
+        <div className="flex flex-wrap gap-1" role="tablist" aria-label="Academic levels">
           {ordered.map((s) => (
             <button
               key={s.id}
-              className={`rounded-full px-3 py-1 text-xs ${
-                s.id === selected ? 'bg-brand-600 text-white' : 'bg-slate-100 dark:bg-slate-700'
+              role="tab"
+              aria-selected={s.id === selected}
+              className={`focus-ring rounded-full px-3 py-1 text-xs ${
+                s.id === selected ? 'bg-brand-600 text-white' : 'bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600'
               }`}
               onClick={() => setParams({ stage: s.id })}
             >
-              {s.status === 'current' ? '●' : s.status === 'completed' ? '✓' : '○'} {s.name} · {s.academicYear}
+              <span aria-hidden="true">{s.status === 'current' ? '●' : s.status === 'completed' ? '✓' : '○'}</span>{' '}
+              {s.name} · {s.academicYear}
+              <span className="sr-only"> ({s.status})</span>
             </button>
           ))}
         </div>
@@ -243,23 +248,16 @@ export function PortfolioPage() {
         </p>
       </div>
 
-      <div className="flex flex-wrap gap-1">
-        {(
-          [
-            ['portfolio', '📁 Portfolio'],
-            ['cv', '📄 CV Builder'],
-            ['ai', '🎓 Career AI'],
-          ] as Array<[typeof tab, string]>
-        ).map(([k, label]) => (
-          <button
-            key={k}
-            className={`rounded-full px-3 py-1 text-xs ${tab === k ? 'bg-brand-600 text-white' : 'bg-slate-100 dark:bg-slate-700'}`}
-            onClick={() => setTab(k)}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
+      <Tabs
+        items={[
+          { key: 'portfolio' as const, label: 'Portfolio', icon: '📁' },
+          { key: 'cv' as const, label: 'CV Builder', icon: '📄' },
+          { key: 'ai' as const, label: 'Career AI', icon: '🎓' },
+        ]}
+        active={tab}
+        onChange={setTab}
+        ariaLabel="Portfolio sections"
+      />
 
       {status && <div className="card text-sm">{status}</div>}
 

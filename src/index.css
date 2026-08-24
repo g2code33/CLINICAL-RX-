@@ -38,6 +38,44 @@ body {
   .label {
     @apply mb-1.5 block text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400;
   }
+
+  /* Phase 9 §27: one shared focus ring so keyboard users can always see
+     where they are. Applied to every interactive element, not just .btn. */
+  .focus-ring {
+    @apply focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:ring-offset-1 dark:focus-visible:ring-offset-slate-900;
+  }
+
+  /* Skip link — first tab stop, lets keyboard users jump past the nav. */
+  .skip-link {
+    @apply sr-only;
+  }
+  .skip-link:focus {
+    @apply not-sr-only fixed left-3 top-3 z-[100] rounded-lg bg-brand-600 px-4 py-2 text-white shadow-lg;
+  }
+}
+
+/* ---- Accessibility: visible focus everywhere (Phase 9 §27) ----
+   Browsers vary in what they outline by default. This guarantees a visible
+   indicator on every focusable control, for keyboard users only (":focus-visible"
+   does not fire for mouse clicks, so it stays visually clean). */
+:where(button, a, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: 2px solid theme('colors.brand.500');
+  outline-offset: 2px;
+  border-radius: 0.375rem;
+}
+
+/* ---- Reduced motion (Phase 9 §48) ----
+   Respect the OS setting. Animation must never be the only way information is
+   communicated, and vestibular-sensitive users need it gone entirely. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 ::-webkit-scrollbar { width: 10px; height: 10px; }
@@ -80,3 +118,24 @@ body {
   .animate-\[splashPop_500ms_cubic-bezier\(0\.34\2c 1\.56\2c 0\.64\2c 1\)\],
   .animate-\[splashBar_800ms_ease-out\] { animation: none !important; }
 }
+
+
+/* ---- Responsive desktop safety (Phase 9 §26) ----
+   Guards against the failure modes the spec calls out: horizontal overflow,
+   clipped content and unreachable dialogs on small laptops or at high OS
+   scaling. */
+
+/* Nothing may push the page sideways. */
+html, body { overflow-x: hidden; }
+
+/* Long medicine names, URLs and AI output must wrap rather than overflow. */
+.card, .card * { min-width: 0; }
+.break-anywhere { overflow-wrap: anywhere; word-break: break-word; }
+
+/* On short viewports a dialog must still be scrollable and fully reachable. */
+@media (max-height: 640px) {
+  [role='dialog'] { max-height: 96vh; }
+}
+
+/* Toast/notification region never covers the whole screen on small windows. */
+.toast-region { max-width: min(92vw, 26rem); }

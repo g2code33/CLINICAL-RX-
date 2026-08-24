@@ -181,8 +181,8 @@ function CourseRow({ title, code, onDelete }: { title: string; code?: string; on
         <div className="truncate text-sm font-medium text-slate-800 dark:text-slate-100">{title}</div>
         {code && <div className="text-[11px] text-slate-400">{code}</div>}
       </div>
-      <button className="text-xs text-red-500 hover:underline" onClick={onDelete}>
-        ✕
+      <button className="text-xs text-red-500 hover:underline focus-ring" onClick={onDelete} aria-label={`Delete course ${title}`} title="Delete course">
+        <span aria-hidden="true">✕</span>
       </button>
     </div>
   );

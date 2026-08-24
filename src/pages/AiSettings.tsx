@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { PageHeader } from '../components/ui';
 import { AiStatusDot } from '../components/AiStatus';
+import { Tabs } from '../components/ui/primitives';
 import { useData } from '../stores/data';
 import { AI_MODULES } from '../services/defaults';
 import {
@@ -81,17 +82,7 @@ export default function AiSettings() {
         <AiStatusDot />
       </div>
 
-      <div className="flex flex-wrap gap-1">
-        {TABS.map((t) => (
-          <button
-            key={t.key}
-            className={`rounded-full px-3 py-1 text-xs ${tab === t.key ? 'bg-brand-600 text-white' : 'bg-slate-100 dark:bg-slate-700'}`}
-            onClick={() => setTab(t.key)}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
+      <Tabs items={TABS} active={tab} onChange={setTab} ariaLabel="AI settings sections" />
 
       {status && <div className="card text-sm">{status}</div>}
 
