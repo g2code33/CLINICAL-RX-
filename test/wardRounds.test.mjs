@@ -144,17 +144,12 @@ try {
   check('bundle from selected entries', b2?.stats['Selected captures'] === 2);
   check('selection bundle is independent', b2.id !== b.id && !!ward.getRound(round.id));
 
-  // Auto daily bundle must pick the ward round up even with no clinical day.
-  const auto = await server.ssrLoadModule('/src/services/autoBundle.ts');
-  // Finishing a round also fires auto-bundling in the background, so poll
-  // briefly rather than assuming our explicit call is the one that wins.
-  let daily = null;
-  for (let i = 0; i < 40 && !daily; i++) {
-    await auto.processAiWhenOnline();
-    daily = st().bundles.find((x) => x.type === 'auto-daily');
-    if (!daily) await new Promise((r) => setTimeout(r, 50));
-  }
-  check('auto-daily bundle includes the ward round', !!daily && daily.sourceIds.includes(round.id));
+  // Phase 4: TODAY is deliberately not auto-bundled (the day isn't over).
+  // Automatic bundling covers COMPLETED days, so bundle this round explicitly.
+  const engine = await server.ssrLoadModule('/src/services/bundleEngine.ts');
+  const dayBundle = await engine.createDayBundle(round.date, 'Ward round day');
+  check('day bundle includes the ward round', dayBundle.sourceIds.includes(round.id));
+  check('and freezes it as a snapshot', dayBundle.snapshot.some((i) => i.sourceId === round.id));
 
   console.log('\nRESTART — persistence');
 

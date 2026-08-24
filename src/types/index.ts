@@ -192,7 +192,42 @@ export interface Bundle extends BaseRecord {
   version: number;
   followUps: BundleFollowUp[];
   academic?: AcademicLink;
+
+  // ---- Phase 4: immutable snapshot ----
+  /**
+   * Frozen copies of the records included when the bundle was generated.
+   * A bundle is a SNAPSHOT, not a live query: editing a source record later
+   * must never change an existing bundle.
+   */
+  snapshot?: BundleSnapshotItem[];
+  /** How the bundle came to exist. */
+  creationMethod?: 'automatic' | 'manual' | 'merge';
+  status?: BundleStatus;
+  generatedAt?: number;
+  error?: string;
+  /** Deterministic key preventing duplicate automatic bundles. */
+  autoKey?: string;
+  favorite?: boolean;
+  notes?: string;
+  tags?: string[];
+  /** Modules the user selected for a custom bundle. */
+  includedModules?: string[];
 }
+
+/** Immutable copy of one source record, frozen into a bundle snapshot. */
+export interface BundleSnapshotItem {
+  /** Original record id — lets the viewer offer "Open original". */
+  sourceId: string;
+  /** Source module/type, e.g. 'medicine' | 'wardRound' | 'lesson'. */
+  sourceType: string;
+  title: string;
+  summary: string;
+  date: string;
+  academicLabel?: string;
+  tags?: string[];
+}
+
+export type BundleStatus = 'pending' | 'generating' | 'completed' | 'failed';
 
 export interface BundleFollowUp {
   id: string;

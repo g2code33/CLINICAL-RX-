@@ -2,7 +2,18 @@ import { useState } from 'react';
 import { useData } from '../stores/data';
 import { PageHeader, EmptyState, Pill } from '../components/ui';
 import { Modal } from '../components/Modal';
-import { generateBundle, mergeBundles, processAiQueue, getPendingAiCount, aiAvailable, consolidatePeriod } from '../services/bundler';
+import { processAiQueue, getPendingAiCount, aiAvailable } from '../services/bundler';
+import {
+  bundleToday,
+  createDayBundle,
+  createWeekBundle,
+  deleteBundle,
+  mergeBundles,
+  previewMerge,
+  runAutomaticBundling,
+  toggleBundleFavorite,
+} from '../services/bundleEngine';
+import { BundleCreator } from '../components/BundleCreator';
 import { bundleToMarkdown, bundleToJson, bundleToPdf, downloadText, copyToClipboard } from '../services/export';
 import { scanForPhi, privacyWarning } from '../services/privacy';
 import { aiChat } from '../services/ai';
@@ -59,49 +70,39 @@ export function Bundles() {
     setStatus(r.processed ? `✓ AI processed ${r.processed} bundle(s)` : 'No pending AI bundles');
   }
 
-  async function doAutoDaily() {
-    setStatus('Generating auto daily bundle…');
-    const day = days.find((d) => d.date === todayIso());
-    await generateBundle({
-      type: 'auto-daily',
-      title: `AUTO — Daily Bundle — ${todayIso()}`,
-      periodStart: todayIso(),
-      periodEnd: todayIso(),
-      sourceModules: ['day', 'disease', 'medicine', 'investigation', 'question'],
-    });
-    void day;
-    setStatus('✓ Auto daily bundle created');
+  async function doAutoCatchUp() {
+    setMerging(true);
+    try {
+      const r = await runAutomaticBundling();
+      useData.getState().setStatus(
+        r.daily + r.weekly
+          ? `📦 Generated ${r.daily} daily and ${r.weekly} weekly bundle(s)`
+          : 'All completed days and weeks are already bundled'
+      );
+    } finally {
+      setMerging(false);
+    }
   }
 
-  async function doAutoWeekly() {
-    const end = todayIso();
-    const start = addDays(end, -6);
-    setStatus('Generating auto weekly bundle…');
-    await generateBundle({
-      type: 'auto-weekly',
-      title: `AUTO — Weekly Bundle — Week ${start}→${end}`,
-      periodStart: start,
-      periodEnd: end,
-      sourceModules: ['day', 'disease', 'medicine', 'investigation', 'question'],
-    });
-    setStatus('✓ Auto weekly bundle created');
+  async function doBundleToday() {
+    setMerging(true);
+    try {
+      await bundleToday();
+      useData.getState().setStatus('📦 Bundled today');
+    } finally {
+      setMerging(false);
+    }
   }
 
-  async function doManual(type: 'manual-day' | 'manual-week' | 'manual-custom', name: string) {
-    const end = todayIso();
-    const start = type === 'manual-day' ? end : type === 'manual-week' ? addDays(end, -6) : addDays(end, -30);
-    setStatus('Creating manual bundle…');
-    await generateBundle({ type, title: name, periodStart: start, periodEnd: end });
-    setStatus('✓ Manual bundle created');
-    setCreateOpen(false);
-  }
+
+
 
   async function doMerge() {
     if (selected.length < 1) return;
     setMerging(true);
     setStatus('Merging bundles…');
     const sources = bundles.filter((b) => selected.includes(b.id));
-    await mergeBundles(selected, `MERGED — Clinical Review — ${sources.length} bundles`);
+    await mergeBundles(selected, `Merged Bundle — ${sources.length} bundles`);
     setSelected([]);
     setMerging(false);
     setStatus('✓ Merged bundle created');
@@ -159,8 +160,12 @@ export function Bundles() {
                 🤖 {pendingAiCount} AI pending
               </button>
             )}
-            <button className="btn-secondary" onClick={doAutoDaily}>🤖 Auto Daily</button>
-            <button className="btn-secondary" onClick={doAutoWeekly}>🤖 Auto Weekly</button>
+            <button className="btn-secondary" onClick={doAutoCatchUp} disabled={merging} title="Generate any missing automatic bundles for completed days and weeks">
+              🤖 Generate missing
+            </button>
+            <button className="btn-secondary" onClick={doBundleToday} disabled={merging} title="Today isn't finished, but bundle it anyway">
+              📦 Bundle today
+            </button>
             <button className="btn-primary" onClick={() => setCreateOpen(true)}>＋ Create Bundle</button>
           </div>
         }
@@ -229,15 +234,6 @@ export function Bundles() {
                   <div className="mb-2 flex items-center gap-2 border-b border-slate-200 pb-1 dark:border-slate-700">
                     <span className="text-sm font-semibold text-slate-700 dark:text-slate-200">🗓 {date}</span>
                     <span className="text-[11px] text-slate-400">{dayGroups.get(date)!.length} bundle(s)</span>
-                    {dayGroups.get(date)!.length > 1 && (
-                      <button
-                        className="ml-auto rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-800 hover:bg-amber-200 dark:bg-amber-900 dark:text-amber-200"
-                        onClick={async () => { await consolidatePeriod(dayGroups.get(date)!); }}
-                        title="Merge all bundles for this day into one"
-                      >
-                        🧹 Consolidate into one
-                      </button>
-                    )}
                   </div>
                   <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                     {(() => {
@@ -251,7 +247,6 @@ export function Bundles() {
                             <div className="card flex flex-col justify-center border-dashed p-4 text-center text-xs text-slate-400">
                               <div className="mb-1">➕ {rest.length} more bundle(s) for this day</div>
                               <div className="mb-2 truncate">{rest.map((b) => b.title).join(' · ')}</div>
-                              <button className="btn-secondary !py-1 text-xs" onClick={async () => { await consolidatePeriod(g); }}>🧹 Sip into one</button>
                             </div>
                           )}
                         </>
@@ -275,15 +270,6 @@ export function Bundles() {
                   <div className="mb-2 flex items-center gap-2 border-b border-slate-200 pb-1 dark:border-slate-700">
                     <span className="text-sm font-semibold text-slate-700 dark:text-slate-200">🗓 Week of {date}</span>
                     <span className="text-[11px] text-slate-400">{weekGroups.get(date)!.length} bundle(s)</span>
-                    {weekGroups.get(date)!.length > 1 && (
-                      <button
-                        className="ml-auto rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-800 hover:bg-amber-200 dark:bg-amber-900 dark:text-amber-200"
-                        onClick={async () => { await consolidatePeriod(weekGroups.get(date)!); }}
-                        title="Merge all bundles for this week into one"
-                      >
-                        🧹 Consolidate into one
-                      </button>
-                    )}
                   </div>
                   <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                     {(() => {
@@ -296,7 +282,6 @@ export function Bundles() {
                           {rest.length > 0 && (
                             <div className="card flex flex-col justify-center border-dashed p-4 text-center text-xs text-slate-400">
                               <div className="mb-1">➕ {rest.length} more bundle(s) for this week</div>
-                              <button className="btn-secondary !py-1 text-xs" onClick={async () => { await consolidatePeriod(g); }}>🧹 Sip into one</button>
                             </div>
                           )}
                         </>
@@ -329,7 +314,7 @@ export function Bundles() {
 
       {/* Manual create modal */}
       <Modal open={createOpen} onClose={() => setCreateOpen(false)} title="Create Manual Bundle">
-        <ManualCreate onCreate={doManual} />
+        <BundleCreator onDone={() => setCreateOpen(false)} />
       </Modal>
 
       {/* Bundle detail */}
