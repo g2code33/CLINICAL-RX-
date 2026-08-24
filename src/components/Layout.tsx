@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { NavLink, useLocation } from 'react-router-dom';
+import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import type { ReactNode } from 'react';
 import pkg from '../../package.json';
 import { useData } from '../stores/data';
@@ -16,9 +16,9 @@ import { NotificationBanner } from './NotificationBanner';
 
 const APP_VERSION = pkg.version;
 
+// ---- CLINICAL workspace navigation (unchanged) ----
 const NAV = [
   { to: '/', icon: '🏠', label: 'Home' },
-  { to: '/journey', icon: '🎓', label: 'PharmD Journey' },
   { to: '/clinical', icon: '📋', label: 'Clinical Days' },
   { to: '/ward-rounds', icon: '🏥', label: 'Ward Rounds' },
   { to: '/calendar', icon: '📅', label: 'Calendar' },
@@ -35,6 +35,25 @@ const NAV = [
   { to: '/settings', icon: '⚙️', label: 'Settings' },
 ];
 
+// ---- PHARMD workspace navigation (its own set + its own drawer) ----
+const PHARMD_NAV = [
+  { to: '/journey', icon: '🎓', label: 'My Journey' },
+  { to: '/archive', icon: '🗂', label: 'Academic Archive' },
+  { to: '/courses', icon: '📚', label: 'Courses' },
+  { to: '/progress', icon: '📊', label: 'Progress' },
+  { to: '/settings', icon: '⚙️', label: 'Settings' },
+];
+
+/** Routes that belong to BOTH workspaces, so they never force a mode change. */
+const SHARED_ROUTES = ['/progress', '/settings', '/admin', '/auth', '/reset'];
+
+const PHARMD_BOTTOM_NAV = [
+  { to: '/journey', icon: '🎓', label: 'Journey' },
+  { to: '/archive', icon: '🗂', label: 'Archive' },
+  { to: '/courses', icon: '📚', label: 'Courses' },
+  { to: '/progress', icon: '📊', label: 'Progress' },
+];
+
 // Fixed bottom navigation — the 6 most-used destinations + "More" (opens the drawer).
 const BOTTOM_NAV = [
   { to: '/', icon: '🏠', label: 'Home' },
@@ -47,7 +66,27 @@ const BOTTOM_NAV = [
 
 export function Layout({ children }: { children: ReactNode }) {
   const location = useLocation();
+  const navigate = useNavigate();
   const [drawerOpen, setDrawerOpen] = useState(false);
+
+  // ---- Workspace mode ----
+  // One button switches the ENTIRE shell between the clinical companion and
+  // the PharmD journey. Each mode has its own sidebar, drawer and bottom nav.
+  const appMode = useUi((s) => s.appMode);
+  const toggleAppMode = useUi((s) => s.toggleAppMode);
+  const setAppMode = useUi((s) => s.setAppMode);
+  const isPharmd = appMode === 'pharmd';
+  const navItems = isPharmd ? PHARMD_NAV : NAV;
+  const bottomItems = isPharmd ? PHARMD_BOTTOM_NAV : BOTTOM_NAV;
+  const workspaceName = isPharmd ? 'PharmD Journey' : 'Clinical Companion';
+
+  function switchMode() {
+    const next = toggleAppMode();
+    setDrawerOpen(false);
+    // Land on the new workspace's home so the user is never left on a page
+    // that doesn't belong to the mode they just switched into.
+    navigate(next === 'pharmd' ? '/journey' : '/');
+  }
 
   const profile = useData((s) => s.profile);
   const searchOpen = useUi((s) => s.searchOpen);
@@ -67,6 +106,18 @@ export function Layout({ children }: { children: ReactNode }) {
   useEffect(() => {
     setDrawerOpen(false);
   }, [location.pathname]);
+
+  // Keep the shell in step with the route. Jumping straight to a PharmD page
+  // (global search, command palette, a deep link) flips the workspace, and
+  // vice versa — so the nav on screen always matches the page being shown.
+  useEffect(() => {
+    const path = location.pathname;
+    const pharmdOnly = PHARMD_NAV.map((n) => n.to).filter((t) => !SHARED_ROUTES.includes(t));
+    const inPharmd = pharmdOnly.some((t) => path === t || path.startsWith(t + '/'));
+    const shared = SHARED_ROUTES.some((t) => path === t || path.startsWith(t + '/'));
+    if (inPharmd && appMode !== 'pharmd') setAppMode('pharmd');
+    else if (!inPharmd && !shared && appMode !== 'clinical') setAppMode('clinical');
+  }, [location.pathname, appMode, setAppMode]);
 
   // While the drawer is open: lock body scroll + close on Escape.
   useEffect(() => {
@@ -95,11 +146,11 @@ export function Layout({ children }: { children: ReactNode }) {
                 <div className="truncate text-base font-extrabold tracking-tight text-brand-700 dark:text-brand-300">
                   CLINICAL Rx
                 </div>
-                <div className="text-[11px] text-slate-400">v{APP_VERSION} · Clinical Companion</div>
+                <div className="text-[11px] text-slate-400">v{APP_VERSION} · {workspaceName}</div>
               </div>
             </div>
             <nav className="flex-1 space-y-0.5 overflow-y-auto p-3">
-              {NAV.map((n) => (
+              {navItems.map((n) => (
                 <NavLink
                   key={n.to}
                   to={n.to}
@@ -117,8 +168,21 @@ export function Layout({ children }: { children: ReactNode }) {
                 </NavLink>
               ))}
             </nav>
-            <div className="border-t border-slate-200 px-5 py-3 text-[11px] text-slate-400 dark:border-slate-700">
-              Offline-first · works without internet
+            <div className="space-y-2 border-t border-slate-200 px-3 py-3 dark:border-slate-700">
+              <button
+                className={`flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-left text-sm font-semibold transition-colors ${
+                  isPharmd
+                    ? 'bg-brand-50 text-brand-700 hover:bg-brand-100 dark:bg-brand-950 dark:text-brand-300'
+                    : 'bg-indigo-50 text-indigo-700 hover:bg-indigo-100 dark:bg-indigo-950 dark:text-indigo-300'
+                }`}
+                onClick={switchMode}
+                title={isPharmd ? 'Back to the clinical workspace' : 'Open the PharmD journey workspace'}
+              >
+                <span className="text-lg leading-none">{isPharmd ? '🩺' : '🎓'}</span>
+                <span className="truncate">{isPharmd ? 'Clinical Journey' : 'PharmD Journey'}</span>
+                <span className="ml-auto text-xs opacity-60">⇄</span>
+              </button>
+              <div className="px-2 text-[11px] text-slate-400">Offline-first · works without internet</div>
             </div>
           </aside>
         ) : (
@@ -127,7 +191,7 @@ export function Layout({ children }: { children: ReactNode }) {
               <img src="./v2.PNG" alt="CLINICAL Rx" className="h-9 w-9 rounded-xl object-cover" />
             </div>
             <nav className="flex flex-1 flex-col items-stretch gap-1 px-1.5">
-              {NAV.map((n) => (
+              {navItems.map((n) => (
                 <NavLink
                   key={n.to}
                   to={n.to}
@@ -170,6 +234,26 @@ export function Layout({ children }: { children: ReactNode }) {
                   v{APP_VERSION}
                 </span>
               </div>
+
+              {/* ONE-BUTTON WORKSPACE SWITCH.
+                  Clinical mode  -> shows "PharmD Journey" (switches to it)
+                  PharmD mode    -> shows "Clinical Journey" (switches back) */}
+              <button
+                onClick={switchMode}
+                title={isPharmd ? 'Switch back to the Clinical workspace' : 'Switch to the PharmD Journey workspace'}
+                aria-label={isPharmd ? 'Switch to Clinical Journey' : 'Switch to PharmD Journey'}
+                className={`ml-1 flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1.5 text-xs font-bold transition-all active:scale-95 sm:ml-2 sm:px-3.5 ${
+                  isPharmd
+                    ? 'bg-brand-600 text-white hover:bg-brand-700'
+                    : 'bg-indigo-600 text-white hover:bg-indigo-700'
+                }`}
+              >
+                <span className="text-sm leading-none">{isPharmd ? '🩺' : '🎓'}</span>
+                <span className="hidden whitespace-nowrap sm:inline">
+                  {isPharmd ? 'Clinical Journey' : 'PharmD Journey'}
+                </span>
+                <span className="text-[10px] opacity-70">⇄</span>
+              </button>
             </div>
 
             <div className="flex shrink-0 items-center gap-1 lg:gap-2">
@@ -261,7 +345,7 @@ export function Layout({ children }: { children: ReactNode }) {
                     CLINICAL Rx
                   </div>
                   <div className="text-[11px] text-slate-400">
-                    v{APP_VERSION} · Clinical Companion
+                    v{APP_VERSION} · {workspaceName}
                   </div>
                 </div>
               </div>
@@ -276,7 +360,7 @@ export function Layout({ children }: { children: ReactNode }) {
 
             {/* Drawer nav — tapping any item closes the drawer automatically */}
             <nav className="flex-1 overflow-y-auto py-2">
-              {NAV.map((n) => (
+              {navItems.map((n) => (
                 <NavLink
                   key={n.to}
                   to={n.to}
@@ -302,7 +386,7 @@ export function Layout({ children }: { children: ReactNode }) {
             {/* Drawer footer */}
             <div className="border-t border-slate-200 px-5 py-4 text-center text-xs text-slate-400 dark:border-slate-700">
               <div className="font-medium">CLINICAL Rx · v{APP_VERSION}</div>
-              <div className="mt-0.5">Offline-first clinical companion</div>
+              <div className="mt-0.5">{isPharmd ? 'Your academic journey, kept for good' : 'Offline-first clinical companion'}</div>
             </div>
           </aside>
         </div>
@@ -313,7 +397,7 @@ export function Layout({ children }: { children: ReactNode }) {
           style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 6px)' }}
         >
           <div className="flex items-stretch justify-around gap-0.5 px-1 pt-1.5">
-            {BOTTOM_NAV.map((n) => (
+            {bottomItems.map((n) => (
               <NavLink
                 key={n.to}
                 to={n.to}

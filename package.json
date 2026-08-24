@@ -25,6 +25,7 @@
     "test:api": "node test/api.test.js",
     "test:ward": "node test/wardRounds.test.mjs",
     "test:phase1": "node test/phase1.test.mjs",
+    "test:mode": "npm run build:web && node test/appMode.test.mjs",
     "test": "node test/api.test.js && node test/wardRounds.test.mjs && node test/phase1.test.mjs",
     "release:patch": "npm version patch --no-git-tag-version && git add -A && git commit -m \"release: v$(node -p \"require(\"./package.json\").version\")\" && git push origin main",
     "release:minor": "npm version minor --no-git-tag-version && git add -A && git commit -m \"release: v$(node -p \"require(\"./package.json\").version\")\" && git push origin main",
