@@ -309,6 +309,14 @@ try {
   check('backup contains CLINICAL EXPERIENCE', text.includes('Cardiology rotation'));
   check('backup carries no API secrets', !/sk-[A-Za-z0-9]{16,}|nvapi-[A-Za-z0-9]{16,}/.test(text));
 
+  // §28/§36 regression: backups embedded plaintext provider keys.
+  const settingsWithKey = { ...st().settings, ai: { clinical: { apiKey: 'sk-SUPERSECRETKEY1234567890', model: 'gpt-4' } } };
+  await st().saveSettings(settingsWithKey);
+  const withKey = backup.buildBackup();
+  check('an API key set in settings NEVER reaches the backup file', !withKey.includes('sk-SUPERSECRETKEY1234567890'));
+  check('non-secret AI configuration is still preserved', withKey.includes('gpt-4'));
+  check('no generic secret field survives redaction', !/"apiKey"\s*:\s*"[^"]+"/.test(withKey));
+
   const countBefore = st().lessons.length;
   const skillsBefore = st().skills.length;
 

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { hasElectronBridge } from '../db/adapter';
+import { confirmAction } from './ui/globalConfirm';
 
 export type Phase =
   | { state: 'idle' }
@@ -59,7 +60,31 @@ export function UpdatePanel() {
       setPhase({ state: 'error', message: res.message || 'Download failed. Check your connection and try again.' });
     }
   }
+  /**
+   * Install the downloaded update (§42, §43).
+   *
+   * A local safety backup is written first. An update replaces the running
+   * application, and if anything goes wrong mid-upgrade the user must still
+   * have a restorable copy of their records — §45: never sacrifice user data
+   * for convenience. A backup failure does not block the update, but the user
+   * is told so they can decide.
+   */
   async function install() {
+    try {
+      const { buildBackup } = await import('../services/backup');
+      const json = buildBackup();
+      localStorage.setItem('clinical-rx:pre-update-backup', json);
+      localStorage.setItem('clinical-rx:pre-update-backup-at', new Date().toISOString());
+    } catch {
+      const proceed = await confirmAction({
+        title: 'Could not create a safety backup',
+        message: 'The update can still be installed, but no local safety copy was made first.',
+        note: 'You can cancel, download a backup from Settings → Data, and try again.',
+        confirmLabel: 'Install anyway',
+        destructive: true,
+      });
+      if (!proceed) return;
+    }
     await window.clinicalRx?.update.install();
   }
 

@@ -1,5 +1,33 @@
 import { useData } from '../stores/data';
 
+/**
+ * Remove provider credentials from a settings object before it leaves the app.
+ *
+ * §28/§36: a backup file is shared, emailed and stored in cloud drives. It
+ * must never carry API keys. The Phase 10 audit found backups embedding
+ * plaintext keys because the whole settings object was serialised verbatim.
+ * Model and provider choices are kept — only the secret is dropped, so a
+ * restored install keeps its configuration and simply asks for the key again.
+ */
+function redactSecrets(settings: any): any {
+  if (!settings || typeof settings !== 'object') return settings;
+  const clone = JSON.parse(JSON.stringify(settings));
+
+  const SECRET_KEYS = ['apiKey', 'api_key', 'secret', 'token', 'accessToken', 'refreshToken', 'password', 'credential'];
+  const scrub = (node: any): void => {
+    if (!node || typeof node !== 'object') return;
+    for (const [k, v] of Object.entries(node)) {
+      if (SECRET_KEYS.includes(k) && typeof v === 'string' && v.length > 0) {
+        delete node[k];
+      } else if (v && typeof v === 'object') {
+        scrub(v);
+      }
+    }
+  };
+  scrub(clone);
+  return clone;
+}
+
 /** Build the full backup JSON (same shape as Settings → Download backup). */
 export function buildBackup(): string {
   const st = useData.getState();
@@ -9,7 +37,8 @@ export function buildBackup(): string {
     exportedAt: new Date().toISOString(),
     records: {
       profile: st.profile,
-      settings: st.settings,
+      // Credentials are stripped: a backup is a data file, not a keychain.
+      settings: redactSecrets(st.settings),
       days: st.days,
       diseases: st.diseases,
       medicines: st.medicines,
