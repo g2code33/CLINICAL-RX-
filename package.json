@@ -6,7 +6,7 @@
     "name": "Clinical Rx",
     "email": "g2code33@users.noreply.github.com"
   },
-  "description": "Your personal clinical companion — offline-first clinical learning app (Electron + web)",
+  "description": "Your personal clinical companion \u2014 offline-first clinical learning app (Electron + web)",
   "main": "dist-electron/main.js",
   "scripts": {
     "dev": "vite",
@@ -23,6 +23,8 @@
     "dist:linux": "npm run build:web && npm run build:electron && electron-builder --linux",
     "smoke": "npm run build:web && node smoke.mjs",
     "test:api": "node test/api.test.js",
+    "test:ward": "node test/wardRounds.test.mjs",
+    "test": "node test/api.test.js && node test/wardRounds.test.mjs",
     "release:patch": "npm version patch --no-git-tag-version && git add -A && git commit -m \"release: v$(node -p \"require(\"./package.json\").version\")\" && git push origin main",
     "release:minor": "npm version minor --no-git-tag-version && git add -A && git commit -m \"release: v$(node -p \"require(\"./package.json\").version\")\" && git push origin main",
     "release:major": "npm version major --no-git-tag-version && git add -A && git commit -m \"release: v$(node -p \"require(\"./package.json\").version\")\" && git push origin main",

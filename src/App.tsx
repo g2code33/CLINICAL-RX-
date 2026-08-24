@@ -10,6 +10,7 @@ import { Layout } from './components/Layout';
 import { Onboarding } from './components/Onboarding';
 import { Dashboard } from './pages/Dashboard';
 import { ClinicalDays } from './pages/ClinicalDays';
+import { WardRounds } from './pages/WardRounds';
 import { CalendarPage } from './pages/Calendar';
 import { Diseases } from './pages/Diseases';
 import { Medicines } from './pages/Medicines';
@@ -82,7 +83,12 @@ export default function App() {
   useEffect(() => {
     if (!ready) return;
     import('./services/aiTaskQueue').then((m) => m.processPendingAiTasks()).catch(() => {});
-    const onOnline = () => { import('./services/aiTaskQueue').then((m) => m.processPendingAiTasks()).catch(() => {}); };
+    // Ward-round analyses queued while offline/without AI are retried here too.
+    import('./services/wardAi').then((m) => m.processPendingWardAnalyses()).catch(() => {});
+    const onOnline = () => {
+      import('./services/aiTaskQueue').then((m) => m.processPendingAiTasks()).catch(() => {});
+      import('./services/wardAi').then((m) => m.processPendingWardAnalyses()).catch(() => {});
+    };
     window.addEventListener('online', onOnline);
     return () => window.removeEventListener('online', onOnline);
   }, [ready]);
@@ -115,6 +121,7 @@ export default function App() {
       <Routes>
         <Route path="/" element={<Dashboard />} />
         <Route path="/clinical" element={<ClinicalDays />} />
+        <Route path="/ward-rounds" element={<WardRounds />} />
         <Route path="/calendar" element={<CalendarPage />} />
         <Route path="/diseases" element={<Diseases />} />
         <Route path="/medicines" element={<Medicines />} />

@@ -16,6 +16,7 @@ interface Result {
 const PAGES: Result[] = [
   { icon: '🏠', kind: 'Page', title: 'Home', subtitle: 'Dashboard', route: '/' },
   { icon: '📋', kind: 'Page', title: 'Clinical Days', subtitle: 'Record daily clinical activity', route: '/clinical' },
+  { icon: '🏥', kind: 'Page', title: 'Ward Rounds', subtitle: 'Capture learning during ward rounds', route: '/ward-rounds' },
   { icon: '📅', kind: 'Page', title: 'Calendar', subtitle: 'See clinical days on a calendar', route: '/calendar' },
   { icon: '🦠', kind: 'Page', title: 'Diseases', subtitle: 'Conditions, WHO→DT framework', route: '/diseases' },
   { icon: '💊', kind: 'Page', title: 'Medicines', subtitle: 'Drugs, mechanism, dosing', route: '/medicines' },
@@ -62,6 +63,8 @@ export function SearchModal({ open, onClose }: { open: boolean; onClose: () => v
       ...s.lessons.filter((l) => matches(l.title, l.content)).map((l) => ({ icon: '💡', kind: 'Lesson' as const, title: l.title, subtitle: 'Lesson', route: '/revision' })),
       ...s.bundles.filter((b) => matches(b.title, b.summary)).map((b) => ({ icon: '📦', kind: 'Bundle' as const, title: b.title, subtitle: b.type, route: '/bundles' })),
       ...s.days.filter((d) => matches(d.date, ...d.conditions, ...d.medicines)).map((d) => ({ icon: '📋', kind: 'Day' as const, title: `Clinical Day ${d.dayNumber}`, subtitle: `${d.date} · ${d.site}`, route: '/clinical' })),
+      ...s.wardRounds.filter((r) => matches(r.ward, r.date, r.focus)).map((r) => ({ icon: '🏥', kind: 'Ward round' as const, title: `${r.ward}`, subtitle: `${r.date}${r.focus ? ' · ' + r.focus : ''}`, route: `/ward-rounds?round=${r.id}` })),
+      ...s.wardEntries.filter((e) => matches(e.title, e.content)).map((e) => ({ icon: '🏥', kind: 'Ward capture' as const, title: e.title || e.content.slice(0, 60), subtitle: e.title && e.content ? e.content.slice(0, 70) : 'Ward round capture', route: `/ward-rounds?round=${e.roundId}` })),
     ];
   }
 

@@ -18,6 +18,7 @@ export function Dashboard() {
   const questions = useData((s) => s.questions);
   const lessons = useData((s) => s.lessons);
   const revisions = useData((s) => s.revisions);
+  const wardRounds = useData((s) => s.wardRounds);
   const save = useData((s) => s.save);
   const [quick, setQuick] = useState(false);
 
@@ -36,6 +37,8 @@ export function Dashboard() {
     }
     navigate('/clinical');
   }
+
+  const liveRound = wardRounds.find((r) => r.status === 'active' && !r.archived) ?? null;
 
   return (
     <div className="space-y-6">
@@ -80,6 +83,9 @@ export function Dashboard() {
           )}
           <button className="btn-primary mt-4 w-full" onClick={startToday}>
             {today ? "✏️ Continue today's log" : "＋ Start Today's Log"}
+          </button>
+          <button className="btn-secondary mt-2 w-full" onClick={() => navigate('/ward-rounds')}>
+            🏥 {liveRound ? `Continue ward round — ${liveRound.ward}` : 'Start Ward Round'}
           </button>
         </div>
 

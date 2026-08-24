@@ -16,6 +16,9 @@ import type {
   SavedQuiz,
   Settings,
   StorageAdapter,
+  WardAnalysis,
+  WardEntry,
+  WardRound,
 } from '../types';
 import { LocalStorageAdapter } from '../db/localStorageAdapter';
 import { ElectronAdapter } from '../db/electronAdapter';
@@ -39,6 +42,9 @@ export interface DataStore {
   chats: ChatSession[];
   quizzes: SavedQuiz[];
   reminders: Reminder[];
+  wardRounds: WardRound[];
+  wardEntries: WardEntry[];
+  wardAnalyses: WardAnalysis[];
   status: string;
   removed: Array<{ module: ModuleType; record: any }>;
 
@@ -67,6 +73,22 @@ function sortByUpdated<T extends { updatedAt: number }>(arr: T[]): T[] {
   return [...arr].sort((a, b) => b.updatedAt - a.updatedAt);
 }
 
+// Maps a module to its array key on the store. Most are simply `module + 's'`,
+// but irregular plurals (wardEntry -> wardEntries) must be explicit, otherwise
+// saves would silently write to a non-existent `wardEntrys` key.
+const LIST_KEY: Partial<Record<ModuleType, keyof DataStore>> = {
+  wardRound: 'wardRounds',
+  wardEntry: 'wardEntries',
+  wardAnalysis: 'wardAnalyses',
+};
+
+function listKeyFor(module: ModuleType, state: Record<string, unknown>): keyof DataStore {
+  const explicit = LIST_KEY[module];
+  if (explicit) return explicit;
+  const plural = module + 's';
+  return (plural in state ? plural : module) as keyof DataStore;
+}
+
 export const useData = create<DataStore>((set, get) => ({
   ready: false,
   adapter: hasElectronBridge() ? new ElectronAdapter() : new LocalStorageAdapter(),
@@ -84,6 +106,9 @@ export const useData = create<DataStore>((set, get) => ({
   chats: [],
   quizzes: [],
   reminders: [],
+  wardRounds: [],
+  wardEntries: [],
+  wardAnalyses: [],
   removed: [],
   status: 'Initializing…',
 
@@ -92,7 +117,7 @@ export const useData = create<DataStore>((set, get) => ({
     set({ status: 'Loading local data…' });
     try {
       const platform = await adapter.platform();
-      const [profiles, settingsList, days, diseases, medicines, investigations, questions, lessons, revisions, bundles, chats, quizzes, reminders] =
+      const [profiles, settingsList, days, diseases, medicines, investigations, questions, lessons, revisions, bundles, chats, quizzes, reminders, wardRounds, wardEntries, wardAnalyses] =
         await Promise.all([
           adapter.list('profile'),
           adapter.list('settings'),
@@ -107,6 +132,9 @@ export const useData = create<DataStore>((set, get) => ({
           adapter.list('chat'),
           adapter.list('quiz'),
           adapter.list('reminder'),
+          adapter.list('wardRound'),
+          adapter.list('wardEntry'),
+          adapter.list('wardAnalysis'),
         ]);
       // Defensive parse: skip any corrupt record instead of throwing, so the
       // app can never be locked on the splash screen by bad stored data.
@@ -133,6 +161,9 @@ export const useData = create<DataStore>((set, get) => ({
         chats: sortByUpdated(parse(chats)),
         quizzes: sortByUpdated(parse(quizzes)),
         reminders: sortByUpdated(parse(reminders)),
+        wardRounds: sortByUpdated(parse(wardRounds)),
+        wardEntries: sortByUpdated(parse(wardEntries)),
+        wardAnalyses: sortByUpdated(parse(wardAnalyses)),
         ready: true,
         status: 'Ready · ' + (hasElectronBridge() ? 'SQLite (offline)' : 'Web storage'),
       });
@@ -183,6 +214,9 @@ export const useData = create<DataStore>((set, get) => ({
       chat: get().chats,
       quiz: get().quizzes,
       reminder: get().reminders,
+      wardRound: get().wardRounds,
+      wardEntry: get().wardEntries,
+      wardAnalysis: get().wardAnalyses,
     };
     return map[module] as Array<BaseRecord & Record<string, any>>;
   },
@@ -202,8 +236,7 @@ export const useData = create<DataStore>((set, get) => ({
     await adapter.put(module, rec.id, rec, rec.createdAt, rec.updatedAt);
     if (!fromSync && backendConfigured()) enqueue({ op: 'upsert', module, id: rec.id, data: rec, createdAt: rec.createdAt, updatedAt: rec.updatedAt });
     set((s) => {
-      const key = module + 's';
-      const listKey = (key in s ? key : module) as keyof DataStore;
+      const listKey = listKeyFor(module, s as unknown as Record<string, unknown>);
       const existing = (s[listKey] as BaseRecord[]) || [];
       const next = existing.some((r) => r.id === rec.id)
         ? existing.map((r) => (r.id === rec.id ? rec : r))
@@ -218,6 +251,11 @@ export const useData = create<DataStore>((set, get) => ({
       import('../services/daySync').then((m) => m.syncDayToCompartments(rec.id)).catch(() => {});
       import('../services/autoBundle').then((m) => m.processAiWhenOnline()).catch(() => {});
     }
+    // A completed ward round feeds the automatic daily/weekly bundlers the same
+    // way a clinical day does.
+    if (!fromSync && module === 'wardRound' && (rec as any).status === 'completed') {
+      import('../services/autoBundle').then((m) => m.processAiWhenOnline()).catch(() => {});
+    }
   },
 
   remove: async (module, id, opts) => {
@@ -229,7 +267,7 @@ export const useData = create<DataStore>((set, get) => ({
     await adapter.remove(module, id);
     if (!fromSync && backendConfigured()) enqueue({ op: 'delete', module, id });
     set((s) => {
-      const listKey = (module + 's' in s ? module + 's' : module) as keyof DataStore;
+      const listKey = listKeyFor(module, s as unknown as Record<string, unknown>);
       const existing = (s[listKey] as BaseRecord[]) || [];
       const removed = snapshot ? [...s.removed, { module, record: snapshot }].slice(-10) : s.removed;
       return { [listKey]: existing.filter((r) => r.id !== id), removed, status: fromSync ? '✓ Synced' : '✓ Deleted' } as any;

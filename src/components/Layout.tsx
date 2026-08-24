@@ -19,6 +19,7 @@ const APP_VERSION = pkg.version;
 const NAV = [
   { to: '/', icon: '🏠', label: 'Home' },
   { to: '/clinical', icon: '📋', label: 'Clinical Days' },
+  { to: '/ward-rounds', icon: '🏥', label: 'Ward Rounds' },
   { to: '/calendar', icon: '📅', label: 'Calendar' },
   { to: '/diseases', icon: '🦠', label: 'Diseases' },
   { to: '/medicines', icon: '💊', label: 'Medicines' },
@@ -37,7 +38,7 @@ const NAV = [
 const BOTTOM_NAV = [
   { to: '/', icon: '🏠', label: 'Home' },
   { to: '/clinical', icon: '📋', label: 'Days' },
-  { to: '/diseases', icon: '🦠', label: 'Diseases' },
+  { to: '/ward-rounds', icon: '🏥', label: 'Rounds' },
   { to: '/medicines', icon: '💊', label: 'Meds' },
   { to: '/quiz', icon: '📝', label: 'Quiz' },
   { to: '/ai', icon: '🤖', label: 'AI' },

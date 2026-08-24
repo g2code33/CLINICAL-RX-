@@ -13,6 +13,10 @@ import type {
   RevisionItem,
   SavedQuiz,
   Settings,
+  WardAnalysis,
+  WardEntry,
+  WardEntryType,
+  WardRound,
 } from '../types';
 
 export const AI_MODULES = [
@@ -162,6 +166,87 @@ export function newChatSession(section: string, title: string): ChatSession {
     section,
     title,
     messages: [],
+  };
+}
+
+// ---- Ward Rounds ----
+
+/** Ward presets offered in the "Start Ward Round" form (custom names allowed). */
+export const WARD_PRESETS = [
+  'Medical Ward',
+  'Surgical Ward',
+  'Paediatric Ward',
+  'Emergency Department',
+  'Outpatient Department',
+  'Pharmacy',
+] as const;
+
+/** Optional learning-focus presets for a round. */
+export const WARD_FOCUS_PRESETS = [
+  'General',
+  'Pharmacotherapy',
+  'Pharmacology',
+  'Clinical pharmacy',
+  'Medicines',
+  'Investigations',
+] as const;
+
+export const WARD_ENTRY_META: Record<
+  WardEntryType,
+  { icon: string; label: string; plural: string; placeholder: string; titleLabel?: string }
+> = {
+  learning: { icon: '💡', label: 'Learning Point', plural: 'Learning Points', placeholder: 'e.g. Amlodipine can cause ankle edema.' },
+  medicine: { icon: '💊', label: 'Medicine', plural: 'Medicines', placeholder: 'What did I learn about it?', titleLabel: 'Medicine name' },
+  condition: { icon: '🦠', label: 'Condition', plural: 'Conditions', placeholder: 'What did I learn about it?', titleLabel: 'Condition name' },
+  investigation: { icon: '🧪', label: 'Investigation', plural: 'Investigations', placeholder: 'What did I learn / observe?', titleLabel: 'Investigation name' },
+  question: { icon: '❓', label: 'Question', plural: 'Questions', placeholder: 'e.g. Why was losartan preferred?' },
+  note: { icon: '📝', label: 'Quick Note', plural: 'Quick Notes', placeholder: 'Anything else worth remembering…' },
+};
+
+export function newWardRound(ward: string, date: string, focus = 'General'): WardRound {
+  const now = Date.now();
+  return {
+    id: uid(),
+    createdAt: now,
+    updatedAt: now,
+    ward,
+    date,
+    focus,
+    status: 'active',
+    startedAt: now,
+  };
+}
+
+export function newWardEntry(roundId: string, type: WardEntryType, title: string, content: string): WardEntry {
+  const now = Date.now();
+  return {
+    id: uid(),
+    createdAt: now,
+    updatedAt: now,
+    roundId,
+    type,
+    title: title.trim(),
+    content: content.trim(),
+    priority: 'medium',
+  };
+}
+
+export function newWardAnalysis(roundId: string): WardAnalysis {
+  const now = Date.now();
+  return {
+    id: uid(),
+    createdAt: now,
+    updatedAt: now,
+    roundId,
+    status: 'pending',
+    summary: '',
+    keyLearningPoints: [],
+    knowledgeGaps: [],
+    questions: [],
+    revisionRecommendations: [],
+    connections: [],
+    difficultTopics: [],
+    attempts: 0,
   };
 }
 

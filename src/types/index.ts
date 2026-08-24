@@ -11,7 +11,10 @@ export type ModuleType =
   | 'bundle'
   | 'chat'
   | 'quiz'
-  | 'reminder';
+  | 'reminder'
+  | 'wardRound'
+  | 'wardEntry'
+  | 'wardAnalysis';
 
 export interface BaseRecord {
   id: string;
@@ -267,4 +270,73 @@ export interface Reminder extends BaseRecord {
   time: string; // HH:mm
   note?: string;
   done: boolean;
+}
+
+// ---- Ward Rounds ------------------------------------------------------
+// A ward round is a fast capture session for CLINICAL LEARNING during an
+// active round. It records what the STUDENT encountered and learned — it is
+// explicitly NOT a patient record: no names, IDs, demographics or contact
+// details are modelled anywhere in these types.
+
+export type WardRoundStatus = 'active' | 'completed';
+
+export interface WardRound extends BaseRecord {
+  ward: string; // e.g. "Medical Ward" (free text, presets offered in the UI)
+  date: string; // yyyy-mm-dd
+  focus: string; // e.g. "Pharmacotherapy" — optional learning focus
+  status: WardRoundStatus;
+  startedAt: number;
+  completedAt?: number;
+  archived?: boolean;
+  dayId?: string; // linked ClinicalDay (same date), if any
+  sample?: boolean; // created by demo/sample data
+}
+
+/** The six capture types available during a round. */
+export type WardEntryType = 'learning' | 'medicine' | 'condition' | 'investigation' | 'question' | 'note';
+
+export interface WardEntry extends BaseRecord {
+  roundId: string;
+  type: WardEntryType;
+  title: string; // short subject, e.g. "Amlodipine" (may be empty for notes)
+  content: string; // the student's own words — NEVER modified by AI
+  priority: 'high' | 'medium' | 'low';
+  /**
+   * AI's structured interpretation of this entry, stored SEPARATELY from the
+   * student's original `content`. Only set once the student accepts it.
+   */
+  aiSuggestion?: WardEntryAiSuggestion;
+  /** Set when the entry has been pushed into Diseases/Medicines/etc. */
+  linkedRecordId?: string;
+}
+
+export interface WardEntryAiSuggestion {
+  acceptedAt: number;
+  model?: string;
+  className?: string;
+  mechanism?: string;
+  adverseEffects?: string[];
+  keyPoints?: string[];
+  answer?: string;
+  raw?: string;
+}
+
+/**
+ * AI output for a whole round. Kept in its own module so AI-generated content
+ * can never overwrite the student's captured learning.
+ */
+export interface WardAnalysis extends BaseRecord {
+  roundId: string;
+  status: 'pending' | 'processing' | 'completed' | 'failed';
+  model?: string;
+  summary: string;
+  keyLearningPoints: string[];
+  knowledgeGaps: string[];
+  questions: string[];
+  revisionRecommendations: string[];
+  connections: string[];
+  difficultTopics: string[];
+  raw?: string;
+  error?: string;
+  attempts: number;
 }

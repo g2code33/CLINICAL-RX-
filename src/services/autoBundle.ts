@@ -56,7 +56,7 @@ async function createAutoDaily(date: string): Promise<boolean> {
       title: `AUTO — Daily Bundle — ${date}`,
       periodStart: date,
       periodEnd: date,
-      sourceModules: ['day', 'disease', 'medicine', 'investigation', 'question'],
+      sourceModules: ['day', 'disease', 'medicine', 'investigation', 'question', 'wardRound'],
     });
     return true;
   } finally {
@@ -77,15 +77,21 @@ export async function runAutoBundling(): Promise<{ daily: number; weekly: number
   let weekly = 0;
 
   const days = s.days.filter((d) => d.date < today); // only completed days
+  // Ward rounds are bundle-worthy on their own: a day with only a ward round
+  // (no clinical-day record) must still get its automatic bundle.
+  const wardDates = Array.from(
+    new Set(s.wardRounds.filter((r) => r.date < today && !r.archived).map((r) => r.date))
+  );
+  const allDates = Array.from(new Set([...days.map((d) => d.date), ...wardDates])).sort();
 
   if (settings?.autoDailyBundle) {
-    for (const day of days) {
-      if (await createAutoDaily(day.date)) daily++;
+    for (const date of allDates) {
+      if (await createAutoDaily(date)) daily++;
     }
   }
 
-  if (settings?.autoWeeklyBundle && days.length) {
-    const weeks = Array.from(new Set(days.map((d) => weekKey(d.date))));
+  if (settings?.autoWeeklyBundle && allDates.length) {
+    const weeks = Array.from(new Set(allDates.map((d) => weekKey(d))));
     for (const wk of weeks) {
       if (hasAutoBundle('auto-weekly', wk)) continue;
       const monday = mondayOfWeek(wk);
@@ -97,7 +103,7 @@ export async function runAutoBundling(): Promise<{ daily: number; weekly: number
         title: `AUTO — Weekly Bundle — ${monday} → ${sunday}`,
         periodStart: monday,
         periodEnd: sunday,
-        sourceModules: ['day', 'disease', 'medicine', 'investigation', 'question'],
+        sourceModules: ['day', 'disease', 'medicine', 'investigation', 'question', 'wardRound'],
       });
       weekly++;
     }
@@ -117,7 +123,11 @@ export async function processAiWhenOnline(): Promise<{ processed: number; failed
   const today = toIso(new Date());
   const settings = s.settings;
   const todayDay = s.days.find((d) => d.date === today);
-  const hasData = todayDay && (todayDay.conditions.length || todayDay.medicines.length || todayDay.investigations.length || todayDay.lessons.length);
+  const dayHasData = !!todayDay && !!(todayDay.conditions.length || todayDay.medicines.length || todayDay.investigations.length || todayDay.lessons.length);
+  // A completed ward round today is enough on its own to warrant a bundle.
+  const todayRoundIds = s.wardRounds.filter((r) => r.date === today && !r.archived).map((r) => r.id);
+  const wardHasData = todayRoundIds.some((id) => s.wardEntries.some((e) => e.roundId === id));
+  const hasData = dayHasData || wardHasData;
   if (settings?.autoDailyBundle && hasData) {
     await createAutoDaily(today); // no-op if already exists or in-flight
   }

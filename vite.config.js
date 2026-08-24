@@ -16,5 +16,9 @@ export default defineConfig({
     server: {
         port: 5173,
         strictPort: true,
+        host: true,
+        // Allow remote/sandboxed preview hosts (Codespaces, e2b, tunnels) to
+        // reach the dev server; Vite blocks unknown hosts by default.
+        allowedHosts: true,
     },
 });

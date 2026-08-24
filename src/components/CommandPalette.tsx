@@ -34,6 +34,7 @@ export function CommandPalette() {
     const base: Command[] = [
       { id: 'home', icon: '🏠', label: 'Go to Home', run: go('/') },
       { id: 'days', icon: '📋', label: 'Clinical Days', run: go('/clinical') },
+      { id: 'wardrounds', icon: '🏥', label: 'Ward Rounds', run: go('/ward-rounds') },
       { id: 'calendar', icon: '📅', label: 'Calendar', run: go('/calendar') },
       { id: 'diseases', icon: '🦠', label: 'Diseases', run: go('/diseases') },
       { id: 'medicines', icon: '💊', label: 'Medicines', run: go('/medicines') },
@@ -46,6 +47,7 @@ export function CommandPalette() {
       { id: 'settings', icon: '⚙️', label: 'Settings', run: go('/settings') },
       { id: 'search', icon: '🔍', label: 'Open global search', run: () => { setOpen(false); setSearchOpen(true); } },
       { id: 'newday', icon: '＋', label: 'New clinical day', run: () => { setOpen(false); navigate('/clinical'); } },
+      { id: 'newround', icon: '🏥', label: 'Start ward round', run: () => { setOpen(false); navigate('/ward-rounds'); } },
       { id: 'quickadd', icon: '⚡', label: 'Quick capture (open AI)', run: () => { setOpen(false); navigate('/ai'); } },
       { id: 'autodaily', icon: '🤖', label: 'Generate auto daily bundle', hint: 'Bundle Library', run: () => { setOpen(false); navigate('/bundles'); } },
     ];
