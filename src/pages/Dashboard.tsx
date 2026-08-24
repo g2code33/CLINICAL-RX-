@@ -22,6 +22,9 @@ export function Dashboard() {
   const revisions = useData((s) => s.revisions);
   const wardRounds = useData((s) => s.wardRounds);
   const academicStages = useData((s) => s.academicStages);
+  const activities = useData((s) => s.activities);
+  const goals = useData((s) => s.goals);
+  const wardEntries = useData((s) => s.wardEntries);
   const [online, setOnline] = useState(typeof navigator === 'undefined' ? true : navigator.onLine);
   useEffect(() => {
     const on = () => setOnline(true);
@@ -48,6 +51,26 @@ export function Dashboard() {
     }
     navigate('/clinical');
   }
+
+  // ---- Today's Activity (§8): what the student has actually done today,
+  // across the four things they do daily. Counts only, not a statistics wall.
+  const iso = todayIso();
+  const startOfDay = new Date(iso).setHours(0, 0, 0, 0);
+  const todayActivity = {
+    learning: lessons.filter((l) => (l.createdAt ?? 0) >= startOfDay).length,
+    wardRounds: wardEntries.filter((e) => (e.createdAt ?? 0) >= startOfDay).length,
+    revision: revisions.filter((r) => (r.reviewedAt ?? 0) >= startOfDay).length,
+    questions: questions.filter((q) => (q.createdAt ?? 0) >= startOfDay).length,
+  };
+
+  // ---- Recent Activity (§8): the last few things touched, newest first.
+  const recent = [...activities].sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0)).slice(0, 6);
+
+  // ---- Upcoming Goals (§8): active goals with the nearest target date.
+  const upcomingGoals = goals
+    .filter((g) => g.status === 'active' || g.status === 'not-started')
+    .sort((a, b) => (a.targetDate ?? '9999').localeCompare(b.targetDate ?? '9999'))
+    .slice(0, 4);
 
   const liveRound = wardRounds.find((r) => r.status === 'active' && !r.archived) ?? null;
   const stage = currentStage();
@@ -84,13 +107,47 @@ export function Dashboard() {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
-        <StatCard icon="🔥" label="Day streak" value={streak.current} accent="bg-orange-100 dark:bg-orange-900" to="/clinical" />
-        <StatCard icon="📋" label="Clinical days" value={days.length} accent="bg-sky-100 dark:bg-sky-900" to="/clinical" />
-        <StatCard icon="🦠" label="Conditions" value={diseases.length} to="/diseases" />
-        <StatCard icon="💊" label="Medicines" value={medicines.length} to="/medicines" />
-        <StatCard icon="🧪" label="Investigations" value={investigations.length} to="/investigations" />
-      </div>
+      {/* ---- Quick actions (§8): the five things a student starts most often,
+           reachable in one click from the home screen. ---- */}
+      <section aria-labelledby="quick-actions-heading">
+        <h2 id="quick-actions-heading" className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-400">
+          Quick actions
+        </h2>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
+          {[
+            { icon: '📝', label: 'Learning Note', hint: 'Capture what you learnt', run: () => navigate('/notes?new=1') },
+            { icon: '🏥', label: 'Ward Round', hint: liveRound ? 'Continue round' : 'Start a round', run: () => navigate('/ward-rounds') },
+            { icon: '❓', label: 'Question', hint: 'Something to research', run: () => navigate('/questions?new=1') },
+            { icon: '📦', label: 'Bundle', hint: 'Package your work', run: () => navigate('/bundles') },
+            { icon: '🧠', label: 'Ask AI', hint: 'Ask CLINICAL Rx AI', run: () => navigate('/ai') },
+          ].map((a) => (
+            <button
+              key={a.label}
+              className="focus-ring flex flex-col items-start gap-0.5 rounded-xl border border-slate-200 bg-white p-3 text-left transition-colors hover:border-brand-400 hover:bg-brand-50 dark:border-slate-700 dark:bg-slate-800 dark:hover:bg-brand-950"
+              onClick={a.run}
+            >
+              <span className="text-xl" aria-hidden="true">{a.icon}</span>
+              <span className="text-sm font-semibold">{a.label}</span>
+              <span className="text-[11px] text-slate-400">{a.hint}</span>
+            </button>
+          ))}
+        </div>
+      </section>
+
+      {/* ---- Today's Activity (§8): four numbers that answer "what have I done
+           today?" — deliberately not a wall of lifetime statistics. ---- */}
+      <section aria-labelledby="today-activity-heading">
+        <h2 id="today-activity-heading" className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-400">
+          Today&rsquo;s activity
+        </h2>
+        <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
+          <StatCard icon="📝" label="Learning" value={todayActivity.learning} to="/notes" />
+          <StatCard icon="🏥" label="Ward rounds" value={todayActivity.wardRounds} accent="bg-sky-100 dark:bg-sky-900" to="/ward-rounds" />
+          <StatCard icon="🧠" label="Revision" value={todayActivity.revision} to="/revision" />
+          <StatCard icon="❓" label="Questions" value={todayActivity.questions} to="/questions" />
+          <StatCard icon="🔥" label="Day streak" value={streak.current} accent="bg-orange-100 dark:bg-orange-900" to="/clinical" />
+        </div>
+      </section>
 
       <div className="grid gap-6 lg:grid-cols-2">
         <div className="card">
@@ -176,6 +233,68 @@ export function Dashboard() {
           </div>
           <span className="btn-primary">Go to Bundles →</span>
         </button>
+      </div>
+
+      {/* ---- Recent Activity + Upcoming Goals (§8) ---- */}
+      <div className="grid gap-6 lg:grid-cols-2">
+        <section className="card" aria-labelledby="recent-heading">
+          <div className="mb-3 flex items-center justify-between">
+            <h2 id="recent-heading" className="font-semibold">🕒 Recent activity</h2>
+            <button className="btn-ghost text-xs" onClick={() => navigate('/progress')}>View progress →</button>
+          </div>
+          {recent.length === 0 ? (
+            <EmptyState icon="🕒" title="Nothing yet today" hint="Anything you create or update will appear here so you can pick up where you left off." />
+          ) : (
+            <ul className="space-y-1.5 text-sm">
+              {recent.map((a) => (
+                <li key={a.id} className="flex items-baseline justify-between gap-3 border-b border-slate-100 pb-1.5 last:border-0 dark:border-slate-700">
+                  <span className="min-w-0 flex-1 truncate">
+                    <span className="text-slate-400">{a.action}</span> {a.label}
+                  </span>
+                  <span className="shrink-0 text-[11px] text-slate-400">
+                    {new Date(a.createdAt).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+
+        <section className="card" aria-labelledby="goals-heading">
+          <div className="mb-3 flex items-center justify-between">
+            <h2 id="goals-heading" className="font-semibold">🎯 Upcoming goals</h2>
+            <button className="btn-ghost text-xs" onClick={() => navigate('/journey/goals')}>All goals →</button>
+          </div>
+          {upcomingGoals.length === 0 ? (
+            <EmptyState
+              icon="🎯"
+              title="No active goals"
+              hint="Set a goal for this semester — a skill to build, a rotation to complete, or a project to finish."
+              actions={<button className="btn-primary" onClick={() => navigate('/journey/goals')}>Create a goal</button>}
+            />
+          ) : (
+            <ul className="space-y-2 text-sm">
+              {upcomingGoals.map((g) => {
+                const done = g.milestones?.filter((m) => m.done).length ?? 0;
+                const total = g.milestones?.length ?? 0;
+                return (
+                  <li key={g.id}>
+                    <button
+                      className="focus-ring w-full rounded-lg px-2 py-1.5 text-left hover:bg-slate-50 dark:hover:bg-slate-700"
+                      onClick={() => navigate('/journey/goals')}
+                    >
+                      <span className="block truncate font-medium">{g.title}</span>
+                      <span className="block text-[11px] text-slate-400">
+                        {g.targetDate ? `Target ${g.targetDate}` : 'No target date'}
+                        {total > 0 ? ` · ${done}/${total} milestones` : ''}
+                      </span>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </section>
       </div>
 
       <QuickAdd open={quick} onClose={() => setQuick(false)} />
