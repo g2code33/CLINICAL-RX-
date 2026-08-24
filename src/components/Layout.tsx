@@ -14,6 +14,7 @@ import { ContextMenuProvider } from './ContextMenu';
 import { TaskIndicator } from './TaskIndicator';
 import { NotificationBanner } from './NotificationBanner';
 import { Toaster, OfflineIndicator } from './Toaster';
+import { GlobalConfirm } from './ui/globalConfirm';
 import { ModeSplash } from './ModeSplash';
 
 const APP_VERSION = pkg.version;
@@ -462,6 +463,7 @@ export function Layout({ children }: { children: ReactNode }) {
         <NotificationBanner />
         <Toaster />
         <OfflineIndicator />
+        <GlobalConfirm />
         {splash && <ModeSplash mode={splash} onDone={() => setSplash(null)} />}
       </div>
     </ContextMenuProvider>

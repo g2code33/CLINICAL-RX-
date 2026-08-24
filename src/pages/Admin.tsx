@@ -4,6 +4,7 @@ import { useData } from '../stores/data';
 import { syncClient } from '../services/syncClient';
 import { PasswordInput } from '../components/ui';
 import { Modal } from '../components/Modal';
+import { confirmAction, notifyAction } from '../components/ui/globalConfirm';
 
 interface AdminUser {
   id: string;
@@ -96,7 +97,12 @@ export function AdminPage() {
   }
 
   async function doClearSecurity(email: string) {
-    if (!confirm('Clear this user\'s security question?')) return;
+    if (!(await confirmAction({
+      title: 'Clear this security question?',
+      message: 'The user will need to set a new security question before they can use it to reset their password.',
+      confirmLabel: 'Clear question',
+      destructive: true,
+    }))) return;
     setBusy(true); setMsg('');
     const res = await syncClient.adminClearSecurity(bUrl, token, email);
     setMsg(res.ok ? `✓ Security question cleared` : '⚠️ ' + (res.error || 'Failed'));

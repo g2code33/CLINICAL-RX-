@@ -356,9 +356,12 @@ export function ConfirmDialog({
       title={options.title}
       footer={
         <>
-          <button className="btn-secondary" onClick={onCancel}>
-            {options.cancelLabel ?? 'Cancel'}
-          </button>
+          {/* An empty cancelLabel means "acknowledge only" (replaces alert). */}
+          {options.cancelLabel !== '' && (
+            <button className="btn-secondary" onClick={onCancel}>
+              {options.cancelLabel ?? 'Cancel'}
+            </button>
+          )}
           <button
             className={options.destructive ? 'btn bg-red-600 text-white hover:bg-red-700' : 'btn-primary'}
             onClick={onConfirm}

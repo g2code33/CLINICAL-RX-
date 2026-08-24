@@ -29,6 +29,7 @@ import { bundleFromWardEntries, bundleFromWardRounds } from '../services/bundler
 import { downloadText } from '../services/export';
 import { privacyWarning, scanForPhi } from '../services/privacy';
 import type { WardEntryType, WardRound } from '../types';
+import { confirmAction, notifyAction } from '../components/ui/globalConfirm';
 
 type View = 'home' | 'active' | 'history';
 
@@ -478,10 +479,20 @@ function ActiveRound({ round, onClose, onDeleted }: { round: WardRound; onClose:
     }
   }
 
-  function exportRound() {
+  async function exportRound() {
     const md = roundToMarkdown(round);
     const finding = scanForPhi(md);
-    if (finding.length && !confirm(`⚠️ Possible patient-identifying info detected (${privacyWarning(finding)}). Export anyway?`)) return;
+    if (
+      finding.length &&
+      !(await confirmAction({
+        title: '⚠️ Possible patient-identifying information',
+        message: privacyWarning(finding),
+        note: 'Clinical Rx is not a patient record. Export only if you are sure nothing identifying is included.',
+        confirmLabel: 'Export anyway',
+        destructive: true,
+      }))
+    )
+      return;
     downloadText(`ward-round-${round.ward.toLowerCase().replace(/\s+/g, '-')}-${round.date}.md`, md);
   }
 
@@ -602,7 +613,13 @@ function ActiveRound({ round, onClose, onDeleted }: { round: WardRound; onClose:
           <button
             className="btn-ghost text-xs text-red-600"
             onClick={async () => {
-              if (!confirm(`Delete this ward round and its ${counts.total} capture(s)? This cannot be undone.`)) return;
+              if (!(await confirmAction({
+                title: 'Delete this ward round?',
+                message: `The round and its ${counts.total} capture(s) will be removed.`,
+                note: 'This cannot be undone.',
+                confirmLabel: 'Delete round',
+                destructive: true,
+              }))) return;
               await deleteRound(round.id);
               onDeleted();
             }}
@@ -1001,9 +1018,35 @@ function History({ rounds, onOpen, onBack }: { rounds: WardRound[]; onOpen: (id:
 function HistoryRow({ round, onOpen }: { round: WardRound; onOpen: () => void }) {
   const counts = countsFor(round.id);
   const [menu, setMenu] = useState(false);
+  // Themed rename instead of window.prompt (§34).
+  const [renameTo, setRenameTo] = useState<string | null>(null);
 
   return (
     <div className="flex flex-wrap items-center gap-3 rounded-xl border border-slate-200 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800">
+      <Modal open={renameTo !== null} onClose={() => setRenameTo(null)} title="Rename ward">
+        <form
+          className="space-y-3"
+          onSubmit={async (e) => {
+            e.preventDefault();
+            const name = (renameTo ?? '').trim();
+            setRenameTo(null);
+            if (name) await renameRound(round.id, name);
+          }}
+        >
+          <label className="label" htmlFor={`ward-rename-${round.id}`}>Ward name</label>
+          <input
+            id={`ward-rename-${round.id}`}
+            className="input"
+            value={renameTo ?? ''}
+            onChange={(e) => setRenameTo(e.target.value)}
+            autoFocus
+          />
+          <div className="flex justify-end gap-2">
+            <button type="button" className="btn-secondary" onClick={() => setRenameTo(null)}>Cancel</button>
+            <button type="submit" className="btn-primary" disabled={!(renameTo ?? '').trim()}>Rename</button>
+          </div>
+        </form>
+      </Modal>
       <button className="min-w-0 flex-1 text-left" onClick={onOpen}>
         <div className="flex flex-wrap items-baseline gap-x-2">
           <span className="font-semibold text-slate-800 dark:text-slate-100">
@@ -1026,10 +1069,9 @@ function HistoryRow({ round, onOpen }: { round: WardRound; onOpen: () => void })
               <MenuItem label="Open" onClick={() => { setMenu(false); onOpen(); }} />
               <MenuItem
                 label="Rename ward"
-                onClick={async () => {
+                onClick={() => {
                   setMenu(false);
-                  const name = prompt('Ward name', round.ward);
-                  if (name) await renameRound(round.id, name);
+                  setRenameTo(round.ward);
                 }}
               />
               <MenuItem
@@ -1059,7 +1101,13 @@ function HistoryRow({ round, onOpen }: { round: WardRound; onOpen: () => void })
                 danger
                 onClick={async () => {
                   setMenu(false);
-                  if (!confirm(`Delete the ${round.ward} round of ${round.date} and its captures?`)) return;
+                  if (!(await confirmAction({
+                    title: `Delete the ${round.ward} round?`,
+                    message: `The round of ${round.date} and all of its captures will be removed.`,
+                    note: 'This cannot be undone.',
+                    confirmLabel: 'Delete round',
+                    destructive: true,
+                  }))) return;
                   await deleteRound(round.id);
                 }}
               />

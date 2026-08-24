@@ -1,6 +1,7 @@
 import { useData } from '../stores/data';
 import type { ClinicalDay, Disease, Medicine, Investigation, Question, Lesson } from '../types';
 import { uid } from '../stores/data';
+import { confirmAction, notifyAction } from '../components/ui/globalConfirm';
 
 function daysAgo(n: number): string {
   const d = new Date();
@@ -11,7 +12,12 @@ function daysAgo(n: number): string {
 export async function loadSampleData() {
   const s = useData.getState();
   if (s.diseases.length || s.medicines.length) {
-    if (!confirm('This will add sample data alongside your current records. Continue?')) return false;
+    if (!(await confirmAction({
+      title: 'Load sample data?',
+      message: 'Sample records will be added alongside your current records so you can explore the app.',
+      note: 'They are clearly marked and can be removed again at any time.',
+      confirmLabel: 'Load sample data',
+    }))) return false;
   }
 
   const now = Date.now();
@@ -87,7 +93,13 @@ export async function loadSampleData() {
 export async function removeSampleData() {
   const s = useData.getState();
   if (!s.diseases.length && !s.medicines.length && !s.days.length) return 0;
-  if (!confirm('Remove all sample data? Your own records are kept.')) return 0;
+  if (!(await confirmAction({
+    title: 'Remove sample data?',
+    message: 'Every record marked as sample data will be deleted.',
+    note: 'Your own records are kept — only sample records are removed.',
+    confirmLabel: 'Remove sample data',
+    destructive: true,
+  }))) return 0;
 
   const SAMPLE_DISEASES = ['Hypertension', 'Malaria', 'URTI', 'Type 2 Diabetes'];
   const SAMPLE_MEDICINES = ['Amlodipine', 'Losartan', 'Artemether/Lumefantrine', 'Metformin', 'Paracetamol'];

@@ -12,6 +12,7 @@ import {
   stageSnapshot,
 } from '../../services/career';
 import { allStages, planPromotion, promote, periodsFor, setCurrentPeriod } from '../../services/academic';
+import { useConfirm } from '../../components/ui/primitives';
 
 /**
  * 🎓 PHARMD JOURNEY — home
@@ -54,13 +55,16 @@ export default function JourneyHome() {
   const periods = useMemo(() => (summary.stage ? periodsFor(summary.stage.id) : []), [summary.stage, stages]);
   const currentPeriod = periods.find((p) => p.id === profile?.currentPeriodId);
 
+  const { confirm, confirmDialog } = useConfirm();
+
   const doPromote = async () => {
     const target = plan.to?.name ?? `Level ${plan.nextLevel}`;
-    const ok = window.confirm(
-      `Progress to ${target}?\n\n` +
-        `${plan.from?.name ?? 'Your current level'} will be ARCHIVED — every record stays exactly where it is and remains fully accessible.\n\n` +
-        `New records will default to ${target}.`
-    );
+    const ok = await confirm({
+      title: `Progress to ${target}?`,
+      message: `${plan.from?.name ?? 'Your current level'} will be archived. Every record stays exactly where it is and remains fully accessible.`,
+      note: `New records will default to ${target}.`,
+      confirmLabel: `Progress to ${target}`,
+    });
     if (!ok) return;
     setPromoting(true);
     const res = await promote();
@@ -86,6 +90,7 @@ export default function JourneyHome() {
 
   return (
     <div className="space-y-4">
+      {confirmDialog}
       <PageHeader
         title="🎓 PharmD Journey"
         subtitle="Your academic, clinical and professional record — preserved across every level."

@@ -7,6 +7,7 @@ import { CloudSyncPrompt } from '../components/CloudSyncPrompt';
 import { dayToMarkdown, dayToPdf, daysToCsv, downloadText } from '../services/export';
 import { ViewToggle } from '../components/ViewToggle';
 import { scanForPhi, privacyWarning } from '../services/privacy';
+import { confirmAction, notifyAction } from '../components/ui/globalConfirm';
 
 const SECTIONS: Array<{ key: 'conditions' | 'medicines' | 'investigations' | 'observations' | 'lessons' | 'uncertainties' | 'topicsToResearch'; label: string; icon: string }> = [
   { key: 'conditions', label: 'Conditions encountered', icon: '🦠' },
@@ -47,7 +48,12 @@ export function ClinicalDays() {
     const text = dayToMarkdown(day);
     const finding = scanForPhi(text);
     if (finding.length) {
-      alert(`⚠️ Potential patient-identifying info detected (${privacyWarning(finding)}). Review before sharing.`);
+      await notifyAction({
+        title: '⚠️ Possible patient-identifying information',
+        message: privacyWarning(finding),
+        note: 'Clinical Rx is not a patient record. Please review and remove anything identifying before you share this.',
+        confirmLabel: 'I understand',
+      });
     }
     const base = `clinical-day-${day.dayNumber}`;
     if (kind === 'md') {

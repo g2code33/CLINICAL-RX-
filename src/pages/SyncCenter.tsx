@@ -37,6 +37,7 @@ import {
 } from '../services/cloudBackup';
 import { downloadBackup } from '../services/backup';
 import { downloadText } from '../services/export';
+import { useConfirm } from '../components/ui/primitives';
 
 /**
  * ☁️ SYNC CENTER (Phase 7 §48)
@@ -122,10 +123,15 @@ export default function SyncCenter() {
     refresh();
   };
 
+  const { confirm, confirmDialog } = useConfirm();
+
   const doSignOut = async () => {
-    const ok = window.confirm(
-      'Sign out?\n\nYour local data will REMAIN on this device — nothing is deleted. You can keep working offline and sign in again any time.'
-    );
+    const ok = await confirm({
+      title: 'Sign out?',
+      message: 'Your local data will remain on this device — nothing is deleted.',
+      note: 'You can keep working offline and sign in again any time.',
+      confirmLabel: 'Sign out',
+    });
     if (!ok) return;
     await signOut();
     setMessage('Signed out. All your local data is still here.');
@@ -134,6 +140,7 @@ export default function SyncCenter() {
 
   return (
     <div className="space-y-4">
+      {confirmDialog}
       <PageHeader
         title="☁️ Sync Center"
         subtitle="Accounts and cloud sync are optional — CLINICAL Rx works fully offline without them."
@@ -367,7 +374,14 @@ export default function SyncCenter() {
                   <button
                     className="text-red-600 underline"
                     onClick={async () => {
-                      if (!window.confirm('Delete this backup? This cannot be undone.')) return;
+                      const ok = await confirm({
+                        title: 'Delete this backup?',
+                        message: 'This cloud backup will be permanently removed.',
+                        note: 'Your data on this device is not affected.',
+                        confirmLabel: 'Delete backup',
+                        destructive: true,
+                      });
+                      if (!ok) return;
                       await deleteCloudBackup(b.id);
                       void loadBackups();
                     }}

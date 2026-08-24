@@ -21,6 +21,7 @@ import { aiEnhancementAvailable, enrichBundleWithAi } from '../services/bundleEn
 import { CloudSyncPrompt } from '../components/CloudSyncPrompt';
 import { ViewToggle } from '../components/ViewToggle';
 import type { Bundle } from '../types';
+import { confirmAction, notifyAction } from '../components/ui/globalConfirm';
 
 type Filter = 'all' | 'days' | 'weeks' | 'merged';
 
@@ -433,11 +434,16 @@ function BundleDetail({ bundle, onClose, onOpenBundle }: { bundle: Bundle; onClo
     setStatus('✓ Follow-up saved (v' + (bundle.version + 1) + ')');
   }
 
-  function exportMd() {
+  async function exportMd() {
     const finding = scanForPhi(bundleToMarkdown(bundle));
     const text = bundleToMarkdown(bundle);
     if (finding.length) {
-      alert(`⚠️ Potential patient-identifying info detected (${privacyWarning(finding)}). Please review before sharing. Exporting anyway.`);
+      await notifyAction({
+        title: '⚠️ Possible patient-identifying information',
+        message: privacyWarning(finding),
+        note: 'The export will continue. Please review it before sharing with anyone.',
+        confirmLabel: 'Continue export',
+      });
     }
     downloadText(`${bundle.title.replace(/[^a-z0-9]/gi, '_')}.md`, text);
   }
@@ -447,7 +453,12 @@ function BundleDetail({ bundle, onClose, onOpenBundle }: { bundle: Bundle; onClo
   async function exportPdf() {
     const finding = scanForPhi(bundleToMarkdown(bundle));
     if (finding.length) {
-      alert(`⚠️ Potential patient-identifying info detected (${privacyWarning(finding)}). Please review before exporting.`);
+      await notifyAction({
+        title: '⚠️ Possible patient-identifying information',
+        message: privacyWarning(finding),
+        note: 'Please review and remove anything identifying before you export.',
+        confirmLabel: 'I understand',
+      });
     }
     setStatus('Exporting PDF…');
     const dataUrl = await bundleToPdf(bundle);
@@ -461,7 +472,12 @@ function BundleDetail({ bundle, onClose, onOpenBundle }: { bundle: Bundle; onClo
     const text = bundleToMarkdown(bundle);
     const finding = scanForPhi(text);
     if (finding.length) {
-      alert(`⚠️ Potential patient-identifying info detected (${privacyWarning(finding)}). Review before sharing.`);
+      await notifyAction({
+        title: '⚠️ Possible patient-identifying information',
+        message: privacyWarning(finding),
+        note: 'Please review before sharing this with anyone.',
+        confirmLabel: 'I understand',
+      });
     }
     await copyToClipboard(text);
     setStatus('✓ Bundle copied — paste it anywhere to share');

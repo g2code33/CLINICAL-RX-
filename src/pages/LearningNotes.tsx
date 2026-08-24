@@ -20,6 +20,7 @@ import {
   type LearningFilter,
 } from '../services/learning';
 import type { Lesson } from '../types';
+import { confirmAction, notifyAction } from '../components/ui/globalConfirm';
 
 /**
  * 💡 Learning Notes — fast capture of "what did I learn?".
@@ -132,7 +133,13 @@ export function LearningNotes() {
           onClose={() => setEditing(null)}
           onSave={(d) => update(editing, d)}
           onDelete={async () => {
-            if (!confirm(`Delete "${editing.title}"?\n\nThis moves the note to your archive. Nothing else is affected.`)) return;
+            if (!(await confirmAction({
+              title: `Delete "${editing.title}"?`,
+              message: 'This moves the note to your archive.',
+              note: 'Nothing else is affected, and you can restore it from the archive.',
+              confirmLabel: 'Delete note',
+              destructive: true,
+            }))) return;
             await softDelete('lesson', editing.id);
             setEditing(null);
           }}

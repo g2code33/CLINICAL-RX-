@@ -261,6 +261,26 @@ try {
   const stillRaw = migrated.filter((f) => /(?:window\.)?confirm\('/.test(fileOf(f)));
   check('migrated destructive actions no longer use window.confirm', stillRaw.length === 0, stillRaw.join(', '));
 
+  // No native browser dialogs anywhere: they are unstyled, block the renderer
+  // and cannot be themed or made consistent with the rest of the product.
+  const stripComments = (src) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
+  // Native = a bare confirm/alert/prompt call. `await confirm(` is the themed
+  // useConfirm() hook and `confirmAction(` / `notifyAction(` are the global
+  // equivalents, so those are the intended replacements, not violations.
+  const nativeDialogs = ALL.filter(({ src }) => {
+    const code = stripComments(src);
+    const re = /(^|[^\w.])(window\.)?(confirm|alert|prompt)\s*\(/g;
+    let m;
+    while ((m = re.exec(code))) {
+      const before = code.slice(Math.max(0, m.index - 12), m.index + m[0].length);
+      if (/await\s+confirm\s*\($/.test(before)) continue;      // useConfirm() hook
+      if (/(confirmAction|notifyAction)\s*\($/.test(before)) continue;
+      return true;
+    }
+    return false;
+  }).map((x) => x.f);
+  check('no native confirm/alert/prompt remains in the app', nativeDialogs.length === 0, nativeDialogs.join(', '));
+
   check('settings is split into sections, not one giant page', fileOf('pages/Settings.tsx').includes('SECTIONS') && fileOf('pages/Settings.tsx').includes('Settings sections'));
   check('shortcuts are documented in Settings', fileOf('pages/Settings.tsx').includes('Keyboard shortcuts') && fileOf('pages/Settings.tsx').includes('Ctrl / Cmd + K'));
 

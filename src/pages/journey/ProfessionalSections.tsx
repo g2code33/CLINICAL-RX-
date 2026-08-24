@@ -49,6 +49,7 @@ import type {
   ResearchItem,
   Skill,
 } from '../../types';
+import { useConfirm } from '../../components/ui/primitives';
 
 /**
  * All eight professional sections.
@@ -150,18 +151,25 @@ function EvidencePanel({ module, record }: { module: ModuleType; record: any }) 
 }
 
 function DeleteButton({ module, record, warning }: { module: ModuleType; record: any; warning?: string }) {
+  const { confirm, confirmDialog } = useConfirm();
   return (
+    <>
+      {confirmDialog}
     <button
       className="text-xs text-red-600 underline"
-      onClick={() => {
-        const ok = window.confirm(
-          `Delete "${record.title ?? 'this record'}"?\n\n${warning ?? 'Records that cite it as evidence will keep their link and simply note that the original no longer exists.'}`
-        );
+      onClick={async () => {
+        const ok = await confirm({
+          title: `Delete "${record.title ?? 'this record'}"?`,
+          message: warning ?? 'Records that cite it as evidence will keep their link and simply note that the original no longer exists.',
+          confirmLabel: 'Delete',
+          destructive: true,
+        });
         if (ok) void deleteCareerRecord(module, record.id);
       }}
     >
       Delete
     </button>
+    </>
   );
 }
 

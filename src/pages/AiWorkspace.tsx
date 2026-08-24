@@ -18,6 +18,7 @@ import {
 } from '../services/aiConversations';
 import { grantConfirmation, runTool, type ToolOutcome } from '../services/aiToolRegistry';
 import { useConfirm } from '../components/ui/primitives';
+import { Modal } from '../components/Modal';
 
 /**
  * 💬 AI WORKSPACE
@@ -76,6 +77,8 @@ export default function AiWorkspace() {
   const [persona, setPersona] = useState<AiPersona>((params.get('m') as AiPersona) || 'general');
   const [convId, setConvId] = useState<string | null>(null);
   const { confirm, confirmDialog } = useConfirm();
+  // Themed rename instead of window.prompt, which is unstyled and blocking (§34).
+  const [renaming, setRenaming] = useState<{ id: string; title: string } | null>(null);
   const [conv, setConv] = useState<AiConversation | null>(null);
   const [list, setList] = useState<AiConversation[]>(() => loadConversations());
   const [convQuery, setConvQuery] = useState('');
@@ -217,6 +220,34 @@ export default function AiWorkspace() {
   return (
     <div className="space-y-4">
       {confirmDialog}
+
+      <Modal open={!!renaming} onClose={() => setRenaming(null)} title="Rename conversation">
+        <form
+          className="space-y-3"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (renaming?.title.trim()) {
+              renameConversation(renaming.id, renaming.title.trim());
+              refresh(convId);
+            }
+            setRenaming(null);
+          }}
+        >
+          <label className="label" htmlFor="conv-rename">Conversation name</label>
+          <input
+            id="conv-rename"
+            className="input"
+            value={renaming?.title ?? ''}
+            onChange={(e) => setRenaming((r) => (r ? { ...r, title: e.target.value } : r))}
+            autoFocus
+          />
+          <div className="flex justify-end gap-2">
+            <button type="button" className="btn-secondary" onClick={() => setRenaming(null)}>Cancel</button>
+            <button type="submit" className="btn-primary" disabled={!renaming?.title.trim()}>Rename</button>
+          </div>
+        </form>
+      </Modal>
+
       <PageHeader
         title="🤖 AI Workspace"
         subtitle="Your records are the source of truth — every answer shows what it used."
@@ -259,13 +290,7 @@ export default function AiWorkspace() {
                   className="opacity-0 focus-ring group-hover:opacity-100 focus-visible:opacity-100"
                   title="Rename conversation"
                   aria-label={`Rename conversation ${c.title}`}
-                  onClick={() => {
-                    const t = window.prompt('Rename conversation', c.title);
-                    if (t) {
-                      renameConversation(c.id, t);
-                      refresh(convId);
-                    }
-                  }}
+                  onClick={() => setRenaming({ id: c.id, title: c.title })}
                 >
                   <span aria-hidden="true">✏️</span>
                 </button>
