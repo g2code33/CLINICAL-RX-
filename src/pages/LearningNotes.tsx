@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
+import { useEffect, useMemo, useState } from 'react';
 import { useData, uid } from '../stores/data';
 import { EmptyState, PageHeader, Pill } from '../components/ui';
 import { Modal, TagInput } from '../components/Modal';
@@ -33,6 +34,17 @@ export function LearningNotes() {
   const [filter, setFilter] = useState<LearningFilter>({});
   const [editing, setEditing] = useState<Lesson | null>(null);
   const [creating, setCreating] = useState(false);
+
+  // /notes?new=1 opens the capture form straight away (§10, §49).
+  const [params, setParams] = useSearchParams();
+  useEffect(() => {
+    if (params.get('new') === '1') {
+      setCreating(true);
+      params.delete('new');
+      setParams(params, { replace: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [params]);
 
   const visible = useMemo(
     () => applyFilter(lessons, filter).sort((a, b) => b.createdAt - a.createdAt),

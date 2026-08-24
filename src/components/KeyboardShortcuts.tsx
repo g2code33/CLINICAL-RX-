@@ -48,10 +48,18 @@ export function KeyboardShortcuts() {
 
       if (typing && !mod) return;
 
-      // Ctrl/Cmd+N -> Quick capture (clinical day)
+      // Ctrl/Cmd+N -> new record IN THE CURRENT CONTEXT (§28).
+      // On a module page this opens that module's create form; anywhere else
+      // it falls back to the clinical day capture.
       if (mod && e.key.toLowerCase() === 'n') {
         e.preventDefault();
-        navigate('/clinical');
+        const path = window.location.hash.replace(/^#/, '') || window.location.pathname;
+        const CREATABLE = ['/notes', '/questions', '/medicines', '/diseases', '/investigations', '/courses'];
+        const match = CREATABLE.find((r) => path.startsWith(r));
+        if (match) navigate(`${match}?new=1`);
+        else if (path.startsWith('/ward-rounds')) navigate('/ward-rounds');
+        else if (path.startsWith('/bundles')) navigate('/bundles');
+        else navigate('/clinical');
         return;
       }
 

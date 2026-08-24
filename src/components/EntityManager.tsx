@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useData } from '../stores/data';
 import { PageHeader, EmptyState } from './ui';
 import { useConfirm } from './ui/primitives';
@@ -147,6 +148,18 @@ export function EntityManager({ module, title, subtitle, icon, emptyText, emptyH
     setCreating(true);
     setEditing(factory());
   }
+
+  // Deep link: /questions?new=1 opens the create form immediately, so a quick
+  // action from the dashboard is one click rather than click-then-click (§49).
+  const [params, setParams] = useSearchParams();
+  useEffect(() => {
+    if (params.get('new') === '1') {
+      openCreate();
+      params.delete('new');
+      setParams(params, { replace: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [params]);
   function openEdit(rec: any) {
     setEditing({ ...rec });
   }
