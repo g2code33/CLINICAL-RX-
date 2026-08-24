@@ -349,6 +349,162 @@ const bundleSource: KnowledgeSource = {
       .bundles.map((b) => baseRecord('bundle', 'bundle', { ...b, date: b.periodStart }, b.title, b.summary)),
 };
 
+
+// ---- Phase 6: professional / PharmD Journey sources --------------------
+//
+// Registering here is what makes the whole career system reachable by
+// Universal Search, the Command Bar, the AI Orchestrator and every AI persona
+// — without any of them knowing these tables exist.
+
+const clinicalExperienceSource: KnowledgeSource = {
+  key: 'clinicalExperience',
+  label: 'Clinical Experience',
+  icon: '🏥',
+  domain: 'professional',
+  list: () =>
+    useData
+      .getState()
+      .clinicalExperiences.filter((e) => !e.archived)
+      .map((e) =>
+        baseRecord('clinicalExperience', 'clinicalExperience', { ...e, date: e.startDate }, e.title, [
+          e.clinicalArea,
+          e.institution,
+          e.description,
+          e.reflections,
+          (e.objectives ?? []).join(', '),
+          (e.skillsPracticed ?? []).join(', '),
+        ].filter(Boolean).join(' — '))
+      ),
+};
+
+const skillSource: KnowledgeSource = {
+  key: 'skill',
+  label: 'Skills',
+  icon: '🧠',
+  domain: 'professional',
+  list: () =>
+    useData
+      .getState()
+      .skills.filter((s) => !s.archived)
+      .map((s) =>
+        baseRecord('skill', 'skill', { ...s, date: s.dateDeveloped }, s.title, [
+          `${s.category} skill`,
+          `self-rated ${s.confidence}/5`,
+          s.description,
+          s.notes,
+          (s.evidence ?? []).length ? `${(s.evidence ?? []).length} evidence link(s)` : '',
+        ].filter(Boolean).join(' — '))
+      ),
+};
+
+const achievementSource: KnowledgeSource = {
+  key: 'achievement',
+  label: 'Achievements',
+  icon: '🏆',
+  domain: 'professional',
+  list: () =>
+    useData
+      .getState()
+      .achievements.filter((a) => !a.archived)
+      .map((a) => baseRecord('achievement', 'achievement', a, a.title, [a.category, a.description].filter(Boolean).join(' — '))),
+};
+
+const certificationSource: KnowledgeSource = {
+  key: 'certification',
+  label: 'Certifications',
+  icon: '📜',
+  domain: 'professional',
+  list: () =>
+    useData
+      .getState()
+      .certifications.filter((c) => !c.archived)
+      // Credential/reference numbers are personal identifiers. They are
+      // stripped BEFORE indexing, so they can never reach search results,
+      // `raw`, an AI prompt or an export.
+      .map(({ credentialId: _omit, attachmentRef: _omit2, ...c }) =>
+        baseRecord('certification', 'certification', { ...c, date: c.dateObtained }, c.title, [c.issuer, c.category, c.description].filter(Boolean).join(' — '))
+      ),
+};
+
+const projectSource: KnowledgeSource = {
+  key: 'project',
+  label: 'Projects',
+  icon: '💻',
+  domain: 'professional',
+  list: () =>
+    useData
+      .getState()
+      .projects.filter((p) => !p.archived)
+      .map((p) =>
+        baseRecord('project', 'project', { ...p, date: p.startDate }, p.title, [
+          p.status,
+          p.role,
+          p.description,
+          p.outcomes,
+          (p.technologies ?? []).join(', '),
+        ].filter(Boolean).join(' — '))
+      ),
+};
+
+const researchSource: KnowledgeSource = {
+  key: 'research',
+  label: 'Research',
+  icon: '🔬',
+  domain: 'professional',
+  list: () =>
+    useData
+      .getState()
+      .research.filter((r) => !r.archived)
+      .map((r) =>
+        baseRecord('research', 'research', { ...r, date: r.startDate }, r.title, [
+          r.kind,
+          r.topic,
+          r.description,
+          r.venue,
+          r.authors,
+        ].filter(Boolean).join(' — '))
+      ),
+};
+
+const leadershipSource: KnowledgeSource = {
+  key: 'leadership',
+  label: 'Leadership',
+  icon: '🏅',
+  domain: 'professional',
+  list: () =>
+    useData
+      .getState()
+      .leadership.filter((l) => !l.archived)
+      .map((l) =>
+        baseRecord('leadership', 'leadership', { ...l, date: l.startDate }, `${l.position} — ${l.organization}`, [
+          l.description,
+          (l.responsibilities ?? []).join(', '),
+          (l.achievements ?? []).join(', '),
+        ].filter(Boolean).join(' — '))
+      ),
+};
+
+const goalSource: KnowledgeSource = {
+  key: 'goal',
+  label: 'Goals',
+  icon: '🎯',
+  domain: 'professional',
+  list: () =>
+    useData
+      .getState()
+      .goals.filter((g) => !g.archived)
+      .map((g) => {
+        const ms = g.milestones ?? [];
+        const done = ms.filter((m) => m.done).length;
+        return baseRecord('goal', 'goal', { ...g, date: g.startDate }, g.title, [
+          g.category,
+          g.status,
+          g.description,
+          ms.length ? `${done}/${ms.length} milestones complete` : '',
+        ].filter(Boolean).join(' — '));
+      }),
+};
+
 /** Register every built-in source. Future modules call registerSource() too. */
 for (const s of [
   diseaseSource,
@@ -364,6 +520,15 @@ for (const s of [
   courseSource,
   quizSource,
   bundleSource,
+  // Phase 6 — professional journey
+  clinicalExperienceSource,
+  skillSource,
+  achievementSource,
+  certificationSource,
+  projectSource,
+  researchSource,
+  leadershipSource,
+  goalSource,
 ]) {
   registerSource(s);
 }
@@ -551,6 +716,34 @@ export function contextForRecord(module: ModuleType | string, id: string): Recor
       if (parent && roundSrc) {
         const r = roundSrc.list().find((x) => x.id === parent);
         if (r) related.push(r);
+      }
+    }
+
+    // Phase 6: professional records resolve their EVIDENCE links, and any
+    // professional record that cites this one as evidence (backlinks). This is
+    // what lets the AI answer "what evidence supports this skill?".
+    const PRO_KEYS = ['clinicalExperience', 'skill', 'achievement', 'certification', 'project', 'research', 'leadership', 'goal'];
+    const focusRaw = focus.raw as any;
+    for (const ev of (focusRaw?.evidence ?? []) as Array<{ type: string; id: string }>) {
+      const src = getSource(ev.type);
+      const hit = src?.list().find((r) => r.id === ev.id);
+      if (hit) related.push(hit);
+    }
+    for (const key of PRO_KEYS) {
+      const src = getSource(key);
+      if (!src) continue;
+      for (const r of src.list()) {
+        const raw = r.raw as any;
+        if (r.id === id) continue;
+        const cites = (raw?.evidence ?? []).some((e: any) => e.type === module && e.id === id);
+        const listed =
+          (raw?.skillIds ?? []).includes(id) ||
+          (raw?.relatedSkillIds ?? []).includes(id) ||
+          (raw?.relatedRoundIds ?? []).includes(id) ||
+          raw?.relatedProjectId === id ||
+          raw?.relatedExperienceId === id ||
+          raw?.relatedCourseId === id;
+        if (cites || listed) related.push(r);
       }
     }
 

@@ -18,7 +18,16 @@ export type ModuleType =
   | 'academicStage'
   | 'academicPeriod'
   | 'course'
-  | 'activity';
+  | 'activity'
+  // --- Phase 6: PharmD Journey + Professional Career Engine ---
+  | 'clinicalExperience'
+  | 'skill'
+  | 'achievement'
+  | 'certification'
+  | 'project'
+  | 'research'
+  | 'leadership'
+  | 'goal';
 
 export interface BaseRecord {
   id: string;
@@ -536,4 +545,227 @@ export interface ActivityEntry extends BaseRecord {
   recordId: string;
   label: string;
   academic?: AcademicLink;
+}
+
+
+// ===========================================================================
+// PHASE 6 — PHARMD JOURNEY + PROFESSIONAL CAREER ENGINE
+// ===========================================================================
+
+/**
+ * Who may see a professional record.
+ *
+ * Everything defaults to PRIVATE. The student explicitly promotes a record to
+ * their portfolio, and separately allows it to leave the app in an export.
+ * Nothing is ever published or uploaded automatically.
+ */
+export type Visibility = 'private' | 'portfolio' | 'export';
+
+/**
+ * A pointer from one professional record to another (or to any clinical or
+ * academic record). Evidence is stored as a REFERENCE, never a copy — so a
+ * skill can cite a ward round without duplicating it.
+ *
+ * `label` is a snapshot of the target's title at link time. If the target is
+ * later deleted the link survives and degrades to
+ * "Original <type> no longer exists" instead of vanishing silently.
+ */
+export interface EvidenceRef {
+  /** Module of the referenced record, e.g. 'wardRound' | 'project'. */
+  type: string;
+  id: string;
+  /** Title captured when the link was made, for graceful degradation. */
+  label: string;
+  note?: string;
+}
+
+/** Fields every professional record shares. */
+export interface ProfessionalRecord extends BaseRecord {
+  title: string;
+  description?: string;
+  visibility?: Visibility;
+  evidence?: EvidenceRef[];
+  tags?: string[];
+  archived?: boolean;
+}
+
+/**
+ * 🏥 CLINICAL EXPERIENCE — a rotation or placement.
+ *
+ * Deliberately broader than a Ward Round: a rotation spans weeks and contains
+ * many rounds. As everywhere in CLINICAL Rx there is NO patient-identifying
+ * field of any kind.
+ */
+export interface ClinicalExperience extends ProfessionalRecord {
+  /** Rotation name, e.g. "Medical Ward Rotation". */
+  title: string;
+  clinicalArea?: string;
+  institution?: string;
+  startDate: string; // yyyy-mm-dd
+  endDate?: string;
+  academic?: AcademicLink;
+  objectives?: string[];
+  skillsPracticed?: string[];
+  reflections?: string;
+  /** Ward rounds that happened during this rotation. */
+  relatedRoundIds?: string[];
+}
+
+export type SkillCategory =
+  | 'clinical'
+  | 'pharmaceutical'
+  | 'academic'
+  | 'research'
+  | 'technology'
+  | 'communication'
+  | 'leadership'
+  | 'professional';
+
+/**
+ * 🧠 SKILL — confidence is ALWAYS user-set.
+ *
+ * The app never infers or auto-awards competency; it only shows the evidence
+ * the student has attached so the rating is defensible.
+ */
+export interface Skill extends ProfessionalRecord {
+  category: SkillCategory;
+  /** 1 Beginner · 2 Developing · 3 Competent · 4 Strong · 5 Advanced. */
+  confidence: 1 | 2 | 3 | 4 | 5;
+  dateDeveloped?: string;
+  academic?: AcademicLink;
+  relatedCourseId?: string;
+  relatedExperienceId?: string;
+  relatedProjectId?: string;
+  notes?: string;
+}
+
+export type AchievementCategory =
+  | 'academic'
+  | 'competition'
+  | 'leadership'
+  | 'clinical'
+  | 'project'
+  | 'research'
+  | 'other';
+
+/** 🏆 ACHIEVEMENT — a real, dated accomplishment. Never AI-invented. */
+export interface Achievement extends ProfessionalRecord {
+  category: AchievementCategory;
+  date: string;
+  academic?: AcademicLink;
+  relatedProjectId?: string;
+  relatedSkillIds?: string[];
+}
+
+/** 📜 CERTIFICATION. */
+export interface Certification extends ProfessionalRecord {
+  issuer?: string;
+  dateObtained: string;
+  expiryDate?: string;
+  /** Reference/credential number. Treated as sensitive: never exported by default. */
+  credentialId?: string;
+  category?: string;
+  relatedSkillIds?: string[];
+  attachmentRef?: string;
+}
+
+export type ProjectStatus = 'idea' | 'planning' | 'active' | 'completed' | 'archived';
+
+/** 💻 PROJECT — pharmacy, research, software, digital health, community. */
+export interface Project extends ProfessionalRecord {
+  role?: string;
+  startDate?: string;
+  endDate?: string;
+  status: ProjectStatus;
+  academic?: AcademicLink;
+  skillIds?: string[];
+  technologies?: string[];
+  outcomes?: string;
+  links?: string[];
+}
+
+export type ResearchKind = 'interest' | 'project' | 'literature' | 'publication' | 'presentation';
+
+/** 🔬 RESEARCH — foundation only; not a full reference manager. */
+export interface ResearchItem extends ProfessionalRecord {
+  kind: ResearchKind;
+  topic?: string;
+  status?: string;
+  startDate?: string;
+  endDate?: string;
+  academic?: AcademicLink;
+  authors?: string;
+  venue?: string;
+  citation?: string;
+  skillIds?: string[];
+}
+
+/** 🏅 LEADERSHIP & ACTIVITIES — historical positions are preserved. */
+export interface LeadershipRole extends ProfessionalRecord {
+  organization: string;
+  position: string;
+  startDate: string;
+  endDate?: string;
+  academic?: AcademicLink;
+  responsibilities?: string[];
+  achievements?: string[];
+  skillIds?: string[];
+}
+
+export type GoalCategory =
+  | 'academic'
+  | 'clinical'
+  | 'research'
+  | 'technology'
+  | 'career'
+  | 'professional'
+  | 'personal';
+
+export type GoalStatus = 'not-started' | 'active' | 'paused' | 'completed' | 'archived';
+
+/** A single checkable step inside a goal. The user controls completion. */
+export interface GoalMilestone {
+  id: string;
+  title: string;
+  done: boolean;
+  doneAt?: number;
+  targetDate?: string;
+}
+
+/** 🎯 GOAL — progress is derived from real milestone completion. */
+export interface Goal extends ProfessionalRecord {
+  category: GoalCategory;
+  status: GoalStatus;
+  startDate?: string;
+  targetDate?: string;
+  milestones?: GoalMilestone[];
+  academic?: AcademicLink;
+  notes?: string;
+}
+
+/** A per-level snapshot computed from REAL stored data — never fabricated. */
+export interface StageSnapshot {
+  stageId: string;
+  stageName: string;
+  level: string;
+  academicYear: string;
+  status: StageStatus;
+  counts: {
+    courses: number;
+    lessons: number;
+    diseases: number;
+    medicines: number;
+    investigations: number;
+    wardRounds: number;
+    questions: number;
+    bundles: number;
+    clinicalExperiences: number;
+    skills: number;
+    achievements: number;
+    projects: number;
+    research: number;
+    leadership: number;
+    goals: number;
+    certifications: number;
+  };
 }

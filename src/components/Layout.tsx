@@ -41,7 +41,17 @@ const NAV = [
 // ---- PHARMD workspace navigation (its own set + its own drawer) ----
 const PHARMD_NAV = [
   { to: '/journey', icon: '🎓', label: 'My Journey' },
-  { to: '/archive', icon: '🗂', label: 'Academic Archive' },
+  { to: '/journey/timeline', icon: '📈', label: 'Timeline' },
+  { to: '/journey/clinical-experience', icon: '🏥', label: 'Clinical Experience' },
+  { to: '/journey/skills', icon: '🧠', label: 'Skills' },
+  { to: '/journey/projects', icon: '💻', label: 'Projects' },
+  { to: '/journey/research', icon: '🔬', label: 'Research' },
+  { to: '/journey/leadership', icon: '🏅', label: 'Leadership' },
+  { to: '/journey/achievements', icon: '🏆', label: 'Achievements' },
+  { to: '/journey/certifications', icon: '📜', label: 'Certifications' },
+  { to: '/journey/goals', icon: '🎯', label: 'Goals' },
+  { to: '/journey/portfolio', icon: '📁', label: 'Portfolio & CV' },
+  { to: '/journey/archive', icon: '📚', label: 'Academic Archive' },
   { to: '/courses', icon: '📚', label: 'Courses' },
   { to: '/progress', icon: '📊', label: 'Progress' },
   { to: '/settings', icon: '⚙️', label: 'Settings' },
@@ -52,9 +62,9 @@ const SHARED_ROUTES = ['/progress', '/settings', '/admin', '/auth', '/reset'];
 
 const PHARMD_BOTTOM_NAV = [
   { to: '/journey', icon: '🎓', label: 'Journey' },
-  { to: '/archive', icon: '🗂', label: 'Archive' },
-  { to: '/courses', icon: '📚', label: 'Courses' },
-  { to: '/progress', icon: '📊', label: 'Progress' },
+  { to: '/journey/skills', icon: '🧠', label: 'Skills' },
+  { to: '/journey/portfolio', icon: '📁', label: 'Portfolio' },
+  { to: '/journey/archive', icon: '📚', label: 'Archive' },
 ];
 
 // Fixed bottom navigation — the 6 most-used destinations + "More" (opens the drawer).

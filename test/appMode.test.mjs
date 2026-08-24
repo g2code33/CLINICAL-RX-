@@ -64,6 +64,10 @@ const jsFile = m ? m[1] : fs.readdirSync(path.join(ROOT,'dist/assets')).find(f=>
 let fail=0; const chk=(n,c)=>{console.log(`  ${c?'\u2713':'\u2717'} ${n}`); if(!c)fail++;};
 const doc = dom.window.document;
 const txt = () => doc.getElementById('root')?.textContent||'';
+// Nav-only text. The page BODY may legitimately mention a section name (the
+// PharmD Journey snapshot shows an "Investigations" count), so workspace-nav
+// assertions must look at the navigation chrome, not the whole page.
+const navTxt = () => Array.from(doc.querySelectorAll('nav')).map((n) => n.textContent || '').join(' ');
 const findBtn = (label) => [...doc.querySelectorAll('button')].find(b=>(b.getAttribute('aria-label')||'').includes(label));
 try{
   await import(new URL('file://'+path.join(ROOT,'dist/assets',jsFile)).href);
@@ -87,8 +91,8 @@ try{
 
   console.log('PHARMD mode (after one click):');
   chk('navigated to journey', dom.window.location.hash.includes('/journey'));
-  chk('PharmD nav shown', txt().includes('Academic Archive') && txt().includes('Courses'));
-  chk('clinical nav hidden', !txt().includes('Clinical Days') && !txt().includes('Investigations'));
+  chk('PharmD nav shown', navTxt().includes('Academic Archive') && navTxt().includes('Courses'));
+  chk('clinical nav hidden', !navTxt().includes('Clinical Days') && !navTxt().includes('Investigations'));
   chk('button now offers Clinical', txt().includes('Clinical Journey'));
   chk('journey content rendered', txt().includes('Level 200'));
   chk('mode persisted', dom.window.localStorage.getItem('clinical-rx:app-mode')==='pharmd');

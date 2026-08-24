@@ -2,9 +2,17 @@ import { create } from 'zustand';
 import type {
   AcademicPeriod,
   AcademicStage,
+  Achievement,
   ActivityEntry,
   BaseRecord,
+  Certification,
+  ClinicalExperience,
   Course,
+  Goal,
+  LeadershipRole,
+  Project,
+  ResearchItem,
+  Skill,
   Bundle,
   ChatSession,
   ClinicalDay,
@@ -53,6 +61,15 @@ export interface DataStore {
   academicPeriods: AcademicPeriod[];
   courses: Course[];
   activities: ActivityEntry[];
+  // --- Phase 6: professional journey ---
+  clinicalExperiences: ClinicalExperience[];
+  skills: Skill[];
+  achievements: Achievement[];
+  certifications: Certification[];
+  projects: Project[];
+  research: ResearchItem[];
+  leadership: LeadershipRole[];
+  goals: Goal[];
   status: string;
   removed: Array<{ module: ModuleType; record: any }>;
 
@@ -110,6 +127,10 @@ function currentAcademicStamp(state: DataStore): Record<string, string> | null {
 const STAMPED_MODULES: ModuleType[] = [
   'day', 'disease', 'medicine', 'investigation', 'question', 'lesson',
   'revision', 'bundle', 'quiz', 'wardRound',
+  // Phase 6: professional records are stamped with the level they happened in,
+  // so promotion can never rewrite their history.
+  'clinicalExperience', 'skill', 'achievement', 'project', 'research',
+  'leadership', 'goal',
 ];
 
 const LIST_KEY: Partial<Record<ModuleType, keyof DataStore>> = {
@@ -123,6 +144,10 @@ const LIST_KEY: Partial<Record<ModuleType, keyof DataStore>> = {
   // 'quiz' + 's' = 'quizs', which is not a key on the store — without this the
   // quizzes array silently never updated after a save.
   quiz: 'quizzes',
+  // Uncountable nouns: `research` + 's' and `leadership` + 's' are not the
+  // store keys, so without these the arrays would silently never update.
+  research: 'research',
+  leadership: 'leadership',
 };
 
 function listKeyFor(module: ModuleType, state: Record<string, unknown>): keyof DataStore {
@@ -156,6 +181,14 @@ export const useData = create<DataStore>((set, get) => ({
   academicPeriods: [],
   courses: [],
   activities: [],
+  clinicalExperiences: [],
+  skills: [],
+  achievements: [],
+  certifications: [],
+  projects: [],
+  research: [],
+  leadership: [],
+  goals: [],
   removed: [],
   status: 'Initializing…',
 
@@ -164,7 +197,7 @@ export const useData = create<DataStore>((set, get) => ({
     set({ status: 'Loading local data…' });
     try {
       const platform = await adapter.platform();
-      const [profiles, settingsList, days, diseases, medicines, investigations, questions, lessons, revisions, bundles, chats, quizzes, reminders, wardRounds, wardEntries, wardAnalyses, academicStages, academicPeriods, courses, activities] =
+      const [profiles, settingsList, days, diseases, medicines, investigations, questions, lessons, revisions, bundles, chats, quizzes, reminders, wardRounds, wardEntries, wardAnalyses, academicStages, academicPeriods, courses, activities, clinicalExperiences, skills, achievements, certifications, projects, research, leadership, goals] =
         await Promise.all([
           adapter.list('profile'),
           adapter.list('settings'),
@@ -186,6 +219,14 @@ export const useData = create<DataStore>((set, get) => ({
           adapter.list('academicPeriod'),
           adapter.list('course'),
           adapter.list('activity'),
+          adapter.list('clinicalExperience'),
+          adapter.list('skill'),
+          adapter.list('achievement'),
+          adapter.list('certification'),
+          adapter.list('project'),
+          adapter.list('research'),
+          adapter.list('leadership'),
+          adapter.list('goal'),
         ]);
       // Defensive parse: skip any corrupt record instead of throwing, so the
       // app can never be locked on the splash screen by bad stored data.
@@ -219,6 +260,14 @@ export const useData = create<DataStore>((set, get) => ({
         academicPeriods: sortByUpdated(parse(academicPeriods)),
         courses: sortByUpdated(parse(courses)),
         activities: sortByUpdated(parse(activities)),
+        clinicalExperiences: sortByUpdated(parse(clinicalExperiences)),
+        skills: sortByUpdated(parse(skills)),
+        achievements: sortByUpdated(parse(achievements)),
+        certifications: sortByUpdated(parse(certifications)),
+        projects: sortByUpdated(parse(projects)),
+        research: sortByUpdated(parse(research)),
+        leadership: sortByUpdated(parse(leadership)),
+        goals: sortByUpdated(parse(goals)),
         ready: true,
         status: 'Ready · ' + (hasElectronBridge() ? 'SQLite (offline)' : 'Web storage'),
       });
@@ -272,6 +321,14 @@ export const useData = create<DataStore>((set, get) => ({
       wardRound: get().wardRounds,
       wardEntry: get().wardEntries,
       wardAnalysis: get().wardAnalyses,
+      clinicalExperience: get().clinicalExperiences,
+      skill: get().skills,
+      achievement: get().achievements,
+      certification: get().certifications,
+      project: get().projects,
+      research: get().research,
+      leadership: get().leadership,
+      goal: get().goals,
       academicStage: get().academicStages,
       academicPeriod: get().academicPeriods,
       course: get().courses,

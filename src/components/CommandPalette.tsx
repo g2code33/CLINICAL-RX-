@@ -60,6 +60,18 @@ export function CommandPalette() {
       { id: 'revision', icon: '📚', label: 'Revision', run: go('/revision') },
       { id: 'bundles', icon: '📦', label: 'Bundles', run: go('/bundles') },
       { id: 'progress', icon: '📊', label: 'Progress', run: go('/progress') },
+      // Phase 6 — PharmD Journey sections
+      { id: 'clinexp', icon: '🏥', label: 'Clinical Experience', hint: 'Rotations', run: go('/journey/clinical-experience') },
+      { id: 'skills', icon: '🧠', label: 'Skills', run: go('/journey/skills') },
+      { id: 'projects', icon: '💻', label: 'Projects', run: go('/journey/projects') },
+      { id: 'research', icon: '🔬', label: 'Research', run: go('/journey/research') },
+      { id: 'leadership', icon: '🏅', label: 'Leadership & Activities', run: go('/journey/leadership') },
+      { id: 'achievements', icon: '🏆', label: 'Achievements', run: go('/journey/achievements') },
+      { id: 'certs', icon: '📜', label: 'Certifications', run: go('/journey/certifications') },
+      { id: 'goals', icon: '🎯', label: 'Goals', run: go('/journey/goals') },
+      { id: 'portfolio', icon: '📁', label: 'Portfolio & CV', run: go('/journey/portfolio') },
+      { id: 'acadarchive', icon: '📚', label: 'Academic Archive', run: go('/journey/archive') },
+      { id: 'protimeline', icon: '📈', label: 'Professional Timeline', run: go('/journey/timeline') },
       { id: 'ai', icon: '🤖', label: 'AI Workspace', run: go('/ai') },
       { id: 'settings', icon: '⚙️', label: 'Settings', run: go('/settings') },
       { id: 'search', icon: '🔍', label: 'Open global search', run: () => { setOpen(false); setSearchOpen(true); } },
@@ -90,6 +102,14 @@ export function CommandPalette() {
     quiz: '/quiz',
     day: '/clinical',
     academicStage: '/journey',
+    clinicalExperience: '/journey/clinical-experience',
+    skill: '/journey/skills',
+    project: '/journey/projects',
+    research: '/journey/research',
+    leadership: '/journey/leadership',
+    achievement: '/journey/achievements',
+    certification: '/journey/certifications',
+    goal: '/journey/goals',
   };
 
   /**

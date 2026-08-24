@@ -57,7 +57,37 @@ export const BUNDLE_SOURCE_KEYS = [
   'course',
 ];
 
+/**
+ * Phase 6: professional activity, registered as an OPTIONAL bundle source.
+ *
+ * Kept separate from BUNDLE_SOURCE_KEYS so existing daily/weekly learning
+ * bundles are completely unchanged. A caller opts in explicitly (e.g. a
+ * "Clinical Rotation" or "Professional Development" bundle) by passing these
+ * keys in `selection.modules`.
+ */
+export const PROFESSIONAL_SOURCE_KEYS = [
+  'clinicalExperience',
+  'skill',
+  'project',
+  'research',
+  'leadership',
+  'achievement',
+  'certification',
+  'goal',
+];
+
+/** Every source a bundle may draw from, learning + professional. */
+export const ALL_BUNDLE_SOURCE_KEYS = [...BUNDLE_SOURCE_KEYS, ...PROFESSIONAL_SOURCE_KEYS];
+
 export const MODULE_LABELS: Record<string, string> = {
+  clinicalExperience: 'Clinical Experience',
+  skill: 'Skills',
+  project: 'Projects',
+  research: 'Research',
+  leadership: 'Leadership',
+  achievement: 'Achievements',
+  certification: 'Certifications',
+  goal: 'Goals',
   wardRound: 'Ward Rounds',
   wardEntry: 'Ward Captures',
   lesson: 'Learning Notes',

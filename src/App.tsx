@@ -30,6 +30,19 @@ import { Bundles } from './pages/Bundles';
 import { AiChat } from './pages/AiChat';
 import AiWorkspace from './pages/AiWorkspace';
 import AiSettings from './pages/AiSettings';
+// Phase 6 — PharmD Journey + Professional Career Engine
+import JourneyHome, { JourneyTimeline } from './pages/journey/JourneyHome';
+import { AcademicArchive, PortfolioPage } from './pages/journey/ArchiveAndPortfolio';
+import {
+  AchievementsPage,
+  CertificationsPage,
+  ClinicalExperiencePage,
+  GoalsPage,
+  LeadershipPage,
+  ProjectsPage,
+  ResearchPage,
+  SkillsPage,
+} from './pages/journey/ProfessionalSections';
 import { SettingsPage } from './pages/Settings';
 import { ResetPassword } from './pages/ResetPassword';
 import { AuthPage } from './pages/Auth';
@@ -135,7 +148,19 @@ export default function App() {
       <KeyboardShortcuts />
       <Routes>
         <Route path="/" element={<Dashboard />} />
-        <Route path="/journey" element={<Journey />} />
+        <Route path="/journey" element={<JourneyHome />} />
+        <Route path="/journey/setup" element={<Journey />} />
+        <Route path="/journey/timeline" element={<JourneyTimeline />} />
+        <Route path="/journey/archive" element={<AcademicArchive />} />
+        <Route path="/journey/portfolio" element={<PortfolioPage />} />
+        <Route path="/journey/clinical-experience" element={<ClinicalExperiencePage />} />
+        <Route path="/journey/skills" element={<SkillsPage />} />
+        <Route path="/journey/projects" element={<ProjectsPage />} />
+        <Route path="/journey/research" element={<ResearchPage />} />
+        <Route path="/journey/leadership" element={<LeadershipPage />} />
+        <Route path="/journey/achievements" element={<AchievementsPage />} />
+        <Route path="/journey/certifications" element={<CertificationsPage />} />
+        <Route path="/journey/goals" element={<GoalsPage />} />
         <Route path="/archive" element={<Archive />} />
         <Route path="/courses" element={<Courses />} />
         <Route path="/learning" element={<LearningOverview />} />
