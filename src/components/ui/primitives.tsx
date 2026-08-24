@@ -177,29 +177,12 @@ export function Tabs<T extends string>({
 
 // ---- State components (§29, §30, §31) ----------------------------------
 
-/** Never show a blank page (§29). */
-export function EmptyState({
-  icon,
-  title,
-  hint,
-  action,
-}: {
-  icon: string;
-  title: string;
-  hint?: string;
-  action?: ReactNode;
-}) {
-  return (
-    <div className="card text-center">
-      <div className="text-4xl" aria-hidden="true">
-        {icon}
-      </div>
-      <h3 className="mt-2 font-semibold">{title}</h3>
-      {hint && <p className="mx-auto mt-1 max-w-md text-sm opacity-75">{hint}</p>}
-      {action && <div className="mt-3 flex flex-wrap justify-center gap-2">{action}</div>}
-    </div>
-  );
-}
+/**
+ * EmptyState already existed in `../ui` and is used across 18 pages, so it is
+ * re-exported here rather than reimplemented. `primitives` stays the single
+ * import surface without creating a second competing component (§45).
+ */
+export { EmptyState } from '../ui';
 
 /** Skeleton loading — avoids blank white screens (§30). */
 export function LoadingState({ message = 'Loading…', rows = 3 }: { message?: string; rows?: number }) {

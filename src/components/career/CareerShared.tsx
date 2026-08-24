@@ -2,6 +2,7 @@ import { useMemo, useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useData } from '../../stores/data';
 import { Modal } from '../Modal';
+import { EmptyState } from '../ui';
 import { resolveEvidence, buildEvidence, setVisibility, saveCareerRecord, CONFIDENCE_LABEL } from '../../services/career';
 import { retrieveKnowledge } from '../../services/intelligence';
 import type { EvidenceRef, ModuleType, Visibility } from '../../types';
@@ -276,14 +277,23 @@ export function SectionCard({
 }
 
 /** Empty-state prompt shared by all professional sections. */
+/**
+ * Career-section empty state.
+ *
+ * Delegates to the app-wide EmptyState (§45) so career pages look identical to
+ * every other module, and only adds the one thing that is specific here: the
+ * reminder that professional records are private by default.
+ */
 export function CareerEmpty({ icon, title, hint }: { icon: string; title: string; hint: string }) {
   return (
-    <div className="card text-center">
-      <div className="text-3xl">{icon}</div>
-      <h3 className="mt-2 font-semibold">{title}</h3>
-      <p className="mt-1 text-sm opacity-75">{hint}</p>
-      <p className="mt-2 text-xs opacity-60">Everything you add here starts private and stays on this device.</p>
-    </div>
+    <EmptyState
+      icon={icon}
+      title={title}
+      hint={hint}
+      actions={
+        <p className="text-xs opacity-60">Everything you add here starts private and stays on this device.</p>
+      }
+    />
   );
 }
 

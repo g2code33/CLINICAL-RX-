@@ -247,7 +247,11 @@ try {
   // =====================================================================
   console.log('\n§45 — CONSISTENCY AUDIT');
 
-  check('a shared primitive library exists', prim.includes('export function Badge') && prim.includes('export function Tabs') && prim.includes('export function EmptyState'));
+  check('a shared primitive library exists', prim.includes('export function Badge') && prim.includes('export function Tabs') && prim.includes('export function LoadingState'));
+  // EmptyState pre-dates Phase 9 and is used in 18 files; it must be re-used,
+  // not reimplemented alongside a competing version.
+  check('EmptyState has exactly one implementation', ALL.filter(({ src }) => src.includes('export function EmptyState')).length === 1);
+  check('primitives re-export the canonical EmptyState', prim.includes("export { EmptyState } from '../ui'"));
   check('IconButton forces an accessible name', prim.includes('label: string'));
   check('one toast system, not several ad-hoc ones', toaster.includes('export function Toaster') && toaster.includes('useToasts'));
   check('a themed confirm replaces window.confirm', prim.includes('export function useConfirm'));
