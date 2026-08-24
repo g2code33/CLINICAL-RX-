@@ -11,6 +11,7 @@ import { Onboarding } from './components/Onboarding';
 import { Dashboard } from './pages/Dashboard';
 import { ClinicalDays } from './pages/ClinicalDays';
 import { WardRounds } from './pages/WardRounds';
+import { Journey } from './pages/Journey';
 import { CalendarPage } from './pages/Calendar';
 import { Diseases } from './pages/Diseases';
 import { Medicines } from './pages/Medicines';
@@ -63,6 +64,13 @@ export default function App() {
       try { new Notification('CLINICAL Rx', { body: msg }); } catch { /* ignore */ }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ready]);
+
+  // Academic journey backfill: profiles created before the journey existed
+  // get one built from their level, so the app is never in a broken state.
+  useEffect(() => {
+    if (!ready) return;
+    import('./services/academic').then((m) => m.ensureJourney()).catch(() => {});
   }, [ready]);
 
   // Auto-backup: if scheduled and due, download + stamp.
@@ -120,6 +128,7 @@ export default function App() {
       <KeyboardShortcuts />
       <Routes>
         <Route path="/" element={<Dashboard />} />
+        <Route path="/journey" element={<Journey />} />
         <Route path="/clinical" element={<ClinicalDays />} />
         <Route path="/ward-rounds" element={<WardRounds />} />
         <Route path="/calendar" element={<CalendarPage />} />

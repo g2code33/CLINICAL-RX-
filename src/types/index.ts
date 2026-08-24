@@ -14,7 +14,10 @@ export type ModuleType =
   | 'reminder'
   | 'wardRound'
   | 'wardEntry'
-  | 'wardAnalysis';
+  | 'wardAnalysis'
+  | 'academicStage'
+  | 'academicPeriod'
+  | 'course';
 
 export interface BaseRecord {
   id: string;
@@ -28,6 +31,11 @@ export interface Profile extends BaseRecord {
   level: string;
   site: string;
   clinicalDay: number;
+  // ---- Academic identity (Phase 1 foundation) ----
+  institution?: string;
+  academicYear?: string; // e.g. "2026/2027"
+  currentStageId?: string; // -> AcademicStage.id
+  currentPeriodId?: string; // -> AcademicPeriod.id (semester)
 }
 
 export type AppearanceMode = 'light' | 'dark' | 'system';
@@ -290,6 +298,8 @@ export interface WardRound extends BaseRecord {
   archived?: boolean;
   dayId?: string; // linked ClinicalDay (same date), if any
   sample?: boolean; // created by demo/sample data
+  /** Academic context at capture time (stage / semester / year). */
+  academic?: AcademicLink;
 }
 
 /** The six capture types available during a round. */
@@ -339,4 +349,59 @@ export interface WardAnalysis extends BaseRecord {
   raw?: string;
   error?: string;
   attempts: number;
+}
+
+// ---- Academic journey (Phase 1 foundation) ---------------------------
+// A longitudinal, ADDITIVE model of the user's studies. Progressing to a new
+// stage never deletes anything: the old stage becomes `completed` and stays
+// fully accessible. Stages are data, not hard-coded enums, so future
+// professional stages (internship, residency, CPD) drop straight in.
+
+export type StageStatus = 'completed' | 'current' | 'upcoming';
+
+export interface AcademicStage extends BaseRecord {
+  name: string; // "Level 200" — display name
+  level: string; // "200" — sortable/identifying token
+  academicYear: string; // "2026/2027"
+  status: StageStatus;
+  order: number; // explicit ordering along the timeline
+  startDate?: string; // yyyy-mm-dd (user-configurable)
+  endDate?: string; // yyyy-mm-dd
+  institution?: string;
+  programme?: string;
+  completedAt?: number; // set when the stage is archived by a promotion
+  note?: string;
+}
+
+/**
+ * An academic period inside a stage — a semester, term, trimester or block.
+ * Data-driven so institutions that don't use exactly two semesters are fine.
+ */
+export interface AcademicPeriod extends BaseRecord {
+  stageId: string;
+  name: string; // "Semester 1"
+  index: number; // 1-based position within the stage
+  startDate?: string;
+  endDate?: string;
+}
+
+/** Course foundation — belongs to a stage and (optionally) a period. */
+export interface Course extends BaseRecord {
+  stageId: string;
+  periodId?: string;
+  title: string;
+  code?: string;
+  credits?: number;
+  note?: string;
+}
+
+/**
+ * Academic context stamped onto learning records so future bundlers can slice
+ * data by stage/year/semester across the whole PharmD journey.
+ * Optional everywhere: records created before this existed remain valid.
+ */
+export interface AcademicLink {
+  stageId?: string;
+  periodId?: string;
+  academicYear?: string;
 }

@@ -34,6 +34,7 @@ export function CommandPalette() {
     const base: Command[] = [
       { id: 'home', icon: '🏠', label: 'Go to Home', run: go('/') },
       { id: 'days', icon: '📋', label: 'Clinical Days', run: go('/clinical') },
+      { id: 'journey', icon: '🎓', label: 'PharmD Journey', run: go('/journey') },
       { id: 'wardrounds', icon: '🏥', label: 'Ward Rounds', run: go('/ward-rounds') },
       { id: 'calendar', icon: '📅', label: 'Calendar', run: go('/calendar') },
       { id: 'diseases', icon: '🦠', label: 'Diseases', run: go('/diseases') },

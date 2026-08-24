@@ -1,6 +1,9 @@
 import { create } from 'zustand';
 import type {
+  AcademicPeriod,
+  AcademicStage,
   BaseRecord,
+  Course,
   Bundle,
   ChatSession,
   ClinicalDay,
@@ -45,6 +48,9 @@ export interface DataStore {
   wardRounds: WardRound[];
   wardEntries: WardEntry[];
   wardAnalyses: WardAnalysis[];
+  academicStages: AcademicStage[];
+  academicPeriods: AcademicPeriod[];
+  courses: Course[];
   status: string;
   removed: Array<{ module: ModuleType; record: any }>;
 
@@ -80,6 +86,9 @@ const LIST_KEY: Partial<Record<ModuleType, keyof DataStore>> = {
   wardRound: 'wardRounds',
   wardEntry: 'wardEntries',
   wardAnalysis: 'wardAnalyses',
+  academicStage: 'academicStages',
+  academicPeriod: 'academicPeriods',
+  course: 'courses',
 };
 
 function listKeyFor(module: ModuleType, state: Record<string, unknown>): keyof DataStore {
@@ -109,6 +118,9 @@ export const useData = create<DataStore>((set, get) => ({
   wardRounds: [],
   wardEntries: [],
   wardAnalyses: [],
+  academicStages: [],
+  academicPeriods: [],
+  courses: [],
   removed: [],
   status: 'Initializing…',
 
@@ -117,7 +129,7 @@ export const useData = create<DataStore>((set, get) => ({
     set({ status: 'Loading local data…' });
     try {
       const platform = await adapter.platform();
-      const [profiles, settingsList, days, diseases, medicines, investigations, questions, lessons, revisions, bundles, chats, quizzes, reminders, wardRounds, wardEntries, wardAnalyses] =
+      const [profiles, settingsList, days, diseases, medicines, investigations, questions, lessons, revisions, bundles, chats, quizzes, reminders, wardRounds, wardEntries, wardAnalyses, academicStages, academicPeriods, courses] =
         await Promise.all([
           adapter.list('profile'),
           adapter.list('settings'),
@@ -135,6 +147,9 @@ export const useData = create<DataStore>((set, get) => ({
           adapter.list('wardRound'),
           adapter.list('wardEntry'),
           adapter.list('wardAnalysis'),
+          adapter.list('academicStage'),
+          adapter.list('academicPeriod'),
+          adapter.list('course'),
         ]);
       // Defensive parse: skip any corrupt record instead of throwing, so the
       // app can never be locked on the splash screen by bad stored data.
@@ -164,6 +179,9 @@ export const useData = create<DataStore>((set, get) => ({
         wardRounds: sortByUpdated(parse(wardRounds)),
         wardEntries: sortByUpdated(parse(wardEntries)),
         wardAnalyses: sortByUpdated(parse(wardAnalyses)),
+        academicStages: sortByUpdated(parse(academicStages)),
+        academicPeriods: sortByUpdated(parse(academicPeriods)),
+        courses: sortByUpdated(parse(courses)),
         ready: true,
         status: 'Ready · ' + (hasElectronBridge() ? 'SQLite (offline)' : 'Web storage'),
       });
@@ -217,6 +235,9 @@ export const useData = create<DataStore>((set, get) => ({
       wardRound: get().wardRounds,
       wardEntry: get().wardEntries,
       wardAnalysis: get().wardAnalyses,
+      academicStage: get().academicStages,
+      academicPeriod: get().academicPeriods,
+      course: get().courses,
     };
     return map[module] as Array<BaseRecord & Record<string, any>>;
   },

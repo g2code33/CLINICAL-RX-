@@ -78,6 +78,13 @@ export function countsSummary(counts: WardCounts): string {
 export async function startRound(ward: string, date: string, focus: string): Promise<WardRound> {
   const st = useData.getState();
   const round = newWardRound(ward.trim() || 'Ward', date || todayIso(), focus.trim() || 'General');
+  // Stamp the academic context (stage / semester / year) so this round stays
+  // attributable to the right point in the user's journey forever.
+  try {
+    const { currentAcademicLink } = await import('./academic');
+    const link = currentAcademicLink();
+    if (link.stageId || link.academicYear) round.academic = link;
+  } catch { /* academic module optional */ }
   // Link to the clinical day with the same date when one exists, so the
   // bundlers and Clinical Days page can relate them without duplicating data.
   const day = st.days.find((d) => d.date === round.date);

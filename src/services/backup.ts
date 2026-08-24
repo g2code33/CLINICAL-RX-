@@ -5,7 +5,7 @@ export function buildBackup(): string {
   const st = useData.getState();
   const data = {
     app: 'clinical-rx',
-    version: 1,
+    version: 2,
     exportedAt: new Date().toISOString(),
     records: {
       profile: st.profile,
@@ -21,6 +21,12 @@ export function buildBackup(): string {
       chats: st.chats,
       quizzes: st.quizzes,
       reminders: st.reminders,
+      wardRounds: st.wardRounds,
+      wardEntries: st.wardEntries,
+      wardAnalyses: st.wardAnalyses,
+      academicStages: st.academicStages,
+      academicPeriods: st.academicPeriods,
+      courses: st.courses,
     },
   };
   return JSON.stringify(data, null, 2);

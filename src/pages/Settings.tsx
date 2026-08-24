@@ -1,6 +1,11 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useData } from '../stores/data';
+import {
+  currentStage as academicCurrentStage,
+  periodsFor as academicPeriodsFor,
+  setCurrentPeriod as academicSetCurrentPeriod,
+} from '../services/academic';
 import { PageHeader, PasswordInput } from '../components/ui';
 import { Modal } from '../components/Modal';
 import { UpdatePanel } from '../components/UpdatePanel';
@@ -186,6 +191,10 @@ export function SettingsPage() {
       await put('day', recs.days); await put('disease', recs.diseases); await put('medicine', recs.medicines);
       await put('investigation', recs.investigations); await put('question', recs.questions);
       await put('lesson', recs.lessons); await put('revision', recs.revisions); await put('bundle', recs.bundles); await put('chat', recs.chats); await put('quiz', recs.quizzes); await put('reminder', recs.reminders);
+      // Ward rounds + academic journey (added in later versions; older
+      // backups simply have no such records and are skipped safely).
+      await put('wardRound', recs.wardRounds); await put('wardEntry', recs.wardEntries); await put('wardAnalysis', recs.wardAnalyses);
+      await put('academicStage', recs.academicStages); await put('academicPeriod', recs.academicPeriods); await put('course', recs.courses);
       await st.init(); setStatus('✓ Backup imported');
     } catch (e: any) { setStatus('⚠️ Import failed: ' + e.message); }
   }
@@ -193,7 +202,7 @@ export function SettingsPage() {
   async function clearAll() {
     if (!confirm('Delete ALL local data? This cannot be undone.')) return;
     const st = useData.getState();
-    const modules: any[] = ['day', 'disease', 'medicine', 'investigation', 'question', 'lesson', 'revision', 'bundle', 'chat', 'quiz', 'reminder', 'profile', 'settings'];
+    const modules: any[] = ['day', 'disease', 'medicine', 'investigation', 'question', 'lesson', 'revision', 'bundle', 'chat', 'quiz', 'reminder', 'wardRound', 'wardEntry', 'wardAnalysis', 'academicStage', 'academicPeriod', 'course', 'profile', 'settings'];
     for (const m of modules) { const items = await st.adapter.list(m); for (const it of items) await st.adapter.remove(m, it.id); }
     // Also drop the offline sync queue and the question bank so no stale
     // operations or questions survive a full reset.
@@ -213,6 +222,42 @@ export function SettingsPage() {
     <div>
       <PageHeader title="Settings" subtitle="Appearance, clinical profile, AI configuration, data and account." />
       <div className="grid gap-6 lg:grid-cols-2">
+
+        {/* Local profile */}
+        <div className="card">
+          <h2 className="mb-1 font-semibold">👤 Profile</h2>
+          <p className="mb-3 text-xs text-slate-400">Stored locally on this device. No account required.</p>
+          <div className="space-y-3">
+            <div>
+              <label className={label}>Name</label>
+              <input
+                className={input}
+                value={profile?.username ?? ''}
+                onChange={(e) => profile && saveProfile({ ...profile, username: e.target.value, updatedAt: Date.now() })}
+              />
+            </div>
+            <div>
+              <label className={label}>Programme</label>
+              <input
+                className={input}
+                value={profile?.programme ?? ''}
+                onChange={(e) => profile && saveProfile({ ...profile, programme: e.target.value, updatedAt: Date.now() })}
+              />
+            </div>
+            <div>
+              <label className={label}>Institution</label>
+              <input
+                className={input}
+                value={profile?.institution ?? ''}
+                placeholder="e.g. KNUST"
+                onChange={(e) => profile && saveProfile({ ...profile, institution: e.target.value, updatedAt: Date.now() })}
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Academic */}
+        <AcademicSettings />
 
         {/* Appearance */}
         <div className="card">
@@ -370,6 +415,7 @@ export function SettingsPage() {
         <p className="mt-3 text-[11px] text-slate-400">🔐 On the desktop app, keys should be stored in the OS secure credential store. This version stores them with your local data — export backups with care.</p>
       </div>
 
+      <div className="mt-6"><ComingLaterSettings /></div>
       <div className="mt-6"><UpdatePanel /></div>
 
       {/* Admin panel — lives beside Updates in Settings now */}
@@ -517,4 +563,104 @@ async function updateAi(draft: Settings, key: string, patch: any, saveSettings: 
   setDraft(next);
   // Debounced push — rapid edits collapse into one request, last edit wins.
   queuePushAiConfig();
+}
+
+/**
+ * Academic settings — current level, academic year and semester.
+ * Changing the level here PROMOTES via the journey service (additive), it
+ * never rewrites history.
+ */
+function AcademicSettings() {
+  const profile = useData((s) => s.profile);
+  const stages = useData((s) => s.academicStages);
+  const periods = useData((s) => s.academicPeriods);
+  const navigate = useNavigate();
+
+  const stage = academicCurrentStage();
+  const stagePeriods = stage ? academicPeriodsFor(stage.id) : [];
+  void stages;
+  void periods;
+
+  return (
+    <div className="card">
+      <h2 className="mb-1 font-semibold">🎓 Academic</h2>
+      <p className="mb-3 text-xs text-slate-400">
+        Your current position in the programme. Previous years always stay accessible.
+      </p>
+
+      {!stage ? (
+        <div className="rounded-lg bg-slate-50 p-3 text-sm text-slate-500 dark:bg-slate-800 dark:text-slate-400">
+          No academic journey yet.
+          <button className="btn-secondary mt-2 w-full !py-1.5 text-xs" onClick={() => navigate('/journey')}>
+            Set up my journey →
+          </button>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-brand-50 px-3 py-2 dark:bg-brand-950">
+            <div>
+              <div className="text-sm font-bold text-brand-800 dark:text-brand-200">{stage.name}</div>
+              <div className="text-xs text-brand-700/70 dark:text-brand-300/70">{stage.academicYear}</div>
+            </div>
+            <button className="btn-secondary !py-1 text-xs" onClick={() => navigate('/journey')}>
+              Manage journey →
+            </button>
+          </div>
+
+          <div>
+            <label className="mb-1.5 block text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+              Current semester
+            </label>
+            <div className="flex flex-wrap gap-1.5">
+              {stagePeriods.map((p) => (
+                <button
+                  key={p.id}
+                  className={`rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
+                    profile?.currentPeriodId === p.id
+                      ? 'bg-brand-600 text-white'
+                      : 'bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-200'
+                  }`}
+                  onClick={() => academicSetCurrentPeriod(p.id)}
+                >
+                  {p.name}
+                </button>
+              ))}
+              {!stagePeriods.length && <span className="text-xs text-slate-400">No semesters defined.</span>}
+            </div>
+          </div>
+
+          <p className="text-[11px] text-slate-400">
+            To move to the next level, use <strong>PharmD Journey → Move to Level …</strong>. Promotion archives the
+            current year; it never deletes it.
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Future modules — declared honestly rather than faked. */
+function ComingLaterSettings() {
+  const items = [
+    { icon: '🤖', title: 'AI settings', detail: 'Cloud AI is configured above. Local (on-device) AI arrives in a later phase.' },
+    { icon: '☁️', title: 'Cloud sync', detail: 'Optional multi-device sync — see Online Account above.' },
+    { icon: '💼', title: 'Professional portfolio & CV builder', detail: 'Planned for a later phase.' },
+  ];
+  return (
+    <div className="card">
+      <h2 className="mb-1 font-semibold">🧭 Coming in later phases</h2>
+      <p className="mb-3 text-xs text-slate-400">Reserved space — these are not implemented yet.</p>
+      <div className="space-y-2">
+        {items.map((i) => (
+          <div key={i.title} className="flex gap-2.5 rounded-lg border border-dashed border-slate-300 px-3 py-2 dark:border-slate-700">
+            <span className="text-lg leading-none">{i.icon}</span>
+            <div className="min-w-0">
+              <div className="text-sm font-semibold text-slate-600 dark:text-slate-300">{i.title}</div>
+              <div className="text-[11px] text-slate-400">{i.detail}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 }

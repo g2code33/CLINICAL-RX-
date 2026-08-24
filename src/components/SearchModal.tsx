@@ -16,6 +16,7 @@ interface Result {
 const PAGES: Result[] = [
   { icon: '🏠', kind: 'Page', title: 'Home', subtitle: 'Dashboard', route: '/' },
   { icon: '📋', kind: 'Page', title: 'Clinical Days', subtitle: 'Record daily clinical activity', route: '/clinical' },
+  { icon: '🎓', kind: 'Page', title: 'PharmD Journey', subtitle: 'Academic timeline, previous years, promotion', route: '/journey' },
   { icon: '🏥', kind: 'Page', title: 'Ward Rounds', subtitle: 'Capture learning during ward rounds', route: '/ward-rounds' },
   { icon: '📅', kind: 'Page', title: 'Calendar', subtitle: 'See clinical days on a calendar', route: '/calendar' },
   { icon: '🦠', kind: 'Page', title: 'Diseases', subtitle: 'Conditions, WHO→DT framework', route: '/diseases' },

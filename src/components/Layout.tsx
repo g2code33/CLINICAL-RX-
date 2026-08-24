@@ -18,6 +18,7 @@ const APP_VERSION = pkg.version;
 
 const NAV = [
   { to: '/', icon: '🏠', label: 'Home' },
+  { to: '/journey', icon: '🎓', label: 'PharmD Journey' },
   { to: '/clinical', icon: '📋', label: 'Clinical Days' },
   { to: '/ward-rounds', icon: '🏥', label: 'Ward Rounds' },
   { to: '/calendar', icon: '📅', label: 'Calendar' },
