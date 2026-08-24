@@ -1,12 +1,12 @@
 {
   "name": "clinical-rx",
-  "version": "1.6.0",
+  "version": "1.6.1",
   "private": true,
   "author": {
     "name": "Clinical Rx",
     "email": "g2code33@users.noreply.github.com"
   },
-  "description": "Your personal clinical companion \u2014 offline-first clinical learning app (Electron + web)",
+  "description": "Your personal clinical companion — offline-first clinical learning app (Electron + web)",
   "main": "dist-electron/main.js",
   "scripts": {
     "dev": "vite",
