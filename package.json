@@ -30,7 +30,7 @@
     "test:phase3": "node test/phase3.test.mjs",
     "test:phase4": "node test/phase4.test.mjs",
     "test:mode": "npm run build:web && node test/appMode.test.mjs",
-    "test": "node test/api.test.js && node test/wardRounds.test.mjs && node test/phase1.test.mjs && node test/phase2.test.mjs && node test/phase3.test.mjs && node test/phase4.test.mjs && node test/phase5.test.mjs && node test/phase6.test.mjs && node test/phase7.test.mjs && node test/unified.test.mjs",
+    "test": "node test/api.test.js && node test/wardRounds.test.mjs && node test/phase1.test.mjs && node test/phase2.test.mjs && node test/phase3.test.mjs && node test/phase4.test.mjs && node test/phase5.test.mjs && node test/phase6.test.mjs && node test/phase7.test.mjs && node test/phase8.test.mjs && node test/unified.test.mjs",
     "release:patch": "npm version patch --no-git-tag-version && git add -A && git commit -m \"release: v$(node -p \"require(\"./package.json\").version\")\" && git push origin main",
     "release:minor": "npm version minor --no-git-tag-version && git add -A && git commit -m \"release: v$(node -p \"require(\"./package.json\").version\")\" && git push origin main",
     "release:major": "npm version major --no-git-tag-version && git add -A && git commit -m \"release: v$(node -p \"require(\"./package.json\").version\")\" && git push origin main",
@@ -39,19 +39,20 @@
     "mobile:android": "npm run build:web && cap sync android && cap open android",
     "test:phase5": "node test/phase5.test.mjs",
     "test:phase6": "node test/phase6.test.mjs",
-    "test:phase7": "node test/phase7.test.mjs"
+    "test:phase7": "node test/phase7.test.mjs",
+    "test:phase8": "node test/phase8.test.mjs"
   },
   "dependencies": {
     "@capacitor/android": "^8.5.0",
     "@capacitor/cli": "^8.5.0",
     "@capacitor/core": "^8.5.0",
     "better-sqlite3": "12.2.0",
-    "drizzle-orm": "^0.44.2",
+    "drizzle-orm": "^0.45.2",
     "electron-updater": "^6.6.2",
     "jspdf": "^4.2.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "react-router-dom": "^6.28.0",
+    "react-router-dom": "^7.18.2",
     "zustand": "^5.0.2"
   },
   "devDependencies": {

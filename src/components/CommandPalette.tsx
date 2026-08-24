@@ -75,6 +75,7 @@ export function CommandPalette() {
       { id: 'ai', icon: '🤖', label: 'AI Workspace', run: go('/ai') },
       { id: 'settings', icon: '⚙️', label: 'Settings', run: go('/settings') },
       { id: 'sync', icon: '☁️', label: 'Sync Center', hint: 'Account, sync & backup', run: go('/sync') },
+      { id: 'security', icon: '🔐', label: 'Security & Privacy', hint: 'App Lock, privacy, activity', run: go('/settings/security') },
       { id: 'search', icon: '🔍', label: 'Open global search', run: () => { setOpen(false); setSearchOpen(true); } },
       { id: 'newday', icon: '＋', label: 'New clinical day', run: () => { setOpen(false); navigate('/clinical'); } },
       { id: 'newround', icon: '🏥', label: 'Start ward round', run: () => { setOpen(false); navigate('/ward-rounds'); } },

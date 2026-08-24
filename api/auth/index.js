@@ -8,7 +8,7 @@ const {
   hashPassword, verifyPassword, verifyHash, signToken, verifyToken, uuid,
 } = require('../_lib/auth.js');
 const { guard, fail, ok } = require('../_lib/errors.js');
-const { rateLimit } = require('../_lib/rateLimit.js');
+const { rateLimit, consume } = require('../_lib/rateLimit.js');
 
 function emailOf(req) { return String(req.body?.email || '').trim().toLowerCase(); }
 function tokenOf(req) {
@@ -30,8 +30,30 @@ async function findUserByEmail(e) {
   return raw ? JSON.parse(raw) : null;
 }
 
+/**
+ * Phase 8 §36: credential-guessing actions get their own, much stricter
+ * bucket. Previously every auth action shared one max:60 window, so an
+ * attacker had 60 password attempts per 15 minutes — and harmless calls like
+ * `me` consumed the same budget.
+ */
+/**
+ * Phase 8 §36: credential-guessing actions get their own, much stricter
+ * bucket. Previously every auth action shared one max:60 window, so an
+ * attacker had 60 password attempts per 15 minutes — and harmless calls like
+ * `me` consumed the same budget.
+ */
+const SENSITIVE_ACTIONS = new Set(['login', 'register', 'reset', 'forgot', 'change-password', 'delete-account', 'security-question']);
+
 async function handler(req, res) {
   const action = req.body?.action || req.query?.action || '';
+
+  if (SENSITIVE_ACTIONS.has(action)) {
+    const { allowed, retryAfter } = consume('auth-sensitive', req, 10, 15 * 60 * 1000);
+    if (!allowed) {
+      if (res.setHeader) res.setHeader('Retry-After', String(retryAfter));
+      return fail(res, 429, 'Too many attempts. Please wait a few minutes and try again.');
+    }
+  }
 
   // ---- REGISTER ----
   if (action === 'register') {

@@ -1,6 +1,7 @@
 const { redis } = require('./_lib/redis.js');
 const { verifyToken } = require('./_lib/auth.js');
 const { guard, fail, ok } = require('./_lib/errors.js');
+const { rateLimit } = require('./_lib/rateLimit.js');
 
 const MAX_RECORDS_PER_PUSH = 5000;
 
@@ -81,4 +82,6 @@ async function handler(req, res) {
   return fail(res, 405, 'Method not allowed');
 }
 
-module.exports = guard(handler);
+// Phase 8 §36: sync is authenticated but still rate-limited, so a stolen or
+// scripted token cannot hammer the store. Generous enough for real use.
+module.exports = guard(rateLimit({ route: 'sync', max: 120, windowMs: 5 * 60 * 1000 })(handler));

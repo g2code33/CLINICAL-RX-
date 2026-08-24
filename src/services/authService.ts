@@ -1,5 +1,6 @@
 import { useData } from '../stores/data';
 import { syncClient } from './syncClient';
+import { audit } from './auditLog';
 
 /**
  * 👤 AUTH SERVICE (Phase 7)
@@ -237,6 +238,7 @@ async function persistAccount(patch: Record<string, unknown>): Promise<void> {
 export async function signUp(email: string, password: string, name?: string): Promise<AuthResult> {
   const res = await provider.signUp(email, password, name);
   if (res.ok && res.token) {
+    audit('auth.signup', { ok: true });
     await ensureDeviceIdentity();
     await persistAccount({
       connected: true,
@@ -256,7 +258,9 @@ export async function signUp(email: string, password: string, name?: string): Pr
 
 export async function signIn(email: string, password: string): Promise<AuthResult> {
   const res = await provider.signIn(email, password);
+  if (!res.ok) audit('auth.failed', { ok: false });
   if (res.ok && res.token) {
+    audit('auth.signin', { ok: true });
     await ensureDeviceIdentity();
     await persistAccount({
       connected: true,
@@ -293,6 +297,7 @@ export async function signOut(): Promise<void> {
     syncing: false,
     firstSyncApproved: false,
   });
+  audit('auth.signout');
 }
 
 export async function resetPassword(email: string): Promise<{ ok: boolean; error?: string }> {
@@ -336,5 +341,6 @@ export async function refreshSession(): Promise<{ ok: boolean; needsReauth: bool
   const user = await getCurrentUser();
   if (user) return { ok: true, needsReauth: false };
   await persistAccount({ lastError: 'Your session expired. Sign in again to resume syncing.' });
+  audit('auth.session-expired', { ok: false });
   return { ok: false, needsReauth: true };
 }

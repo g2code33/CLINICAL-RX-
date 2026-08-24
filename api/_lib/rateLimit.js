@@ -45,4 +45,13 @@ function rateLimit({ route, max = 10, windowMs = 15 * 60 * 1000, message = 'Too 
   };
 }
 
-module.exports = { rateLimit, clientIp };
+/**
+ * Direct check for handlers that need per-ACTION limits rather than
+ * per-route (e.g. auth, where `login` must be far stricter than `me`).
+ * Returns { allowed, retryAfter } and does not touch the response.
+ */
+function consume(route, req, max, windowMs) {
+  return checkLimit(route, clientIp(req), max, windowMs);
+}
+
+module.exports = { rateLimit, clientIp, consume };

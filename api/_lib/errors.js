@@ -18,6 +18,24 @@ function setCors(res) {
   if (!res.headersSent) res.setHeader('Vary', 'Origin');
 }
 
+// Errors that are safe to show a user verbatim: they describe a
+// configuration problem the operator must fix, and contain no internals.
+const SAFE_ERROR_PREFIX = 'CLIENT_SAFE:';
+
+/** Mark an error message as safe to return to the client. */
+function clientError(message) {
+  const e = new Error(SAFE_ERROR_PREFIX + message);
+  return e;
+}
+
+/**
+ * Phase 8 §30: never leak internals to the client.
+ *
+ * A raw `e.message` can contain absolute filesystem paths, driver internals,
+ * query fragments, or upstream credentials. The full error is logged
+ * server-side with a short reference id; the client gets a friendly message
+ * plus that id, so a user can report a problem without us exposing anything.
+ */
 function guard(fn) {
   return async (req, res) => {
     setCors(res);
@@ -27,14 +45,21 @@ function guard(fn) {
     try {
       return await fn(req, res);
     } catch (e) {
-      console.error('[clinical-rx] API error:', e);
-      const message = e?.message || 'Unexpected server error.';
-      if (/KV_REST_API|KV error|KV REST|in-memory|storage|redis|UPSTASH/i.test(message)) {
-        return fail(res, 503, 'Cloud storage is not configured. Please set KV_REST_API_URL and KV_REST_API_TOKEN in Vercel (Storage → KV → create).');
+      const ref = Math.random().toString(36).slice(2, 10);
+      // Full detail goes to the server log ONLY.
+      console.error(`[clinical-rx] API error ref=${ref}:`, e);
+
+      const message = e?.message || '';
+
+      if (message.startsWith(SAFE_ERROR_PREFIX)) {
+        return fail(res, 400, message.slice(SAFE_ERROR_PREFIX.length));
       }
-      return fail(res, 500, message);
+      if (/KV_REST_API|KV error|KV REST|in-memory|storage|redis|UPSTASH/i.test(message)) {
+        return fail(res, 503, 'Cloud storage is not available right now. Your changes are safe locally and will sync later.');
+      }
+      return fail(res, 500, `Something went wrong on the server. Reference: ${ref}`);
     }
   };
 }
 
-module.exports = { ok, fail, guard, setCors };
+module.exports = { ok, fail, guard, setCors, clientError };

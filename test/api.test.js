@@ -69,14 +69,19 @@ async function call(fn, req, res) { await fn(req, res); return res; }
   r = await call(sync, req, res);
   assert.strictEqual(r.body.records.length, 0, 'incremental');
 
-  // aiConfig round trip
+  // aiConfig round trip.
+  // Phase 8 §6: the SERVER strips credentials, so a modified client cannot
+  // park an API key in the cloud. Shareable preferences must still survive.
   ({ req, res } = makeReqRes()); req.method = 'POST'; req.headers.authorization = 'Bearer ' + token;
   req.body = { aiConfig: { tutor: { enabled: true, provider: 'openai', apiKey: 'sk-t', model: 'gpt-4o-mini' } } };
   r = await call(aiConfig, req, res);
   assert.strictEqual(r.statusCode, 200, 'aiConfig save');
   ({ req, res } = makeReqRes()); req.method = 'GET'; req.headers.authorization = 'Bearer ' + token;
   r = await call(aiConfig, req, res);
-  assert.strictEqual(r.body.aiConfig.tutor.apiKey, 'sk-t', 'aiConfig read');
+  assert.strictEqual(r.body.aiConfig.tutor.apiKey, undefined, 'aiConfig strips apiKey server-side');
+  assert.strictEqual(r.body.aiConfig.tutor.model, 'gpt-4o-mini', 'aiConfig keeps preferences');
+  assert.strictEqual(r.body.aiConfig.tutor.enabled, true, 'aiConfig keeps enabled flag');
+  assert.ok(!JSON.stringify(r.body).includes('sk-t'), 'no credential anywhere in the response');
 
   // security-question
   ({ req, res } = makeReqRes()); req.method = 'POST'; req.body = { action: 'security-question', email: 'test@example.com' };

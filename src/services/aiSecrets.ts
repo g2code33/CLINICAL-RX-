@@ -77,6 +77,7 @@ export async function getKeyStatus(moduleKey: string): Promise<KeyStatus> {
 }
 
 export async function removeApiKey(moduleKey: string): Promise<void> {
+  void import('./auditLog').then((m) => m.audit('ai.key-removed')).catch(() => {});
   const b = bridge();
   if (b?.secrets) {
     try {

@@ -3,6 +3,7 @@ import { conflictCount, getPendingCount, syncNow } from './syncEngine';
 import { firstSyncApproved } from './accountLink';
 import { refreshSession } from './authService';
 import { runCloudAutoBackup } from './cloudBackup';
+import { audit } from './auditLog';
 
 /**
  * ⏱️ SYNC SCHEDULER (Phase 7 §18, §46, §47)
@@ -110,6 +111,8 @@ export async function runSync(manual = false): Promise<{ ok: boolean; message: s
           device: { ...settings.device, lastSync: Date.now(), lastSeen: Date.now() },
         });
       }
+      audit('sync.completed', { count: res.pushed + res.pulled, ok: true });
+      if (conflictCount() > 0) audit('sync.conflict', { count: conflictCount() });
       return { ok: true, message: `Synced — ${res.pushed} sent, ${res.pulled} received.` };
     }
 
@@ -123,6 +126,7 @@ export async function runSync(manual = false): Promise<{ ok: boolean; message: s
       }
     }
     await noteFailure(res.message);
+    audit('sync.failed', { ok: false });
     return { ok: false, message: res.message ?? 'Sync failed. Your changes are safe locally.' };
   } catch (e: any) {
     await noteFailure(e?.message);

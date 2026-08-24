@@ -3,6 +3,7 @@ import { syncClient } from './syncClient';
 import { SYNCED_MODULES, aiSyncEnabled } from './syncEngine';
 import { stripDeviceSecrets } from './aiConfigSync';
 import { deviceInfo } from './authService';
+import { audit } from './auditLog';
 import type { ModuleType } from '../types';
 
 /**
@@ -129,6 +130,7 @@ export async function createCloudBackup(opts: { safety?: boolean; label?: string
     },
   ]);
   if (!res.ok) return { ok: false, error: res.error ?? 'Backup failed.' };
+  audit('backup.created', { count: payload.manifest.recordCount, ok: true });
   return { ok: true, manifest: payload.manifest };
 }
 
@@ -237,6 +239,7 @@ export async function restoreCloudBackup(id: string, opts: { force?: boolean } =
     }
   }
 
+  audit('backup.restored', { count: restored, ok: true });
   return { ok: true, restored, safetyBackupId, warning };
 }
 

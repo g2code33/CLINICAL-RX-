@@ -145,7 +145,13 @@ export default function AiWorkspace() {
 
     appendMessage(convId, {
       role: 'assistant',
-      content: res.ok ? res.text : res.error ?? 'Something went wrong.',
+      // A high-stakes clinical question gets one short verification reminder
+      // appended — not a disclaimer on every single reply (§41).
+      content: res.ok
+        ? res.safetyNotice
+          ? `${res.text}\n\n⚕️ ${res.safetyNotice}`
+          : res.text
+        : res.error ?? 'Something went wrong.',
       sources: res.ok ? res.sources : [],
       runtime: res.runtime,
       error: !res.ok,

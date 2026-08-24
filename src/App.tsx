@@ -1,8 +1,9 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useData } from './stores/data';
 import { newSettings } from './services/defaults';
 import { setupAutoAndReconnect } from './services/autoBundle';
+import { lockState, startAutoLock } from './services/appLock';
 import { shouldRemind, computeStreak } from './services/streaks';
 import { KeyboardShortcuts } from './components/KeyboardShortcuts';
 import { useUi } from './stores/ui';
@@ -31,6 +32,8 @@ import { AiChat } from './pages/AiChat';
 import AiWorkspace from './pages/AiWorkspace';
 import AiSettings from './pages/AiSettings';
 import SyncCenter from './pages/SyncCenter';
+import SecuritySettings from './pages/SecuritySettings';
+import { LockScreen } from './components/LockScreen';
 // Phase 6 — PharmD Journey + Professional Career Engine
 import JourneyHome, { JourneyTimeline } from './pages/journey/JourneyHome';
 import { AcademicArchive, PortfolioPage } from './pages/journey/ArchiveAndPortfolio';
@@ -154,8 +157,41 @@ export default function App() {
 
   useEffect(() => { if (useData.getState().profile && !useData.getState().settings) { useData.getState().saveSettings(newSettings()); } }, [useData((s) => s.profile)]);
 
+  // App Lock state. Evaluated once at start-up; the lock screen flips it.
+  const [locked, setLocked] = useState(() => {
+    try {
+      return lockState().locked;
+    } catch {
+      return false; // a broken lock config must never brick the app
+    }
+  });
+
+  // Re-lock after the app has been in the background too long.
+  useEffect(() => {
+    const stop = startAutoLock();
+    const onVis = () => {
+      if (!document.hidden) {
+        try {
+          if (lockState().locked) setLocked(true);
+        } catch {
+          /* ignore */
+        }
+      }
+    };
+    document.addEventListener('visibilitychange', onVis);
+    return () => {
+      stop();
+      document.removeEventListener('visibilitychange', onVis);
+    };
+  }, []);
+
   if (!ready) {
     return (<div className="flex h-screen items-center justify-center bg-slate-900 text-slate-100"><div className="text-center"><img src="./v2.PNG" alt="CLINICAL Rx logo" className="mx-auto mb-3 h-16 w-16 rounded-2xl object-cover" /><div className="animate-pulse text-lg font-semibold">CLINICAL Rx</div><div className="text-sm text-slate-400">Starting your clinical companion…</div></div></div>);
+  }
+  // 🔒 APP LOCK (Phase 8 §15). Rendered before the router, so no private
+  // record can reach the DOM while the app is locked.
+  if (locked) {
+    return <LockScreen onUnlocked={() => setLocked(false)} />;
   }
   if (!profile) { return <Onboarding />; }
 
@@ -199,6 +235,7 @@ export default function App() {
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="/settings/ai" element={<AiSettings />} />
         <Route path="/sync" element={<SyncCenter />} />
+        <Route path="/settings/security" element={<SecuritySettings />} />
         <Route path="/admin" element={<AdminPage />} />
         <Route path="/auth" element={<AuthPage />} />
         <Route path="/reset" element={<ResetPassword />} />
