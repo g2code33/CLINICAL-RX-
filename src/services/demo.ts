@@ -1,7 +1,7 @@
 import { useData } from '../stores/data';
 import type { ClinicalDay, Disease, Medicine, Investigation, Question, Lesson } from '../types';
 import { uid } from '../stores/data';
-import { confirmAction, notifyAction } from '../components/ui/globalConfirm';
+import { confirmAction } from '../components/ui/globalConfirm';
 
 function daysAgo(n: number): string {
   const d = new Date();

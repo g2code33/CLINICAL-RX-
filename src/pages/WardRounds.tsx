@@ -14,7 +14,6 @@ import {
   countsSummary,
   deleteRound,
   duplicateRound,
-  entriesFor,
   finishRound,
   renameRound,
   reopenRound,
@@ -29,7 +28,7 @@ import { bundleFromWardEntries, bundleFromWardRounds } from '../services/bundler
 import { downloadText } from '../services/export';
 import { privacyWarning, scanForPhi } from '../services/privacy';
 import type { WardEntryType, WardRound } from '../types';
-import { confirmAction, notifyAction } from '../components/ui/globalConfirm';
+import { confirmAction } from '../components/ui/globalConfirm';
 
 type View = 'home' | 'active' | 'history';
 

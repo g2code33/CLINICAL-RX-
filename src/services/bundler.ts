@@ -142,7 +142,7 @@ export function aiAvailable(): boolean {
   return !!cfg?.enabled && !!cfg?.apiKey;
 }
 
-async function enrichWithAi(bundle: Bundle, ctx: Context): Promise<EnrichResult> {
+async function enrichWithAi(bundle: Bundle, _ctx: Context): Promise<EnrichResult> {
   const cfg = getEffectiveAiConfig('bundler');
   if (!cfg?.enabled || !cfg.apiKey) {
     return { bundle, succeeded: false, reason: 'no-config' };

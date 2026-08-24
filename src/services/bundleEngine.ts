@@ -1,4 +1,4 @@
-import { useData, uid } from '../stores/data';
+import { useData } from '../stores/data';
 import { emptyBundle, todayIso } from './defaults';
 import { getStage } from './academic';
 import { retrieveKnowledge, type KnowledgeRecord, type RetrieveOptions } from './intelligence';
@@ -276,11 +276,6 @@ export async function generateSnapshot(input: GenerateInput): Promise<Bundle> {
 
 // ---- Automatic generation ---------------------------------------------
 
-function isoAddDays(iso: string, n: number): string {
-  const d = new Date(iso + 'T00:00:00');
-  d.setDate(d.getDate() + n);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
 
 export function dailyKey(date: string): string {
   return `auto-daily:${date}`;

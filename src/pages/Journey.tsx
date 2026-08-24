@@ -6,7 +6,6 @@ import {
   addStage,
   allStages,
   buildCourse,
-  coursesFor,
   currentAcademicYear,
   currentStage,
   deleteStage,
@@ -30,8 +29,6 @@ const STATUS_META: Record<AcademicStage['status'], { icon: string; label: string
 
 export function Journey() {
   const stages = useData((s) => s.academicStages);
-  const periods = useData((s) => s.academicPeriods);
-  const courses = useData((s) => s.courses);
   const profile = useData((s) => s.profile);
 
   const [promoteOpen, setPromoteOpen] = useState(false);

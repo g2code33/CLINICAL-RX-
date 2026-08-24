@@ -35,14 +35,11 @@ export function ctxHandlers(show: (e: any, items: CtxItem[]) => void, items: Ctx
   return {
     onContextMenu: (e: React.MouseEvent) => { e.preventDefault(); cancelLongPress(); mk(e); },
     onTouchStart: (e: React.TouchEvent) => {
-      const t = e.touches[0];
-      const startX = t.clientX, startY = t.clientY;
       cancelLongPress();
       longPressTimer = setTimeout(() => { longPressTimer = null; mk(e); }, 500);
     },
-    onTouchMove: (e: React.TouchEvent) => {
-      // Cancel if the finger moved a lot (that's a scroll, not a long-press).
-      const t = e.touches[0];
+    // Any movement cancels the long-press: that gesture is a scroll.
+    onTouchMove: () => {
       cancelLongPress();
     },
     onTouchEnd: cancelLongPress,

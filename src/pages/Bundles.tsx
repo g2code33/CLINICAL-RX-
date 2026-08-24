@@ -5,11 +5,8 @@ import { Modal } from '../components/Modal';
 import { processAiQueue, getPendingAiCount, aiAvailable } from '../services/bundler';
 import {
   bundleToday,
-  createDayBundle,
-  createWeekBundle,
   deleteBundle,
   mergeBundles,
-  previewMerge,
   runAutomaticBundling,
   toggleBundleFavorite,
 } from '../services/bundleEngine';
@@ -34,19 +31,8 @@ const TYPE_LABEL: Record<string, string> = {
   merged: '🔗 Merged',
 };
 
-function addDays(iso: string, n: number): string {
-  const d = new Date(iso + 'T00:00:00');
-  d.setDate(d.getDate() + n);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
-function todayIso() {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
-
 export function Bundles() {
   const bundles = useData((s) => s.bundles);
-  const days = useData((s) => s.days);
   const setStatus = useData((s) => s.setStatus);
   const [filter, setFilter] = useState<Filter>('all');
   const [query, setQuery] = useState('');
@@ -55,7 +41,6 @@ export function Bundles() {
   const [selected, setSelected] = useState<string[]>([]);
   const [viewing, setViewing] = useState<Bundle | null>(null);
   const [merging, setMerging] = useState(false);
-  const [aiReply, setAiReply] = useState<string | null>(null);
   const pendingAiCount = getPendingAiCount();
 
   async function processPendingAi() {
@@ -98,6 +83,36 @@ export function Bundles() {
 
 
 
+
+  /** Export a bundle from the vault, with the same PHI check as the viewer. */
+  async function exportBundle(b: Bundle) {
+    const text = bundleToMarkdown(b);
+    const finding = scanForPhi(text);
+    if (finding.length) {
+      await notifyAction({
+        title: '⚠️ Possible patient-identifying information',
+        message: privacyWarning(finding),
+        note: 'The export will continue. Please review it before sharing.',
+        confirmLabel: 'Continue export',
+      });
+    }
+    downloadText(`${b.title.replace(/[^a-z0-9]/gi, '_')}.md`, text);
+    setStatus('✓ Bundle exported');
+  }
+
+  /** Delete a bundle snapshot. Source records are never touched (§9). */
+  async function removeBundle(b: Bundle) {
+    const ok = await confirmAction({
+      title: `Delete "${b.title}"?`,
+      message: 'This removes the bundle snapshot only.',
+      note: 'Your learning notes, ward rounds and other clinical records are NOT deleted.',
+      confirmLabel: 'Delete bundle',
+      destructive: true,
+    });
+    if (!ok) return;
+    await deleteBundle(b.id);
+    setSelected((cur) => cur.filter((id) => id !== b.id));
+  }
 
   async function doMerge() {
     if (selected.length < 1) return;
@@ -249,7 +264,7 @@ export function Bundles() {
                       const rest = g.filter((b) => b.id !== primary.id);
                       return (
                         <>
-                          <BundleCard key={primary.id} b={primary} selected={selected.includes(primary.id)} onToggle={(v) => setSelected(v ? [...selected, primary.id] : selected.filter((x) => x !== primary.id))} onOpen={() => setViewing(primary)} />
+                          <BundleCard key={primary.id} b={primary} selected={selected.includes(primary.id)} onToggle={(v) => setSelected(v ? [...selected, primary.id] : selected.filter((x) => x !== primary.id))} onOpen={() => setViewing(primary)} onExport={exportBundle} onDelete={removeBundle} />
                           {rest.length > 0 && (
                             <div className="card flex flex-col justify-center border-dashed p-4 text-center text-xs text-slate-400">
                               <div className="mb-1">➕ {rest.length} more bundle(s) for this day</div>
@@ -285,7 +300,7 @@ export function Bundles() {
                       const rest = g.filter((b) => b.id !== primary.id);
                       return (
                         <>
-                          <BundleCard key={primary.id} b={primary} selected={selected.includes(primary.id)} onToggle={(v) => setSelected(v ? [...selected, primary.id] : selected.filter((x) => x !== primary.id))} onOpen={() => setViewing(primary)} />
+                          <BundleCard key={primary.id} b={primary} selected={selected.includes(primary.id)} onToggle={(v) => setSelected(v ? [...selected, primary.id] : selected.filter((x) => x !== primary.id))} onOpen={() => setViewing(primary)} onExport={exportBundle} onDelete={removeBundle} />
                           {rest.length > 0 && (
                             <div className="card flex flex-col justify-center border-dashed p-4 text-center text-xs text-slate-400">
                               <div className="mb-1">➕ {rest.length} more bundle(s) for this week</div>
@@ -309,7 +324,7 @@ export function Bundles() {
               </div>
               <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                 {mergedList.map((b) => (
-                  <BundleCard key={b.id} b={b} selected={selected.includes(b.id)} onToggle={(v) => setSelected(v ? [...selected, b.id] : selected.filter((x) => x !== b.id))} onOpen={() => setViewing(b)} />
+                  <BundleCard key={b.id} b={b} selected={selected.includes(b.id)} onToggle={(v) => setSelected(v ? [...selected, b.id] : selected.filter((x) => x !== b.id))} onOpen={() => setViewing(b)} onExport={exportBundle} onDelete={removeBundle} />
                 ))}
               </div>
             </section>
@@ -328,15 +343,42 @@ export function Bundles() {
       {viewing && (
         <BundleDetail
           bundle={viewing}
-          onClose={() => { setViewing(null); setAiReply(null); }}
-          onOpenBundle={(b) => { setViewing(b); setAiReply(null); }}
+          onClose={() => setViewing(null)}
+          onOpenBundle={(b) => setViewing(b)}
         />
       )}
     </div>
   );
 }
 
-function BundleCard({ b, selected, onToggle, onOpen }: { b: Bundle; selected: boolean; onToggle: (v: boolean) => void; onOpen: () => void }) {
+/**
+ * A bundle card in the Vault (§12).
+ *
+ * Shows title, date range, type, record count and academic context, and
+ * offers the quick actions the vault is supposed to have: Open, Favorite,
+ * Export and Delete. These service functions already existed but had no UI
+ * calling them — the Phase 10 audit found them unreachable.
+ */
+function BundleCard({
+  b,
+  selected,
+  onToggle,
+  onOpen,
+  onExport,
+  onDelete,
+}: {
+  b: Bundle;
+  selected: boolean;
+  onToggle: (v: boolean) => void;
+  onOpen: () => void;
+  onExport: (b: Bundle) => void;
+  onDelete: (b: Bundle) => void;
+}) {
+  // A bundle is a snapshot, so the count comes from the frozen copy when
+  // present and falls back to the source id list for older bundles.
+  const recordCount = b.snapshot?.length ?? b.sourceIds.length;
+  const academic = b.academic;
+
   return (
     <div className="card flex cursor-pointer flex-col justify-between transition-colors hover:border-brand-400" onClick={onOpen}>
       <div>
@@ -344,6 +386,7 @@ function BundleCard({ b, selected, onToggle, onOpen }: { b: Bundle; selected: bo
           <div className="flex flex-wrap items-center gap-1.5">
             <Pill color={b.type.startsWith('auto') ? 'green' : b.type === 'merged' ? 'slate' : 'amber'}>{TYPE_LABEL[b.type]}</Pill>
             {b.aiPending && <Pill color="amber">🤖 AI pending</Pill>}
+            {b.favorite && <Pill color="amber">⭐ Favorite</Pill>}
           </div>
           <input
             type="checkbox"
@@ -351,47 +394,50 @@ function BundleCard({ b, selected, onToggle, onOpen }: { b: Bundle; selected: bo
             onClick={(e) => e.stopPropagation()}
             onChange={(e) => onToggle(e.target.checked)}
             className="h-4 w-4 accent-brand-600"
+            aria-label={`Select "${b.title}" for merging`}
           />
         </div>
         <h3 className="font-bold text-slate-800 dark:text-slate-100">{b.title}</h3>
-        <div className="text-xs text-slate-400">{b.periodStart} → {b.periodEnd}</div>
+        <div className="text-xs text-slate-400">
+          {b.periodStart} → {b.periodEnd} · {recordCount} record{recordCount === 1 ? '' : 's'}
+        </div>
+        {(academic?.level || academic?.academicYear) && (
+          <div className="text-[11px] text-slate-400">
+            🎓 {[academic.level, academic.academicYear].filter(Boolean).join(' · ')}
+          </div>
+        )}
         <p className="mt-2 line-clamp-2 text-sm text-slate-500 dark:text-slate-400">{b.summary}</p>
         {b.sourceBundleIds.length > 0 && <div className="mt-1 text-[11px] text-slate-400">🔗 Merged from {b.sourceBundleIds.length} bundle(s)</div>}
       </div>
-      <span className="btn-secondary mt-3 w-full text-center">Open →</span>
-    </div>
-  );
-}
 
-function ManualCreate({ onCreate }: { onCreate: (type: 'manual-day' | 'manual-week' | 'manual-custom', name: string) => Promise<void> }) {
-  const [mode, setMode] = useState<'manual-day' | 'manual-week' | 'manual-custom' | null>(null);
-  const [name, setName] = useState('');
-  if (!mode) {
-    return (
-      <div className="space-y-3">
-        {([
-          { t: 'manual-day', icon: '📅', d: 'Create a bundle for one day' },
-          { t: 'manual-week', icon: '📆', d: 'Create a weekly bundle' },
-          { t: 'manual-custom', icon: '📦', d: 'Bundle anything you choose' },
-        ] as const).map((o) => (
-          <button key={o.t} className="card flex w-full items-center gap-3 text-left hover:border-brand-500" onClick={() => setMode(o.t)}>
-            <span className="text-2xl">{o.icon}</span>
-            <div>
-              <div className="font-semibold">{o.t === 'manual-day' ? 'Day' : o.t === 'manual-week' ? 'Week' : 'Custom'} bundle</div>
-              <div className="text-xs text-slate-400">{o.d}</div>
-            </div>
-          </button>
-        ))}
-      </div>
-    );
-  }
-  return (
-    <div className="space-y-3">
-      <div className="text-sm text-slate-500">Name this bundle</div>
-      <input autoFocus className="input" placeholder="e.g. My Hypertension Revision" value={name} onChange={(e) => setName(e.target.value)} />
-      <div className="flex justify-end gap-2">
-        <button className="btn-secondary" onClick={() => setMode(null)}>Back</button>
-        <button className="btn-primary" disabled={!name.trim()} onClick={() => onCreate(mode, name.trim())}>Create Bundle ✓</button>
+      <div className="mt-3 flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+        <button className="btn-secondary flex-1 text-center text-xs" onClick={onOpen}>
+          Open →
+        </button>
+        <button
+          className="btn-ghost !px-2 !py-1 text-sm"
+          onClick={() => void toggleBundleFavorite(b.id)}
+          aria-label={b.favorite ? `Remove "${b.title}" from favorites` : `Add "${b.title}" to favorites`}
+          title={b.favorite ? 'Remove from favorites' : 'Add to favorites'}
+        >
+          <span aria-hidden="true">{b.favorite ? '⭐' : '☆'}</span>
+        </button>
+        <button
+          className="btn-ghost !px-2 !py-1 text-sm"
+          onClick={() => onExport(b)}
+          aria-label={`Export "${b.title}"`}
+          title="Export bundle"
+        >
+          <span aria-hidden="true">⬇</span>
+        </button>
+        <button
+          className="btn-ghost !px-2 !py-1 text-sm text-red-600"
+          onClick={() => onDelete(b)}
+          aria-label={`Delete "${b.title}"`}
+          title="Delete bundle"
+        >
+          <span aria-hidden="true">🗑</span>
+        </button>
       </div>
     </div>
   );

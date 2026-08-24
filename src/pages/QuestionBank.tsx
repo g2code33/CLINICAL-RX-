@@ -5,7 +5,7 @@ import { Modal } from '../components/Modal';
 import { ViewToggle } from '../components/ViewToggle';
 import { useConfirm } from '../components/ui/primitives';
 import {
-  loadGroups, saveGroups, loadBank, saveBank, parseBankJson,
+  loadGroups, saveGroups, loadBank, parseBankJson,
   createGroup, addToGroup, deleteGroup, renameGroup, totalQuestions,
   type BankGroup, type BankQuestion,
 } from '../services/questionBank';
@@ -84,6 +84,9 @@ export function QuestionBank() {
           <div className="flex flex-wrap items-center gap-2">
             <button className="btn-secondary" onClick={() => navigate('/quiz')}>📝 Go to Quiz</button>
             <button className="btn-primary" onClick={() => setImportOpen(true)}>⬆ Import questions</button>
+            {groups.length > 0 && (
+              <button className="btn-secondary !text-red-600" onClick={clearAll}>🗑 Delete all groups</button>
+            )}
           </div>
         }
       />

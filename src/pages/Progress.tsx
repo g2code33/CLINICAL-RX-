@@ -121,7 +121,7 @@ export function Progress() {
           <h2 className="font-semibold">📈 Clinical encounters over time</h2>
           <span className="text-xs text-slate-400">view days →</span>
         </button>
-        <EncountersChart days={days} medicines={medicines} diseases={diseases} />
+        <EncountersChart days={days} />
       </div>
 
       {/* Top lists — each item clickable to its specific entity */}
@@ -165,12 +165,12 @@ function TopList({ items, to }: { items: Array<{ name: string; count: number }>;
   );
 }
 
-function EncountersChart({ days, medicines, diseases }: { days: any[]; medicines: any[]; diseases: any[] }) {
+function EncountersChart({ days }: { days: any[] }) {
   const sorted = [...days].sort((a, b) => a.date.localeCompare(b.date));
   if (sorted.length < 2) {
     return <p className="text-sm text-slate-400">Add at least two clinical days to see your progress over time.</p>;
   }
-  const points = sorted.map((d, i) => {
+  const points = sorted.map((d) => {
     const meds = d.medicines?.length ?? 0;
     const conds = d.conditions?.length ?? 0;
     return { label: `Day ${d.dayNumber}`, date: d.date, value: meds + conds };

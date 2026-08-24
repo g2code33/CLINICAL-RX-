@@ -14,14 +14,10 @@ export function Dashboard() {
   const navigate = useNavigate();
   const profile = useData((s) => s.profile)!;
   const days = useData((s) => s.days);
-  const diseases = useData((s) => s.diseases);
-  const medicines = useData((s) => s.medicines);
-  const investigations = useData((s) => s.investigations);
   const questions = useData((s) => s.questions);
   const lessons = useData((s) => s.lessons);
   const revisions = useData((s) => s.revisions);
   const wardRounds = useData((s) => s.wardRounds);
-  const academicStages = useData((s) => s.academicStages);
   const activities = useData((s) => s.activities);
   const goals = useData((s) => s.goals);
   const wardEntries = useData((s) => s.wardEntries);

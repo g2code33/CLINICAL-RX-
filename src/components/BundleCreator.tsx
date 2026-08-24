@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useData } from '../stores/data';
-import { allStages, periodsFor } from '../services/academic';
+import { allStages } from '../services/academic';
 import { allTags } from '../services/learning';
 import { todayIso } from '../services/defaults';
 import { weekBounds } from '../services/wardRounds';

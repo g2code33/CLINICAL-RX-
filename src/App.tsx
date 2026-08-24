@@ -6,7 +6,6 @@ import { setupAutoAndReconnect } from './services/autoBundle';
 import { lockState, startAutoLock } from './services/appLock';
 import { shouldRemind, computeStreak } from './services/streaks';
 import { KeyboardShortcuts } from './components/KeyboardShortcuts';
-import { useUi } from './stores/ui';
 import { Layout } from './components/Layout';
 import { Onboarding } from './components/Onboarding';
 import { Dashboard } from './pages/Dashboard';
@@ -122,8 +121,7 @@ export default function App() {
   useEffect(() => {
     if (!ready) return;
     const stop = import('./services/reminders').then((m) => m.startReminderWatcher());
-    let cancelled = false;
-    return () => { cancelled = true; stop.then((s) => s()).catch(() => {}); };
+    return () => { stop.then((s) => s()).catch(() => {}); };
   }, [ready]);
 
   // Queued AI tasks: retry when the network is back (and on startup).

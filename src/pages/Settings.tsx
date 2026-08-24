@@ -38,7 +38,6 @@ export function SettingsPage() {
   const profile = useData((s) => s.profile);
   const saveProfile = useData((s) => s.saveProfile);
   const saveSettings = useData((s) => s.saveSettings);
-  const save = useData((s) => s.save);
   const setStatus = useData((s) => s.setStatus);
   const [draft, setDraft] = useState<Settings | null>(settings);
   const [showKeys, setShowKeys] = useState<Record<string, boolean>>({});

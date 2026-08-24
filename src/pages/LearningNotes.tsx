@@ -20,7 +20,7 @@ import {
   type LearningFilter,
 } from '../services/learning';
 import type { Lesson } from '../types';
-import { confirmAction, notifyAction } from '../components/ui/globalConfirm';
+import { confirmAction } from '../components/ui/globalConfirm';
 
 /**
  * 💡 Learning Notes — fast capture of "what did I learn?".

@@ -57,7 +57,6 @@ export async function generateWeeklyQuiz(monday: string, count = 10): Promise<Sa
     const conditions = Array.from(new Set(weekDays.flatMap((d) => d.conditions))).filter(Boolean);
     const medicines = Array.from(new Set(weekDays.flatMap((d) => d.medicines))).filter(Boolean);
     const investigations = Array.from(new Set(weekDays.flatMap((d) => d.investigations))).filter(Boolean);
-    const lessons = Array.from(new Set(weekDays.flatMap((d) => d.lessons))).filter(Boolean);
     // Linked topics: diseases/medicines related to the week's names.
     const linkedDiseases = st.diseases.filter((d) => conditions.some((c) => d.name.toLowerCase() === String(c).toLowerCase())).map((d) => d.name);
     const linkedMeds = st.medicines.filter((m) => medicines.some((mm) => m.name.toLowerCase() === String(mm).toLowerCase())).map((m) => m.name);

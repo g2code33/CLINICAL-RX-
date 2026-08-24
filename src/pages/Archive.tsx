@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useData } from '../stores/data';
 import { EmptyState, PageHeader, Pill } from '../components/ui';
-import { allStages, coursesFor, periodsFor } from '../services/academic';
+import { allStages, periodsFor } from '../services/academic';
 import { WARD_ENTRY_META } from '../services/defaults';
 import { countsFor } from '../services/wardRounds';
 import type { AcademicStage } from '../types';

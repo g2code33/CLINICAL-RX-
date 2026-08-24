@@ -427,8 +427,6 @@ export interface SyncOutcome {
 export async function syncNow(): Promise<SyncOutcome> {
   const token = settingsToken();
   if (!token) return { ok: false, pushed: 0, pulled: 0, message: 'No online account connected.' };
-  const st = useData.getState();
-
   // AI conversations only leave the device when the user opted in (§35).
   const allowed = new Set<string>(activeSyncModules());
   const pending = loadPending().filter((p) => allowed.has(p.module));
@@ -473,8 +471,6 @@ export async function syncNow(): Promise<SyncOutcome> {
 export async function syncNowFull(): Promise<SyncOutcome> {
   const token = settingsToken();
   if (!token) return { ok: false, pushed: 0, pulled: 0, message: 'No online account connected.' };
-  const st = useData.getState();
-
   const allowed = new Set<string>(activeSyncModules());
   const pending = loadPending().filter((p) => allowed.has(p.module));
   const upserts = pending.filter((p) => p.op === 'upsert').map((p) => ({

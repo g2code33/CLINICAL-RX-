@@ -50,7 +50,6 @@ export function broadcastReminder(title: string, body: string): void {
 
 /** Check every minute whether a reminder is due; fire + mark done. */
 export function startReminderWatcher(): () => void {
-  let lastChecked = Date.now();
   const check = () => {
     const now = new Date();
     const iso = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
@@ -66,7 +65,6 @@ export function startReminderWatcher(): () => void {
       broadcastReminder(`⏰ ${r.title}`, r.note || `Reminder for ${iso} at ${hhmm}`);
       void useData.getState().save('reminder', { ...r, done: true, updatedAt: Date.now() });
     }
-    lastChecked = Date.now();
   };
   check();
   const t = setInterval(check, 60000); // every minute

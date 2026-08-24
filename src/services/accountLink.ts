@@ -1,8 +1,8 @@
 import { useData } from '../stores/data';
 import { syncClient } from './syncClient';
-import { SYNCED_MODULES, activeSyncModules, loadPending, savePending, enqueue, syncNowFull } from './syncEngine';
+import { SYNCED_MODULES, activeSyncModules, loadPending, savePending, syncNowFull } from './syncEngine';
 import { loadConversations } from './aiConversations';
-import type { ModuleType, SyncRecord } from '../types';
+import type { ModuleType } from '../types';
 
 /**
  * 🔗 ACCOUNT LINKING (Phase 7 §12, §13, §56, §57, §58)

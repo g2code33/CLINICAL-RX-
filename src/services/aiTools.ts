@@ -1,6 +1,6 @@
 import { useData } from '../stores/data';
 import { aiChat, type AiChatOpts, type AiResult } from './ai';
-import { useTasks, type TaskKind } from '../stores/tasks';
+import { type TaskKind } from '../stores/tasks';
 import type { AiModuleConfig } from '../types';
 import { buildUnifiedContext } from './learning';
 import { contextForRecord, formatForAi, retrieveKnowledge } from './intelligence';
@@ -158,7 +158,7 @@ export function retrieveRecordContext(module: string, id: string): string {
  * sessions (any section), so any AI section can recall earlier conversations
  * from any other section. Bounded so prompts stay small and fast.
  */
-export function buildMemoryContext(section: AiModuleKey, excludeSessionId?: string, limit = 24): string {
+export function buildMemoryContext(_section: AiModuleKey, excludeSessionId?: string, limit = 24): string {
   const chats = useData.getState().chats ?? [];
   const items: Array<{ ts: number; section: string; title: string; role: string; text: string }> = [];
   for (const c of chats) {

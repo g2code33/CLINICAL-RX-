@@ -7,7 +7,7 @@ import { CloudSyncPrompt } from '../components/CloudSyncPrompt';
 import { dayToMarkdown, dayToPdf, daysToCsv, downloadText } from '../services/export';
 import { ViewToggle } from '../components/ViewToggle';
 import { scanForPhi, privacyWarning } from '../services/privacy';
-import { confirmAction, notifyAction } from '../components/ui/globalConfirm';
+import { notifyAction } from '../components/ui/globalConfirm';
 
 const SECTIONS: Array<{ key: 'conditions' | 'medicines' | 'investigations' | 'observations' | 'lessons' | 'uncertainties' | 'topicsToResearch'; label: string; icon: string }> = [
   { key: 'conditions', label: 'Conditions encountered', icon: '🦠' },

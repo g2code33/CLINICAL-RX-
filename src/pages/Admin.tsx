@@ -4,7 +4,7 @@ import { useData } from '../stores/data';
 import { syncClient } from '../services/syncClient';
 import { PasswordInput } from '../components/ui';
 import { Modal } from '../components/Modal';
-import { confirmAction, notifyAction } from '../components/ui/globalConfirm';
+import { confirmAction } from '../components/ui/globalConfirm';
 
 interface AdminUser {
   id: string;

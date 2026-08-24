@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { PageHeader, StatCard } from '../../components/ui';
+import { PageHeader } from '../../components/ui';
 import { useData } from '../../stores/data';
 import {
   allStageSnapshots,
