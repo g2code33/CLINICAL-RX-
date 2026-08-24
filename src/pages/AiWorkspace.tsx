@@ -82,11 +82,45 @@ export default function AiWorkspace() {
   const [conv, setConv] = useState<AiConversation | null>(null);
   const [list, setList] = useState<AiConversation[]>(() => loadConversations());
   const [convQuery, setConvQuery] = useState('');
+  // Hamburger: collapse the conversation list to give the chat full width.
+  // Remembered across visits, per §24 (the app should not forget your layout).
+  const [showList, setShowList] = useState(() => {
+    try {
+      return localStorage.getItem('clinical-rx:ai-list-hidden') !== '1';
+    } catch {
+      return true;
+    }
+  });
+  const toggleList = () => {
+    setShowList((v) => {
+      try {
+        localStorage.setItem('clinical-rx:ai-list-hidden', v ? '1' : '0');
+      } catch {
+        /* storage unavailable — the toggle still works for this session */
+      }
+      return !v;
+    });
+  };
   const [input, setInput] = useState(params.get('q') ?? '');
-  const [busy, setBusy] = useState(false);
-  const [stream, setStream] = useState('');
+  /**
+   * Generation state is tracked PER CONVERSATION, not globally.
+   *
+   * Previously a single `busy` flag was shared by every AI module: while
+   * Clinical AI was answering, `send()` early-returned for Revision, Career
+   * and the rest, and their Send button showed "Stop generating". Each AI is
+   * an independent workspace, so each needs its own busy flag, its own
+   * streaming buffer and its own abort controller.
+   */
+  const [busyByConv, setBusyByConv] = useState<Record<string, boolean>>({});
+  const [streamByConv, setStreamByConv] = useState<Record<string, string>>({});
   const [pending, setPending] = useState<Extract<ToolOutcome, { status: 'needs-confirmation' }> | null>(null);
-  const abortRef = useRef<AbortController | null>(null);
+  const abortsRef = useRef<Record<string, AbortController>>({});
+
+  // Values for the conversation currently on screen.
+  const busy = convId ? !!busyByConv[convId] : false;
+  const stream = convId ? (streamByConv[convId] ?? '') : '';
+  // How many other AI modules are working right now (shown in the header).
+  const otherBusyCount = Object.entries(busyByConv).filter(([id, on]) => on && id !== convId).length;
   const endRef = useRef<HTMLDivElement>(null);
 
   const refresh = (id?: string | null) => {
@@ -95,10 +129,19 @@ export default function AiWorkspace() {
   };
 
   // Start (or restore) a conversation for the chosen persona.
+  //
+  // Switching module switches workspace: we land on that module's most recent
+  // conversation (creating one only if it has none), rather than carrying the
+  // previous module's chat across.
   useEffect(() => {
-    if (convId) return;
-    const existing = loadConversations().find((c) => c.module === persona);
-    const c = existing ?? createConversation(persona);
+    const all = loadConversations();
+    const current = convId ? all.find((c) => c.id === convId) : null;
+    if (current && current.module === persona) return;
+
+    const mostRecent = all
+      .filter((c) => c.module === persona)
+      .sort((a, b) => b.updated - a.updated)[0];
+    const c = mostRecent ?? createConversation(persona);
     setConvId(c.id);
     setConv(c);
     setList(loadConversations());
@@ -108,47 +151,69 @@ export default function AiWorkspace() {
     endRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [conv?.messages.length, stream]);
 
-  const visible = useMemo(() => (convQuery.trim() ? searchConversations(convQuery) : list), [convQuery, list]);
+  /**
+   * Each AI module has its own conversation list.
+   *
+   * The list previously showed every conversation from every module mixed
+   * together, so switching to Revision AI still showed Clinical chats. Each
+   * workspace is separate, so the list is scoped to the active persona and
+   * search stays within it.
+   */
+  const visible = useMemo(() => {
+    const base = convQuery.trim() ? searchConversations(convQuery) : list;
+    return base.filter((c) => c.module === persona);
+  }, [convQuery, list, persona]);
 
   const send = async (text?: string) => {
     const query = (text ?? input).trim();
-    if (!query || busy || !convId) return;
+    // Only THIS conversation being busy blocks a new send — another module
+    // generating must never stop you asking a different AI.
+    if (!query || !convId || busyByConv[convId]) return;
+
+    // Capture the conversation and persona this request belongs to. The user
+    // may switch modules while it streams; the answer must still land here.
+    const targetConv = convId;
+    const targetPersona = persona;
 
     setInput('');
     setParams({}, { replace: true });
-    appendMessage(convId, { role: 'user', content: query });
-    refresh(convId);
+    appendMessage(targetConv, { role: 'user', content: query });
+    refresh(targetConv);
 
-    setBusy(true);
-    setStream('');
+    setBusyByConv((m) => ({ ...m, [targetConv]: true }));
+    setStreamByConv((m) => ({ ...m, [targetConv]: '' }));
     const ctrl = new AbortController();
-    abortRef.current = ctrl;
+    abortsRef.current[targetConv] = ctrl;
 
     let acc = '';
     const res = await askAi({
-      persona,
+      persona: targetPersona,
       query,
-      history: historyFor(getConversation(convId), 6),
+      history: historyFor(getConversation(targetConv), 6),
       signal: ctrl.signal,
       onToken: (t) => {
         acc += t;
-        setStream(acc);
+        setStreamByConv((m) => ({ ...m, [targetConv]: acc }));
       },
     });
 
-    abortRef.current = null;
-    setStream('');
-    setBusy(false);
+    delete abortsRef.current[targetConv];
+    setStreamByConv((m) => {
+      const next = { ...m };
+      delete next[targetConv];
+      return next;
+    });
+    setBusyByConv((m) => ({ ...m, [targetConv]: false }));
 
     if (ctrl.signal.aborted) {
       if (acc.trim()) {
-        appendMessage(convId, { role: 'assistant', content: acc + '\n\n_(stopped)_', runtime: res.runtime });
-        refresh(convId);
+        appendMessage(targetConv, { role: 'assistant', content: acc + '\n\n_(stopped)_', runtime: res.runtime });
+        refresh(targetConv);
       }
       return;
     }
 
-    appendMessage(convId, {
+    appendMessage(targetConv, {
       role: 'assistant',
       // A high-stakes clinical question gets one short verification reminder
       // appended — not a disclaimer on every single reply (§41).
@@ -161,13 +226,15 @@ export default function AiWorkspace() {
       runtime: res.runtime,
       error: !res.ok,
     });
-    refresh(convId);
+    refresh(targetConv);
   };
 
+  /** Stop only the conversation on screen; other modules keep working. */
   const stop = () => {
-    abortRef.current?.abort();
-    abortRef.current = null;
-    setBusy(false);
+    if (!convId) return;
+    abortsRef.current[convId]?.abort();
+    delete abortsRef.current[convId];
+    setBusyByConv((m) => ({ ...m, [convId]: false }));
   };
 
   /** Ask to run a write tool — always via the confirmation gate. */
@@ -254,9 +321,24 @@ export default function AiWorkspace() {
         action={<AiStatusDot persona={persona} compact />}
       />
 
-      <div className="grid gap-4 lg:grid-cols-[260px_1fr]">
-        {/* Conversation list */}
-        <aside className="card space-y-2">
+      <div className={`grid gap-4 ${showList ? 'lg:grid-cols-[260px_1fr]' : 'grid-cols-1'}`}>
+        {/* Conversation list — this module's chats only, hideable. */}
+        {showList && (
+        <aside className="card space-y-2" aria-label={`${def.label} conversations`}>
+          <div className="flex items-center justify-between gap-2">
+            <h2 className="text-xs font-bold uppercase tracking-wide opacity-70">
+              {def.icon} {def.label}
+            </h2>
+            <button
+              className="btn-ghost !px-2 !py-1 text-sm"
+              onClick={toggleList}
+              aria-label="Hide conversation list"
+              aria-expanded={true}
+              title="Hide conversation list"
+            >
+              <span aria-hidden="true">☰</span>
+            </button>
+          </div>
           <button className="btn-primary w-full" onClick={newChat}>
             ＋ New conversation
           </button>
@@ -267,7 +349,11 @@ export default function AiWorkspace() {
             onChange={(e) => setConvQuery(e.target.value)}
           />
           <div className="max-h-72 space-y-1 overflow-y-auto">
-            {visible.length === 0 && <p className="text-xs opacity-70">No conversations yet.</p>}
+            {visible.length === 0 && (
+              <p className="text-xs opacity-70">
+                No {def.label} conversations yet. Start one above — each AI keeps its own separate history.
+              </p>
+            )}
             {visible.map((c) => (
               <div
                 key={c.id}
@@ -284,7 +370,9 @@ export default function AiWorkspace() {
                   }}
                   title={c.title}
                 >
-                  {PERSONAS[c.module]?.icon ?? '💬'} {c.title}
+                  {/* Spinner marks a conversation that is still generating. */}
+                  <span aria-hidden="true">{busyByConv[c.id] ? '⏳' : PERSONAS[c.module]?.icon ?? '💬'}</span> {c.title}
+                  {busyByConv[c.id] && <span className="sr-only"> (generating)</span>}
                 </button>
                 <button
                   className="opacity-0 focus-ring group-hover:opacity-100 focus-visible:opacity-100"
@@ -345,9 +433,26 @@ export default function AiWorkspace() {
             </button>
           </div>
         </aside>
+        )}
 
         {/* Chat */}
         <section className="card flex min-h-[60vh] flex-col">
+          {/* When the list is hidden the hamburger moves in here, so there is
+              always a visible way to bring it back. */}
+          {!showList && (
+            <div className="mb-2">
+              <button
+                className="btn-ghost !px-2 !py-1 text-sm"
+                onClick={toggleList}
+                aria-label="Show conversation list"
+                aria-expanded={false}
+                title="Show conversation list"
+              >
+                <span aria-hidden="true">☰</span> Conversations
+              </button>
+            </div>
+          )}
+
           {/* AI module selector (§21). The active module is stated in words as
               well as colour, so it is obvious and screen-reader friendly. */}
           <div className="mb-2 flex flex-wrap gap-1" role="tablist" aria-label="AI module">
@@ -385,6 +490,13 @@ export default function AiWorkspace() {
                   : '⚪ No provider'}
             </span>
             {status.effective !== 'none' && <span className="opacity-60">· {status.online ? 'Online' : 'Offline'}</span>}
+            {/* Each AI runs independently — show when others are mid-answer so
+                it is clear nothing is blocked. */}
+            {otherBusyCount > 0 && (
+              <span className="rounded-full bg-amber-100 px-2 py-0.5 text-amber-900 dark:bg-amber-900 dark:text-amber-100">
+                ⏳ {otherBusyCount} other AI{otherBusyCount === 1 ? '' : 's'} still working
+              </span>
+            )}
           </div>
 
           <p className="mb-2 text-xs opacity-70">{def.system.slice(0, 160)}…</p>

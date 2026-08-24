@@ -32,6 +32,10 @@ export type AuditEvent =
   | 'security.lock-enabled'
   | 'security.lock-disabled'
   | 'security.unlock-failed'
+  | 'security.recovery-configured'
+  | 'security.recovery-cleared'
+  | 'security.pin-recovered'
+  | 'security.pin-recovery-failed'
   | 'ai.config-changed'
   | 'ai.key-stored'
   | 'ai.key-removed'
@@ -119,6 +123,10 @@ const LABELS: Record<AuditEvent, string> = {
   'security.lock-enabled': 'App Lock enabled',
   'security.lock-disabled': 'App Lock disabled',
   'security.unlock-failed': 'Failed unlock attempt',
+  'security.recovery-configured': 'PIN recovery question set',
+  'security.recovery-cleared': 'PIN recovery question removed',
+  'security.pin-recovered': 'PIN reset via security question',
+  'security.pin-recovery-failed': 'Failed PIN recovery attempt',
   'ai.config-changed': 'AI configuration changed',
   'ai.key-stored': 'AI key saved to secure storage',
   'ai.key-removed': 'AI key removed',

@@ -7,6 +7,10 @@ import {
   autoLockMinutes,
   disableLock,
   enablePin,
+  hasRecoveryQuestion,
+  recoveryQuestion,
+  setRecoveryQuestion,
+  clearRecoveryQuestion,
   isLockEnabled,
   lockNow,
   setAutoLockMinutes,
@@ -184,6 +188,8 @@ function AppLockTab({ onMessage }: { onMessage: (s: string) => void }) {
               Lock now
             </button>
 
+            <RecoveryQuestionPanel onMessage={onMessage} />
+
             <div className="border-t border-slate-200 pt-2 dark:border-slate-700">
               <label className="text-xs">
                 Enter your PIN to turn App Lock off
@@ -203,6 +209,169 @@ function AppLockTab({ onMessage }: { onMessage: (s: string) => void }) {
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+/**
+ * Security question for PIN recovery.
+ *
+ * Without this a forgotten PIN meant clearing app settings — recoverable, but
+ * alarming and easy to get wrong. The answer is hashed with PBKDF2 and its own
+ * salt, exactly like the PIN; it is never stored in readable form.
+ */
+function RecoveryQuestionPanel({ onMessage }: { onMessage: (m: string) => void }) {
+  const [configured, setConfigured] = useState(hasRecoveryQuestion());
+  const [existing, setExisting] = useState(recoveryQuestion());
+  const [open, setOpen] = useState(false);
+  const [question, setQuestion] = useState('');
+  const [answer, setAnswer] = useState('');
+  const [pin, setPin] = useState('');
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  const SUGGESTIONS = [
+    'What was the name of your first secondary school?',
+    'What is the name of the ward where you had your first clinical rotation?',
+    'What was the title of your first research project?',
+    'Which town did your family live in when you were ten?',
+  ];
+
+  const save = async () => {
+    setBusy(true);
+    setError('');
+    const res = await setRecoveryQuestion(question, answer, pin);
+    setBusy(false);
+    if (!res.ok) {
+      setError(res.error ?? 'Could not save the security question.');
+      return;
+    }
+    audit('security.recovery-configured');
+    setConfigured(true);
+    setExisting(recoveryQuestion());
+    setOpen(false);
+    setQuestion('');
+    setAnswer('');
+    setPin('');
+    onMessage('🔑 Security question saved. You can now reset a forgotten PIN from the lock screen.');
+  };
+
+  const clear = async () => {
+    setBusy(true);
+    setError('');
+    const res = await clearRecoveryQuestion(pin);
+    setBusy(false);
+    if (!res.ok) {
+      setError(res.error ?? 'Could not remove the security question.');
+      return;
+    }
+    audit('security.recovery-cleared');
+    setConfigured(false);
+    setExisting(null);
+    setPin('');
+    onMessage('Security question removed. A forgotten PIN can no longer be reset on this device.');
+  };
+
+  return (
+    <div className="border-t border-slate-200 pt-2 dark:border-slate-700">
+      <h3 className="text-sm font-semibold">🔑 Forgotten-PIN recovery</h3>
+
+      {configured ? (
+        <>
+          <p className="mt-1 text-xs opacity-75">
+            ✅ A security question is set. If you forget your PIN, choose <em>Forgot your PIN?</em> on the lock screen.
+          </p>
+          <p className="mt-1 rounded bg-slate-50 p-2 text-xs dark:bg-slate-700">{existing}</p>
+        </>
+      ) : (
+        <p className="mt-1 text-xs opacity-75">
+          No security question set. Add one so a forgotten PIN can be reset without clearing app settings.
+        </p>
+      )}
+
+      {!open ? (
+        <button className="btn-secondary mt-2 text-xs" onClick={() => setOpen(true)}>
+          {configured ? 'Change or remove question' : 'Set a security question'}
+        </button>
+      ) : (
+        <div className="mt-2 space-y-2">
+          {!configured && (
+            <div className="flex flex-wrap gap-1">
+              {SUGGESTIONS.map((q) => (
+                <button
+                  key={q}
+                  className="focus-ring rounded-full bg-slate-100 px-2 py-1 text-[11px] hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600"
+                  onClick={() => setQuestion(q)}
+                >
+                  {q.length > 42 ? q.slice(0, 42) + '…' : q}
+                </button>
+              ))}
+            </div>
+          )}
+
+          <label className="block text-xs">
+            Question
+            <input
+              className="input mt-1 w-full"
+              value={question}
+              onChange={(e) => setQuestion(e.target.value)}
+              placeholder="Something only you can answer"
+            />
+          </label>
+
+          <label className="block text-xs">
+            Answer
+            <input
+              className="input mt-1 w-full"
+              value={answer}
+              onChange={(e) => setAnswer(e.target.value)}
+              placeholder="Capitalisation and punctuation are ignored"
+            />
+          </label>
+
+          <label className="block text-xs">
+            Confirm with your current PIN
+            <input
+              type="password"
+              inputMode="numeric"
+              className="input mt-1 w-full max-w-48"
+              value={pin}
+              onChange={(e) => setPin(e.target.value.replace(/\D/g, ''))}
+            />
+          </label>
+
+          {error && <p className="text-sm text-red-600" role="alert">{error}</p>}
+
+          <div className="flex flex-wrap gap-2">
+            <button
+              className="btn-primary text-xs"
+              disabled={busy || !question.trim() || !answer.trim() || !pin}
+              onClick={() => void save()}
+            >
+              {busy ? 'Saving…' : 'Save question'}
+            </button>
+            {configured && (
+              <button className="btn-secondary text-xs !text-red-600" disabled={busy || !pin} onClick={() => void clear()}>
+                Remove question
+              </button>
+            )}
+            <button
+              className="btn-secondary text-xs"
+              onClick={() => {
+                setOpen(false);
+                setError('');
+              }}
+            >
+              Cancel
+            </button>
+          </div>
+
+          <p className="text-[11px] opacity-70">
+            Your answer is never stored — only a salted PBKDF2 hash, the same protection used for your PIN. Recovery
+            sets a new PIN; it never reveals the old one, and it never deletes your records.
+          </p>
+        </div>
+      )}
     </div>
   );
 }

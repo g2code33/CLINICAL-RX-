@@ -377,6 +377,105 @@ export async function promote(): Promise<{ ok: boolean; from?: AcademicStage; to
   return { ok: true, from: archived, to: promoted };
 }
 
+// ---- Demotion (go back a level) ----------------------------------------
+
+export interface DemotionPlan {
+  from: AcademicStage | null;
+  /** The completed stage we would return to. Null when there is none. */
+  to: AcademicStage | null;
+  /** Why the move is not possible, when `to` is null. */
+  reason?: string;
+}
+
+/**
+ * Work out what going back a level would do, without doing it.
+ *
+ * Only a stage that was actually completed can be returned to — this never
+ * invents history. If the student is already at their earliest stage there is
+ * nowhere to go back to.
+ */
+export function planDemotion(): DemotionPlan {
+  const stages = allStages();
+  const from = currentStage();
+  if (!from) return { from: null, to: null, reason: 'No current academic stage.' };
+
+  const idx = stages.findIndex((s) => s.id === from.id);
+  if (idx <= 0) {
+    return { from, to: null, reason: `${from.name} is your earliest level — there is nothing before it.` };
+  }
+
+  // Nearest earlier stage that was completed (walk backwards).
+  const previous = [...stages.slice(0, idx)].reverse().find((s) => s.status === 'completed') ?? null;
+  if (!previous) {
+    return { from, to: null, reason: 'No completed earlier level to return to.' };
+  }
+  return { from, to: previous };
+}
+
+/**
+ * Return to a previous academic stage ("decline to Level …").
+ *
+ * The mirror image of promote(), and just as additive: the level you leave is
+ * marked `upcoming` again rather than deleted, so every record created there
+ * stays exactly where it is and remains editable. Going back and forward
+ * repeatedly must be lossless.
+ *
+ * Academic-year immutability still holds: no record is ever restamped. A note
+ * written at Level 300 keeps its Level 300 stamp even while you are working
+ * back at Level 200 — the timeline is a cursor, not a rewrite.
+ *
+ * @param targetStageId Optional explicit stage to return to. Defaults to the
+ *                      nearest completed earlier stage.
+ */
+export async function demote(
+  targetStageId?: string
+): Promise<{ ok: boolean; from?: AcademicStage; to?: AcademicStage; error?: string }> {
+  const plan = planDemotion();
+  if (!plan.from) return { ok: false, error: plan.reason ?? 'No current academic stage.' };
+
+  const target = targetStageId ? getStage(targetStageId) : plan.to;
+  if (!target) return { ok: false, error: plan.reason ?? 'No earlier level to return to.' };
+  if (target.id === plan.from.id) return { ok: false, error: 'You are already on that level.' };
+
+  // 1) The level being left goes back to `upcoming`. Its records are untouched
+  //    and it can be completed again later by promoting forward.
+  const reopened: AcademicStage = {
+    ...plan.from,
+    status: 'upcoming',
+    completedAt: undefined,
+    endDate: undefined,
+  };
+  await saveStage(reopened);
+
+  // 2) The earlier stage becomes current again, keeping its original dates.
+  const restored: AcademicStage = {
+    ...target,
+    status: 'current',
+    completedAt: undefined,
+    endDate: undefined,
+  };
+  await saveStage(restored);
+
+  // 3) Point the profile back at that stage and its first period.
+  const firstPeriod = periodsFor(restored.id)[0] ?? null;
+  const profile = useData.getState().profile;
+  if (profile) {
+    await useData.getState().saveProfile({
+      ...profile,
+      updatedAt: Date.now(),
+      level: restored.level,
+      academicYear: restored.academicYear,
+      currentStageId: restored.id,
+      currentPeriodId: firstPeriod?.id,
+    });
+  }
+
+  useData
+    .getState()
+    .setStatus(`↩ Back on ${restored.name} — your ${reopened.name} work is saved and still there`);
+  return { ok: true, from: reopened, to: restored };
+}
+
 /** Switch the active semester within the current stage. */
 export async function setCurrentPeriod(periodId: string): Promise<void> {
   const profile = useData.getState().profile;

@@ -11,7 +11,7 @@ import {
   professionalTimeline,
   stageSnapshot,
 } from '../../services/career';
-import { allStages, planPromotion, promote, periodsFor, setCurrentPeriod } from '../../services/academic';
+import { allStages, planPromotion, promote, planDemotion, demote, periodsFor, setCurrentPeriod } from '../../services/academic';
 import { useConfirm } from '../../components/ui/primitives';
 
 /**
@@ -43,6 +43,7 @@ export default function JourneyHome() {
   const projects = useData((s) => s.projects);
   const profile = useData((s) => s.profile);
   const [promoting, setPromoting] = useState(false);
+  const [declining, setDeclining] = useState(false);
   const [msg, setMsg] = useState('');
 
   const summary = useMemo(
@@ -52,6 +53,8 @@ export default function JourneyHome() {
   );
   const snapshot = useMemo(() => (summary.stage ? stageSnapshot(summary.stage.id) : null), [summary.stage, stages, skills]);
   const plan = useMemo(() => planPromotion(), [stages, profile]);
+  // Going back a level is the mirror of progressing (see services/academic).
+  const backPlan = useMemo(() => planDemotion(), [stages, profile]);
   const periods = useMemo(() => (summary.stage ? periodsFor(summary.stage.id) : []), [summary.stage, stages]);
   const currentPeriod = periods.find((p) => p.id === profile?.currentPeriodId);
 
@@ -70,6 +73,32 @@ export default function JourneyHome() {
     const res = await promote();
     setPromoting(false);
     setMsg(res.ok ? `🎓 Now on ${res.to?.name}. ${res.from?.name} is archived and still accessible.` : `⚠️ ${res.error}`);
+  };
+
+  /**
+   * Go back to a previous level.
+   *
+   * Framed as reversible and non-destructive, because it is: the level you
+   * leave becomes 'upcoming' again and every record stays put and editable.
+   */
+  const doDecline = async () => {
+    if (!backPlan.to) return;
+    const target = backPlan.to.name;
+    const ok = await confirm({
+      title: `Go back to ${target}?`,
+      message: `${backPlan.from?.name ?? 'Your current level'} will be reopened as upcoming, and ${target} becomes your current level again.`,
+      note: 'Nothing is deleted. All your work on both levels stays exactly where it is and remains editable — you can move forward again at any time.',
+      confirmLabel: `Go back to ${target}`,
+    });
+    if (!ok) return;
+    setDeclining(true);
+    const res = await demote(backPlan.to.id);
+    setDeclining(false);
+    setMsg(
+      res.ok
+        ? `↩ Back on ${res.to?.name}. Your ${res.from?.name} work is saved and still editable.`
+        : `⚠️ ${res.error}`
+    );
   };
 
   if (!summary.stage) {
@@ -134,7 +163,18 @@ export default function JourneyHome() {
                 ))}
               </select>
             )}
-            <button className="btn-primary" disabled={promoting} onClick={() => void doPromote()}>
+            {/* Going back sits beside going forward: both are reversible. */}
+            {backPlan.to && (
+              <button
+                className="btn-secondary"
+                disabled={declining || promoting}
+                onClick={() => void doDecline()}
+                title={`Return to ${backPlan.to.name} — nothing is deleted`}
+              >
+                {declining ? 'Going back…' : `⬇ Decline to ${backPlan.to.name}`}
+              </button>
+            )}
+            <button className="btn-primary" disabled={promoting || declining} onClick={() => void doPromote()}>
               {promoting ? 'Progressing…' : `⬆ Progress to ${plan.to?.name ?? `Level ${plan.nextLevel}`}`}
             </button>
           </div>
@@ -142,6 +182,9 @@ export default function JourneyHome() {
         <p className="mt-2 text-xs opacity-70">
           Progressing archives this level. Nothing is deleted or rewritten — every record keeps the level, year and semester
           it was created in.
+          {backPlan.to
+            ? ` You can also go back to ${backPlan.to.name} at any time to carry on or edit that work.`
+            : ''}
         </p>
       </div>
 
