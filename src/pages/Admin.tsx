@@ -5,6 +5,7 @@ import { syncClient } from '../services/syncClient';
 import { PasswordInput } from '../components/ui';
 import { Modal } from '../components/Modal';
 import { confirmAction } from '../components/ui/globalConfirm';
+import { IconManager } from '../components/admin/IconManager';
 
 interface AdminUser {
   id: string;
@@ -24,6 +25,7 @@ export function AdminPage() {
   const [loading, setLoading] = useState(true);
   const [msg, setMsg] = useState('');
   const [query, setQuery] = useState('');
+  const [tab, setTab] = useState<'users' | 'icons'>('users');
   const [adminEmail, setAdminEmail] = useState('');
   const [resetEmail, setResetEmail] = useState('');
   const [resetPw, setResetPw] = useState('');
@@ -110,33 +112,61 @@ export function AdminPage() {
     if (res.ok) { setDetail(null); loadUsers(); }
   }
 
-  if (!token) {
-    return (
-      <div className="flex min-h-full items-center justify-center p-4">
-        <div className="card text-center">
-          <h1 className="text-xl font-bold">🛡️ Admin Panel</h1>
-          <p className="mt-2 text-sm text-slate-400">Please sign in first.</p>
-          <button className="btn-primary mt-4" onClick={() => navigate('/auth')}>Go to Sign In</button>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="p-4">
-      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold">🛡️ Admin Panel</h1>
-          <p className="text-sm text-slate-400">Admin: {adminEmail || 'not configured'}</p>
+          <p className="text-sm text-slate-400">
+            {tab === 'users'
+              ? `Admin: ${adminEmail || 'not configured'}`
+              : 'Appearance customisation for this device'}
+          </p>
         </div>
         <div className="flex gap-2">
-          <button className="btn-secondary" onClick={loadUsers}>🔄 Refresh</button>
+          {tab === 'users' && token && (
+            <button className="btn-secondary" onClick={loadUsers}>🔄 Refresh</button>
+          )}
           <button className="btn-ghost" onClick={() => navigate('/settings')}>← Settings</button>
         </div>
       </div>
 
+      {/* Admin sections. Icons are a LOCAL tool, so it stays usable without an
+          account — only user management needs a signed-in admin. */}
+      <div className="mb-4 flex flex-wrap gap-1" role="tablist" aria-label="Admin sections">
+        {([
+          { key: 'users' as const, icon: '👥', label: 'Users' },
+          { key: 'icons' as const, icon: '🎨', label: 'Icons & emojis' },
+        ]).map((t) => (
+          <button
+            key={t.key}
+            role="tab"
+            aria-selected={tab === t.key}
+            className={`focus-ring rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
+              tab === t.key
+                ? 'bg-brand-600 text-white'
+                : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-slate-600'
+            }`}
+            onClick={() => setTab(t.key)}
+          >
+            <span aria-hidden="true">{t.icon}</span> {t.label}
+          </button>
+        ))}
+      </div>
+
       {msg && <div className="mb-4 rounded-lg bg-slate-50 p-3 text-sm dark:bg-slate-700">{msg}</div>}
 
+      {tab === 'icons' && <IconManager />}
+
+      {tab === 'users' && !token && (
+        <div className="card text-center">
+          <p className="text-sm text-slate-400">Sign in with an admin account to manage users.</p>
+          <button className="btn-primary mt-3" onClick={() => navigate('/auth')}>Go to Sign In</button>
+        </div>
+      )}
+
+      {tab === 'users' && token && (
+      <>
       {/* Stats */}
       <div className="mb-6 grid grid-cols-3 gap-3">
         <div className="card !p-4 text-center">
@@ -208,6 +238,9 @@ export function AdminPage() {
           <div className="flex items-end"><button className="btn-primary w-full" disabled={busy || !resetEmail || !resetPw} onClick={() => doReset(resetEmail, resetPw)}>Reset Password</button></div>
         </div>
       </div>
+
+      </>
+      )}
 
       {/* Reset confirm modal */}
       <Modal open={!!resetTarget} onClose={() => setResetTarget(null)} title={`🔑 Reset password for ${resetTarget?.email ?? ''}`}>

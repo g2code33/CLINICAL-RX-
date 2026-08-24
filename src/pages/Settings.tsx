@@ -1,10 +1,16 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useData } from '../stores/data';
 import {
   currentStage as academicCurrentStage,
   periodsFor as academicPeriodsFor,
   setCurrentPeriod as academicSetCurrentPeriod,
+  allStages as academicAllStages,
+  addStage as academicAddStage,
+  saveStage as academicSaveStage,
+  setCurrentStage as academicSetCurrentStage,
+  deleteStage as academicDeleteStage,
+  currentAcademicYear as academicCurrentYear,
 } from '../services/academic';
 import { PageHeader, PasswordInput } from '../components/ui';
 import { Modal } from '../components/Modal';
@@ -261,6 +267,10 @@ export function SettingsPage() {
         </button>
         <button className="focus-ring rounded-full bg-slate-100 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-200 dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-slate-600" onClick={() => navigate('/sync')}>
           <span aria-hidden="true">☁️</span> Sync Center →
+        </button>
+        {/* Admin is its own destination, not buried inside About. */}
+        <button className="focus-ring rounded-full bg-slate-100 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-200 dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-slate-600" onClick={() => navigate('/admin')}>
+          <span aria-hidden="true">🛡️</span> Admin Panel →
         </button>
       </div>
 
@@ -525,13 +535,6 @@ export function SettingsPage() {
       <div className="mt-6"><ComingLaterSettings /></div>
       <div className="mt-6"><UpdatePanel /></div>
 
-      {/* Admin panel — lives beside Updates in Settings now */}
-      <div className="mt-6 card">
-        <h2 className="mb-1 font-semibold">🛡️ Admin Panel</h2>
-        <p className="mb-3 text-xs text-slate-400">Manage users, reset passwords and review accounts (admin access required).</p>
-        <button className="btn-secondary" onClick={() => navigate('/admin')}>Open Admin Panel →</button>
-      </div>
-
         </div>
       )}
 
@@ -680,71 +683,214 @@ async function updateAi(draft: Settings, key: string, patch: any, saveSettings: 
  * Changing the level here PROMOTES via the journey service (additive), it
  * never rewrites history.
  */
+/**
+ * 🎓 ACADEMIC LEVELS (managed here, in Settings)
+ *
+ * Levels used to be view-only here, with a "Manage journey →" link that sent
+ * the user to another page to do anything real. Levels are configuration, so
+ * they belong in Settings: add, rename the year, set the current level, and
+ * remove one — all without leaving this page.
+ *
+ * Safety rules that still hold:
+ *  · Removing a level NEVER deletes the records stamped with it (§45).
+ *  · Switching the current level archives the previous one; it never rewrites
+ *    the academic year on existing records.
+ */
 function AcademicSettings() {
   const profile = useData((s) => s.profile);
   const stages = useData((s) => s.academicStages);
   const periods = useData((s) => s.academicPeriods);
   const navigate = useNavigate();
+  const { confirm, confirmDialog } = useConfirm();
 
   const stage = academicCurrentStage();
   const stagePeriods = stage ? academicPeriodsFor(stage.id) : [];
-  void stages;
+  const ordered = useMemo(() => academicAllStages(), [stages]);
   void periods;
+
+  const [newLevel, setNewLevel] = useState('');
+  const [newYear, setNewYear] = useState(academicCurrentYear());
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState('');
+
+  const addLevel = async () => {
+    const level = newLevel.trim();
+    if (!level || busy) return;
+    setBusy(true);
+    try {
+      await academicAddStage({
+        level,
+        academicYear: newYear.trim() || academicCurrentYear(),
+        status: ordered.length === 0 ? 'current' : 'upcoming',
+      });
+      setNewLevel('');
+      setNote(`✓ Level ${level} added.`);
+    } finally {
+      setBusy(false);
+    }
+  };
 
   return (
     <div className="card">
-      <h2 className="mb-1 font-semibold">🎓 Academic</h2>
+      {confirmDialog}
+      <h2 className="mb-1 font-semibold">🎓 Academic levels</h2>
       <p className="mb-3 text-xs text-slate-400">
-        Your current position in the programme. Previous years always stay accessible.
+        Set up the levels of your programme and choose which one you are on now. Previous years always stay accessible.
       </p>
 
-      {!stage ? (
-        <div className="rounded-lg bg-slate-50 p-3 text-sm text-slate-500 dark:bg-slate-800 dark:text-slate-400">
-          No academic journey yet.
-          <button className="btn-secondary mt-2 w-full !py-1.5 text-xs" onClick={() => navigate('/journey')}>
-            Set up my journey →
+      {note && <p className="mb-2 rounded bg-slate-50 p-2 text-xs dark:bg-slate-700">{note}</p>}
+
+      {/* ---- Add a level ---- */}
+      <div className="mb-4 rounded-lg border border-slate-200 p-3 dark:border-slate-700">
+        <div className="label">Add a level</div>
+        <div className="flex flex-wrap items-end gap-2">
+          <div className="min-w-28 flex-1">
+            <label className="text-[11px] opacity-70" htmlFor="new-level">
+              Level
+            </label>
+            <input
+              id="new-level"
+              className="input"
+              placeholder="e.g. 200"
+              value={newLevel}
+              onChange={(e) => setNewLevel(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') void addLevel();
+              }}
+            />
+          </div>
+          <div className="min-w-32 flex-1">
+            <label className="text-[11px] opacity-70" htmlFor="new-year">
+              Academic year
+            </label>
+            <input
+              id="new-year"
+              className="input"
+              placeholder="2024/2025"
+              value={newYear}
+              onChange={(e) => setNewYear(e.target.value)}
+            />
+          </div>
+          <button className="btn-primary" disabled={!newLevel.trim() || busy} onClick={() => void addLevel()}>
+            {busy ? 'Adding…' : '＋ Add'}
           </button>
         </div>
+        <p className="mt-1.5 text-[11px] opacity-60">
+          Two semesters are created automatically. The academic year is stamped onto records made at this level and is
+          never rewritten later.
+        </p>
+      </div>
+
+      {/* ---- Existing levels ---- */}
+      {ordered.length === 0 ? (
+        <div className="rounded-lg bg-slate-50 p-3 text-sm text-slate-500 dark:bg-slate-800 dark:text-slate-400">
+          No levels yet — add your current level above to get started.
+        </div>
       ) : (
-        <div className="space-y-3">
-          <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-brand-50 px-3 py-2 dark:bg-brand-950">
-            <div>
-              <div className="text-sm font-bold text-brand-800 dark:text-brand-200">{stage.name}</div>
-              <div className="text-xs text-brand-700/70 dark:text-brand-300/70">{stage.academicYear}</div>
-            </div>
-            <button className="btn-secondary !py-1 text-xs" onClick={() => navigate('/journey')}>
-              Manage journey →
-            </button>
-          </div>
+        <div className="space-y-2">
+          {ordered.map((st) => {
+            const isCurrent = st.id === stage?.id;
+            return (
+              <div
+                key={st.id}
+                className={`flex flex-wrap items-center gap-2 rounded-lg border px-3 py-2 ${
+                  isCurrent
+                    ? 'border-brand-400 bg-brand-50 dark:border-brand-600 dark:bg-brand-950'
+                    : 'border-slate-200 dark:border-slate-700'
+                }`}
+              >
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className="text-sm font-semibold">{st.name}</span>
+                    {/* Status in words + glyph, never colour alone. */}
+                    <span className="rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium dark:bg-slate-700">
+                      {st.status === 'current' ? '● Current' : st.status === 'completed' ? '✓ Completed' : '○ Upcoming'}
+                    </span>
+                  </div>
+                  <input
+                    className="mt-1 w-36 rounded border border-slate-300 bg-transparent px-2 py-0.5 text-xs dark:border-slate-600"
+                    value={st.academicYear}
+                    aria-label={`Academic year for ${st.name}`}
+                    onChange={(e) => void academicSaveStage({ ...st, academicYear: e.target.value })}
+                  />
+                </div>
 
-          <div>
-            <label className="mb-1.5 block text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-              Current semester
-            </label>
-            <div className="flex flex-wrap gap-1.5">
-              {stagePeriods.map((p) => (
+                {!isCurrent && (
+                  <button
+                    className="btn-secondary !px-2 !py-1 text-xs"
+                    onClick={async () => {
+                      const ok = await confirm({
+                        title: `Make ${st.name} your current level?`,
+                        message: 'New records will be stamped with this level and year.',
+                        note: 'Records you already created keep the level they were made in — nothing is rewritten.',
+                        confirmLabel: 'Set as current',
+                      });
+                      if (!ok) return;
+                      await academicSetCurrentStage(st.id);
+                      setNote(`✓ Now on ${st.name}.`);
+                    }}
+                  >
+                    Set current
+                  </button>
+                )}
+
                 <button
-                  key={p.id}
-                  className={`rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
-                    profile?.currentPeriodId === p.id
-                      ? 'bg-brand-600 text-white'
-                      : 'bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-200'
-                  }`}
-                  onClick={() => academicSetCurrentPeriod(p.id)}
+                  className="btn-ghost !px-2 !py-1 text-xs text-red-600"
+                  aria-label={`Remove ${st.name}`}
+                  onClick={async () => {
+                    const ok = await confirm({
+                      title: `Remove ${st.name}?`,
+                      message: 'This level will no longer appear in your journey.',
+                      note: 'Records stamped with this level are NOT deleted — their academic history is permanent.',
+                      confirmLabel: 'Remove level',
+                      destructive: true,
+                    });
+                    if (!ok) return;
+                    await academicDeleteStage(st.id);
+                    setNote(`${st.name} removed. Its records are still safe.`);
+                  }}
                 >
-                  {p.name}
+                  🗑
                 </button>
-              ))}
-              {!stagePeriods.length && <span className="text-xs text-slate-400">No semesters defined.</span>}
-            </div>
-          </div>
-
-          <p className="text-[11px] text-slate-400">
-            To move to the next level, use <strong>PharmD Journey → Move to Level …</strong>. Promotion archives the
-            current year; it never deletes it.
-          </p>
+              </div>
+            );
+          })}
         </div>
       )}
+
+      {/* ---- Current semester ---- */}
+      {stage && (
+        <div className="mt-4">
+          <label className="mb-1.5 block text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+            Current semester
+          </label>
+          <div className="flex flex-wrap gap-1.5" role="group" aria-label="Current semester">
+            {stagePeriods.map((p) => (
+              <button
+                key={p.id}
+                aria-pressed={profile?.currentPeriodId === p.id}
+                className={`focus-ring rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
+                  profile?.currentPeriodId === p.id
+                    ? 'bg-brand-600 text-white'
+                    : 'bg-slate-200 text-slate-600 hover:bg-slate-300 dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-slate-600'
+                }`}
+                onClick={() => academicSetCurrentPeriod(p.id)}
+              >
+                {p.name}
+              </button>
+            ))}
+            {!stagePeriods.length && <span className="text-xs text-slate-400">No semesters defined.</span>}
+          </div>
+        </div>
+      )}
+
+      <p className="mt-3 text-[11px] text-slate-400">
+        You can also progress or go back a level on the{' '}
+        <button className="underline" onClick={() => navigate('/journey')}>
+          PharmD Journey
+        </button>{' '}
+        page, which shows the full timeline.
+      </p>
     </div>
   );
 }

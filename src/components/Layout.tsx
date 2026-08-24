@@ -15,70 +15,75 @@ import { TaskIndicator } from './TaskIndicator';
 import { NotificationBanner } from './NotificationBanner';
 import { Toaster, OfflineIndicator } from './Toaster';
 import { GlobalConfirm } from './ui/globalConfirm';
+import { AppIcon } from './AppIcon';
 import { ModeSplash } from './ModeSplash';
 
 const APP_VERSION = pkg.version;
 
-// ---- CLINICAL workspace navigation (unchanged) ----
+// ---- CLINICAL workspace navigation ----
+// `iconKey` points at the icon registry so an administrator can replace any of
+// these with a different emoji or an image (see services/iconRegistry).
 const NAV = [
-  { to: '/', icon: '🏠', label: 'Home' },
-  { to: '/learning', icon: '📋', label: 'Clinical Learning' },
-  { to: '/notes', icon: '💡', label: 'Learning Notes' },
-  { to: '/clinical', icon: '📆', label: 'Clinical Days' },
-  { to: '/ward-rounds', icon: '🏥', label: 'Ward Rounds' },
-  { to: '/calendar', icon: '📅', label: 'Calendar' },
-  { to: '/diseases', icon: '🦠', label: 'Diseases' },
-  { to: '/medicines', icon: '💊', label: 'Medicines' },
-  { to: '/investigations', icon: '🧪', label: 'Investigations' },
-  { to: '/questions', icon: '❓', label: 'Questions' },
-  { to: '/revision', icon: '📚', label: 'Revision' },
-  { to: '/quiz', icon: '📝', label: 'Quiz' },
-  { to: '/question-bank', icon: '🗂', label: 'Question Bank' },
-  { to: '/bundles', icon: '📦', label: 'Bundles' },
-  { to: '/progress', icon: '📊', label: 'Progress' },
-  { to: '/ai', icon: '🤖', label: 'AI' },
-  { to: '/sync', icon: '☁️', label: 'Sync & Backup' },
-  { to: '/settings', icon: '⚙️', label: 'Settings' },
+  { to: '/', iconKey: 'nav.home', label: 'Home' },
+  { to: '/learning', iconKey: 'nav.learning', label: 'Clinical Learning' },
+  { to: '/notes', iconKey: 'nav.notes', label: 'Learning Notes' },
+  { to: '/clinical', iconKey: 'nav.clinicalDays', label: 'Clinical Days' },
+  { to: '/ward-rounds', iconKey: 'nav.wardRounds', label: 'Ward Rounds' },
+  { to: '/calendar', iconKey: 'nav.calendar', label: 'Calendar' },
+  { to: '/diseases', iconKey: 'nav.diseases', label: 'Diseases' },
+  { to: '/medicines', iconKey: 'nav.medicines', label: 'Medicines' },
+  { to: '/investigations', iconKey: 'nav.investigations', label: 'Investigations' },
+  { to: '/questions', iconKey: 'nav.questions', label: 'Questions' },
+  { to: '/revision', iconKey: 'nav.revision', label: 'Revision' },
+  { to: '/quiz', iconKey: 'nav.quiz', label: 'Quiz' },
+  { to: '/question-bank', iconKey: 'nav.questionBank', label: 'Question Bank' },
+  { to: '/bundles', iconKey: 'nav.bundles', label: 'Bundles' },
+  { to: '/progress', iconKey: 'nav.progress', label: 'Progress' },
+  { to: '/ai', iconKey: 'nav.ai', label: 'AI' },
+  { to: '/sync', iconKey: 'nav.sync', label: 'Sync & Backup' },
+  { to: '/settings', iconKey: 'nav.settings', label: 'Settings' },
+  { to: '/admin', iconKey: 'nav.admin', label: 'Admin' },
 ];
 
 // ---- PHARMD workspace navigation (its own set + its own drawer) ----
 const PHARMD_NAV = [
-  { to: '/journey', icon: '🎓', label: 'My Journey' },
-  { to: '/journey/timeline', icon: '📈', label: 'Timeline' },
-  { to: '/journey/clinical-experience', icon: '🏥', label: 'Clinical Experience' },
-  { to: '/journey/skills', icon: '🧠', label: 'Skills' },
-  { to: '/journey/projects', icon: '💻', label: 'Projects' },
-  { to: '/journey/research', icon: '🔬', label: 'Research' },
-  { to: '/journey/leadership', icon: '🏅', label: 'Leadership' },
-  { to: '/journey/achievements', icon: '🏆', label: 'Achievements' },
-  { to: '/journey/certifications', icon: '📜', label: 'Certifications' },
-  { to: '/journey/goals', icon: '🎯', label: 'Goals' },
-  { to: '/journey/portfolio', icon: '📁', label: 'Portfolio & CV' },
-  { to: '/journey/archive', icon: '📚', label: 'Academic Archive' },
-  { to: '/courses', icon: '📚', label: 'Courses' },
-  { to: '/progress', icon: '📊', label: 'Progress' },
-  { to: '/sync', icon: '☁️', label: 'Sync & Backup' },
-  { to: '/settings', icon: '⚙️', label: 'Settings' },
+  { to: '/journey', iconKey: 'nav.journey', label: 'My Journey' },
+  { to: '/journey/timeline', iconKey: 'nav.timeline', label: 'Timeline' },
+  { to: '/journey/clinical-experience', iconKey: 'nav.experience', label: 'Clinical Experience' },
+  { to: '/journey/skills', iconKey: 'nav.skills', label: 'Skills' },
+  { to: '/journey/projects', iconKey: 'nav.projects', label: 'Projects' },
+  { to: '/journey/research', iconKey: 'nav.research', label: 'Research' },
+  { to: '/journey/leadership', iconKey: 'nav.leadership', label: 'Leadership' },
+  { to: '/journey/achievements', iconKey: 'nav.achievements', label: 'Achievements' },
+  { to: '/journey/certifications', iconKey: 'nav.certifications', label: 'Certifications' },
+  { to: '/journey/goals', iconKey: 'nav.goals', label: 'Goals' },
+  { to: '/journey/portfolio', iconKey: 'nav.portfolio', label: 'Portfolio & CV' },
+  { to: '/journey/archive', iconKey: 'nav.archive', label: 'Academic Archive' },
+  { to: '/courses', iconKey: 'nav.courses', label: 'Courses' },
+  { to: '/progress', iconKey: 'nav.progress', label: 'Progress' },
+  { to: '/sync', iconKey: 'nav.sync', label: 'Sync & Backup' },
+  { to: '/settings', iconKey: 'nav.settings', label: 'Settings' },
+  { to: '/admin', iconKey: 'nav.admin', label: 'Admin' },
 ];
 
 /** Routes that belong to BOTH workspaces, so they never force a mode change. */
 const SHARED_ROUTES = ['/progress', '/settings', '/admin', '/auth', '/reset', '/sync'];
 
 const PHARMD_BOTTOM_NAV = [
-  { to: '/journey', icon: '🎓', label: 'Journey' },
-  { to: '/journey/skills', icon: '🧠', label: 'Skills' },
-  { to: '/journey/portfolio', icon: '📁', label: 'Portfolio' },
-  { to: '/journey/archive', icon: '📚', label: 'Archive' },
+  { to: '/journey', iconKey: 'nav.journey', label: 'Journey' },
+  { to: '/journey/skills', iconKey: 'nav.skills', label: 'Skills' },
+  { to: '/journey/portfolio', iconKey: 'nav.portfolio', label: 'Portfolio' },
+  { to: '/journey/archive', iconKey: 'nav.archive', label: 'Archive' },
 ];
 
 // Fixed bottom navigation — the 6 most-used destinations + "More" (opens the drawer).
 const BOTTOM_NAV = [
-  { to: '/', icon: '🏠', label: 'Home' },
-  { to: '/clinical', icon: '📋', label: 'Days' },
-  { to: '/ward-rounds', icon: '🏥', label: 'Rounds' },
-  { to: '/medicines', icon: '💊', label: 'Meds' },
-  { to: '/quiz', icon: '📝', label: 'Quiz' },
-  { to: '/ai', icon: '🤖', label: 'AI' },
+  { to: '/', iconKey: 'nav.home', label: 'Home' },
+  { to: '/clinical', iconKey: 'nav.clinicalDays', label: 'Days' },
+  { to: '/ward-rounds', iconKey: 'nav.wardRounds', label: 'Rounds' },
+  { to: '/medicines', iconKey: 'nav.medicines', label: 'Meds' },
+  { to: '/quiz', iconKey: 'nav.quiz', label: 'Quiz' },
+  { to: '/ai', iconKey: 'nav.ai', label: 'AI' },
 ];
 
 export function Layout({ children }: { children: ReactNode }) {
@@ -187,7 +192,7 @@ export function Layout({ children }: { children: ReactNode }) {
                     }`
                   }
                 >
-                  <span className="text-lg leading-none">{n.icon}</span>
+                  <AppIcon name={n.iconKey} className="text-lg leading-none" />
                   <span className="truncate">{n.label}</span>
                 </NavLink>
               ))}
@@ -227,7 +232,7 @@ export function Layout({ children }: { children: ReactNode }) {
                     }`
                   }
                 >
-                  <span>{n.icon}</span>
+                  <AppIcon name={n.iconKey} />
                 </NavLink>
               ))}
             </nav>
@@ -249,14 +254,19 @@ export function Layout({ children }: { children: ReactNode }) {
                 ☰
               </button>
 
-              <img src="./v2.PNG" alt="CLINICAL Rx" className="h-8 w-8 shrink-0 rounded-xl object-cover" />
-              <div className="flex min-w-0 items-baseline gap-2">
-                <span className="truncate text-[15px] font-extrabold tracking-tight text-brand-700 dark:text-brand-300 sm:text-lg">
-                  CLINICAL Rx
-                </span>
-                <span className="hidden rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-500 dark:bg-slate-800 dark:text-slate-400 sm:inline">
-                  v{APP_VERSION}
-                </span>
+              {/* Brand: shown here ONLY when the desktop sidebar is not already
+                  showing it. With the sidebar open the logo and wordmark
+                  appeared twice, side by side. */}
+              <div className={sidebarOpen ? 'flex min-w-0 items-center gap-2 sm:gap-3 lg:hidden' : 'flex min-w-0 items-center gap-2 sm:gap-3'}>
+                <img src="./v2.PNG" alt="CLINICAL Rx" className="h-8 w-8 shrink-0 rounded-xl object-cover" />
+                <div className="flex min-w-0 items-baseline gap-2">
+                  <span className="truncate text-[15px] font-extrabold tracking-tight text-brand-700 dark:text-brand-300 sm:text-lg">
+                    CLINICAL Rx
+                  </span>
+                  <span className="hidden rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-500 dark:bg-slate-800 dark:text-slate-400 sm:inline">
+                    v{APP_VERSION}
+                  </span>
+                </div>
               </div>
 
               {/* ONE-BUTTON WORKSPACE SWITCH.
@@ -391,14 +401,14 @@ export function Layout({ children }: { children: ReactNode }) {
                   end={n.to === '/'}
                   onClick={() => setDrawerOpen(false)}
                   className={({ isActive }) =>
-                    `flex w-full items-center gap-4 px-5 py-[15px] text-left transition-all duration-150 active:scale-[0.98] ${
+                    `flex w-full items-center gap-4 px-5 py-[15px] text-left transition-colors duration-150 ${
                       isActive
                         ? 'bg-brand-50 font-semibold text-brand-700 dark:bg-brand-950 dark:text-brand-300'
                         : 'text-slate-700 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-800'
                     }`
                   }
                 >
-                  <span className="w-8 shrink-0 text-center text-xl leading-none">{n.icon}</span>
+                  <span className="w-8 shrink-0 text-center text-xl leading-none"><AppIcon name={n.iconKey} /></span>
                   <span className="truncate text-[15px]">{n.label}</span>
                   {location.pathname === n.to && (
                     <span className="ml-auto h-2 w-2 shrink-0 rounded-full bg-brand-600" />
@@ -434,7 +444,7 @@ export function Layout({ children }: { children: ReactNode }) {
                   }`
                 }
               >
-                <span className="text-[21px] leading-none">{n.icon}</span>
+                <AppIcon name={n.iconKey} className="text-[21px] leading-none" />
                 <span className="text-[9.5px] font-semibold tracking-tight">{n.label}</span>
               </NavLink>
             ))}

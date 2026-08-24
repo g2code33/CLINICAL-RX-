@@ -11,6 +11,21 @@ html, body, #root {
   margin: 0;
 }
 
+/*
+ * Stop mobile browsers auto-inflating text.
+ *
+ * WebKit/Blink "text autosizing" re-measures text when an element is
+ * transformed — which is exactly what the slide-in drawer does. The result is
+ * the drawer's labels rendering oversized for a frame and then snapping back
+ * to normal as the animation settles. Pinning the adjustment to 100% keeps the
+ * text at its authored size throughout. This does NOT stop the user zooming.
+ */
+html {
+  -webkit-text-size-adjust: 100%;
+  -moz-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
 body {
   font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   font-size: 16px;
