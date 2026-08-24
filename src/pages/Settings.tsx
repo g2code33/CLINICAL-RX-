@@ -318,7 +318,7 @@ export function SettingsPage() {
           <div className="flex flex-wrap gap-2">
             {['simple-first', 'step-by-step', 'pharmacy-focused', 'clinical-examples', 'exam-connections'].map((o) => {
               const on = (draft.learningProfile?.preferredExplanation ?? []).includes(o);
-              return <button key={o} onClick={() => set('learningProfile', { preferredExplanation: on ? (draft.learningProfile?.preferredExplanation ?? []).filter((x) => x !== o) : [...(draft.learningProfile?.preferredExplanation ?? []), o] })} className={`rounded-full px-3 py-1 text-xs font-medium ${on ? 'bg-brand-600 text-white' : 'bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-200'}`}>{o.replace(/-/g, ' ')}</button>;
+              return <button key={o} onClick={() => set('learningProfile', { preferredExplanation: on ? (draft.learningProfile?.preferredExplanation ?? []).filter((x) => x !== o) : [...(draft.learningProfile?.preferredExplanation ?? []), o] })} aria-pressed={on} className={`focus-ring rounded-full px-3 py-1 text-xs font-medium ${on ? 'bg-brand-600 text-white' : 'bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-200'}`}>{o.replace(/-/g, ' ')}</button>;
             })}
           </div>
           <div className="mt-4 space-y-2">
@@ -335,9 +335,9 @@ export function SettingsPage() {
         {/* Appearance */}
         <div className="card">
           <h2 className="mb-3 font-semibold">Appearance</h2>
-          <div className="flex gap-2">
+          <div className="flex gap-2" role="group" aria-label="Appearance mode">
             {(['light', 'dark', 'system'] as AppearanceMode[]).map((m) => (
-              <button key={m} onClick={() => set('appearance', m)} className={`rounded-full px-3 py-1 text-xs font-medium ${draft.appearance === m ? 'bg-brand-600 text-white' : 'bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-200'}`}>{m[0].toUpperCase() + m.slice(1)}</button>
+              <button key={m} onClick={() => set('appearance', m)} aria-pressed={draft.appearance === m} className={`focus-ring rounded-full px-3 py-1 text-xs font-medium ${draft.appearance === m ? 'bg-brand-600 text-white' : 'bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-200'}`}>{m[0].toUpperCase() + m.slice(1)}</button>
             ))}
           </div>
           <div className="mt-4 space-y-3">

@@ -411,7 +411,8 @@ function FieldRow({ field, value, onChange }: { field: FieldConfig; value: any; 
                     onChange(nextArr);
                   }
                 }}
-                className={`rounded-full px-3 py-1 text-xs font-medium ${checked ? 'bg-brand-600 text-white' : 'bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-200'}`}
+                aria-pressed={checked}
+                className={`focus-ring rounded-full px-3 py-1 text-xs font-medium ${checked ? 'bg-brand-600 text-white' : 'bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-200'}`}
               >
                 {o}
               </button>

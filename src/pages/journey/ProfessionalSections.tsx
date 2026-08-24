@@ -390,9 +390,10 @@ export function SkillsPage() {
           Confidence is always yours to set — the app never awards you a competency. Attach evidence so your rating is
           defensible in an interview.
         </p>
-        <div className="mt-2 flex flex-wrap gap-1">
+        <div className="mt-2 flex flex-wrap gap-1" role="group" aria-label="Filter skills by category">
           <button
-            className={`rounded-full px-3 py-1 text-xs ${!filter ? 'bg-brand-600 text-white' : 'bg-slate-100 dark:bg-slate-700'}`}
+            aria-pressed={!filter}
+            className={`focus-ring rounded-full px-3 py-1 text-xs ${!filter ? 'bg-brand-600 text-white' : 'bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600'}`}
             onClick={() => setFilter('')}
           >
             All
@@ -400,7 +401,8 @@ export function SkillsPage() {
           {SKILL_CATEGORIES.map((c) => (
             <button
               key={c.key}
-              className={`rounded-full px-3 py-1 text-xs ${filter === c.key ? 'bg-brand-600 text-white' : 'bg-slate-100 dark:bg-slate-700'}`}
+              aria-pressed={filter === c.key}
+              className={`focus-ring rounded-full px-3 py-1 text-xs ${filter === c.key ? 'bg-brand-600 text-white' : 'bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600'}`}
               onClick={() => setFilter(c.key)}
             >
               {c.icon} {c.label}

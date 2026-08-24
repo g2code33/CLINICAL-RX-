@@ -79,11 +79,12 @@ export function Revision() {
 
       <p className="mb-2 text-[11px] text-slate-400">{REVISION_BOX_HELP}</p>
 
-      <div className="mb-3 flex gap-2">
-        <button className={`rounded-full px-3 py-1 text-xs font-medium ${filter === 'due' ? 'bg-brand-600 text-white' : 'bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-300'}`} onClick={() => setFilter('due')}>
+      {/* Filter toggles, not tabs: aria-pressed states which filter is on (§27). */}
+      <div className="mb-3 flex gap-2" role="group" aria-label="Revision filter">
+        <button aria-pressed={filter === 'due'} className={`focus-ring rounded-full px-3 py-1 text-xs font-medium ${filter === 'due' ? 'bg-brand-600 text-white' : 'bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-300'}`} onClick={() => setFilter('due')}>
           ⏰ Due now ({dueCount})
         </button>
-        <button className={`rounded-full px-3 py-1 text-xs font-medium ${filter === 'all' ? 'bg-brand-600 text-white' : 'bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-300'}`} onClick={() => setFilter('all')}>
+        <button aria-pressed={filter === 'all'} className={`focus-ring rounded-full px-3 py-1 text-xs font-medium ${filter === 'all' ? 'bg-brand-600 text-white' : 'bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-300'}`} onClick={() => setFilter('all')}>
           📚 All topics
         </button>
       </div>
