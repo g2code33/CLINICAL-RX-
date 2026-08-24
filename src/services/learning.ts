@@ -526,3 +526,195 @@ export async function restoreRecord(module: ModuleType, id: string): Promise<voi
   if (!rec) return;
   await st.save(module, { ...rec, archived: false });
 }
+
+// ---- UNIFIED APP CONTEXT ----------------------------------------------
+
+/**
+ * ONE MEMORY FOR THE WHOLE APP.
+ *
+ * The Clinical workspace and the PharmD Journey workspace are two *views* of
+ * a single dataset — never separate entities. This function is the single
+ * source of truth that every AI module reads, so the AI can answer across
+ * everything the user has ever recorded:
+ *
+ *   academic journey  ·  courses      ·  clinical days   ·  ward rounds
+ *   diseases          ·  medicines    ·  investigations  ·  questions
+ *   learning notes    ·  revision/SRS ·  quizzes         ·  bundles
+ *   tags              ·  favourites   ·  recent activity
+ *
+ * Everything is cross-linked by academic stage, so "what did I learn about
+ * statins in Level 200?" is answerable from this snapshot alone.
+ *
+ * Bounded on purpose: prompts stay small and fast, newest data wins.
+ */
+export function buildUnifiedContext(opts: { scope?: LearningFilter; limit?: number } = {}): string {
+  const s = useData.getState();
+  const f = opts.scope ?? {};
+  const limit = opts.limit ?? 25;
+  const g = filterAll(f);
+  const now = Date.now();
+  const lines: string[] = [];
+
+  const list = (items: string[], max = limit) =>
+    items.filter(Boolean).slice(0, max).join('; ') || 'none recorded';
+
+  // --- Who the student is ---
+  const p = s.profile;
+  const stage = getStage(p?.currentStageId);
+  const period = s.academicPeriods.find((x) => x.id === p?.currentPeriodId);
+  lines.push('=== STUDENT ===');
+  lines.push(
+    `${p?.username ?? 'Student'} — ${p?.programme ?? 'Pharmacy'}${p?.institution ? ' at ' + p.institution : ''}.`
+  );
+  lines.push(
+    `Currently: ${stage ? `${stage.name}, ${stage.academicYear}` : `Level ${p?.level ?? '?'}`}${period ? `, ${period.name}` : ''}.`
+  );
+  const prefs = s.settings?.learningProfile?.preferredExplanation ?? [];
+  lines.push(`Preferred explanation style: ${prefs.length ? prefs.join(', ') : 'simple first, step-by-step'}.`);
+
+  // --- The academic journey (PharmD workspace) ---
+  const stages = [...s.academicStages].sort((a, b) => a.order - b.order);
+  if (stages.length) {
+    lines.push('');
+    lines.push('=== ACADEMIC JOURNEY (all years remain accessible) ===');
+    for (const st of stages) {
+      const courses = s.courses.filter((c) => c.stageId === st.id).map((c) => c.title);
+      const counts = KNOWLEDGE_MODULES.reduce((n, m) => n + (s.all(m) as any[]).filter((r) => !r.archived && r.academic?.stageId === st.id).length, 0);
+      lines.push(
+        `${st.name} (${st.academicYear}) — ${st.status}${courses.length ? `; courses: ${courses.join(', ')}` : ''}; ${counts} learning record(s).`
+      );
+    }
+  }
+
+  // --- Knowledge base (Clinical workspace) ---
+  lines.push('');
+  lines.push('=== KNOWLEDGE BASE ===');
+  const withStage = (r: any) => {
+    const a = academicLabel(r);
+    return a ? ` [${a}]` : '';
+  };
+  lines.push(
+    `Diseases (${g.disease.length}): ${list(g.disease.map((d: Disease) => `${d.name}${withStage(d)}`))}`
+  );
+  lines.push(
+    `Medicines (${g.medicine.length}): ${list(
+      g.medicine.map((m: Medicine) => `${m.name}${m.className ? ` (${m.className})` : ''}${withStage(m)}`)
+    )}`
+  );
+  lines.push(
+    `Investigations (${g.investigation.length}): ${list(g.investigation.map((i: Investigation) => `${i.name}${withStage(i)}`))}`
+  );
+
+  // --- Learning notes ---
+  if (g.lesson.length) {
+    lines.push('');
+    lines.push(`=== LEARNING NOTES (${g.lesson.length}) ===`);
+    for (const l of g.lesson.slice(0, limit) as Lesson[]) {
+      lines.push(`- ${l.date}${withStage(l)} ${l.title}: ${String(l.content ?? '').slice(0, 220)}`);
+    }
+  }
+
+  // --- Questions ---
+  if (g.question.length) {
+    lines.push('');
+    lines.push(`=== QUESTIONS (${g.question.length}) ===`);
+    for (const q of g.question.slice(0, limit) as Question[]) {
+      lines.push(`- [${q.status}] ${q.text}${q.answer ? ` — my answer: ${q.answer.slice(0, 160)}` : ''}${withStage(q)}`);
+    }
+  }
+
+  // --- Clinical days ---
+  if (s.days.length) {
+    lines.push('');
+    lines.push(`=== CLINICAL DAYS (${s.days.length}) ===`);
+    for (const d of s.days.slice(0, 10)) {
+      const bits = [
+        d.conditions?.length ? `conditions: ${d.conditions.join(', ')}` : '',
+        d.medicines?.length ? `medicines: ${d.medicines.join(', ')}` : '',
+        d.investigations?.length ? `investigations: ${d.investigations.join(', ')}` : '',
+        d.lessons?.length ? `lessons: ${d.lessons.join(' | ')}` : '',
+      ].filter(Boolean);
+      if (bits.length) lines.push(`- Day ${d.dayNumber} (${d.date}): ${bits.join('; ')}`);
+    }
+  }
+
+  // --- Ward rounds ---
+  if (s.wardRounds.length) {
+    lines.push('');
+    lines.push(`=== WARD ROUNDS (${s.wardRounds.length}) ===`);
+    for (const r of s.wardRounds.slice(0, 10)) {
+      const entries = s.wardEntries.filter((e) => e.roundId === r.id);
+      const summary = entries
+        .slice(0, 12)
+        .map((e) => `${e.title || ''}${e.title && e.content ? ' — ' : ''}${String(e.content ?? '').slice(0, 90)}`)
+        .filter(Boolean)
+        .join(' | ');
+      const stageName = getStage(r.academic?.stageId)?.name;
+      lines.push(
+        `- ${r.date} ${r.ward}${r.focus ? ` (${r.focus})` : ''}${stageName ? ` [${stageName}]` : ''}: ${entries.length} capture(s)${summary ? ` — ${summary}` : ''}`
+      );
+    }
+  }
+
+  // --- Revision / SRS ---
+  if (s.revisions.length) {
+    const due = s.revisions.filter((r) => (r.nextReview ?? 0) <= now);
+    const weak = s.revisions.filter((r) => ((r as any).confidence ?? 3) <= 2);
+    lines.push('');
+    lines.push(`=== REVISION (${s.revisions.length} items, ${due.length} due) ===`);
+    lines.push(`Due now: ${list(due.map((r) => r.topic), 15)}`);
+    if (weak.length) lines.push(`Low confidence / weak areas: ${list(weak.map((r) => r.topic), 15)}`);
+  }
+
+  // --- Quizzes ---
+  if (s.quizzes.length) {
+    lines.push('');
+    lines.push(`=== QUIZ HISTORY (${s.quizzes.length}) ===`);
+    for (const q of s.quizzes.slice(0, 6)) {
+      lines.push(`- ${q.date} ${q.title}: scored ${q.score}/${q.total}`);
+    }
+  }
+
+  // --- Bundles ---
+  if (s.bundles.length) {
+    lines.push('');
+    lines.push(`=== BUNDLES (${s.bundles.length}) ===`);
+    for (const b of s.bundles.slice(0, 6)) {
+      lines.push(`- ${b.title} (${b.periodStart}→${b.periodEnd})`);
+    }
+  }
+
+  // --- Tags & favourites ---
+  const tags = allTags().slice(0, 20);
+  if (tags.length) {
+    lines.push('');
+    lines.push(`Tags in use: ${tags.map((t) => `#${t.tag}(${t.count})`).join(' ')}`);
+  }
+  const favs = favorites().slice(0, 12);
+  if (favs.length) lines.push(`Starred: ${favs.map((f) => f.title).join('; ')}`);
+
+  return lines.join('\n');
+}
+
+/**
+ * Compact stats line — cheap enough to include in every prompt even when the
+ * full context is too large.
+ */
+export function unifiedSummaryLine(): string {
+  const s = useData.getState();
+  const st = learningStats();
+  return [
+    `${s.academicStages.length} academic stage(s)`,
+    `${s.courses.length} course(s)`,
+    `${s.days.length} clinical day(s)`,
+    `${s.wardRounds.length} ward round(s)`,
+    `${st.diseases} disease(s)`,
+    `${st.medicines} medicine(s)`,
+    `${st.investigations} investigation(s)`,
+    `${st.lessons} learning note(s)`,
+    `${st.questions} question(s) (${st.openQuestions} open)`,
+    `${st.revision} revision item(s) (${st.dueRevision} due)`,
+    `${s.quizzes.length} quiz(zes)`,
+    `${s.bundles.length} bundle(s)`,
+  ].join(' · ');
+}

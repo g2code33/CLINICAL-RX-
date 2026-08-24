@@ -84,6 +84,34 @@ function sortByUpdated<T extends { updatedAt: number }>(arr: T[]): T[] {
 // Maps a module to its array key on the store. Most are simply `module + 's'`,
 // but irregular plurals (wardEntry -> wardEntries) must be explicit, otherwise
 // saves would silently write to a non-existent `wardEntrys` key.
+/**
+ * Resolve the current academic context straight from state.
+ * Computed inline (rather than importing services/academic) because that
+ * module imports this store — this keeps the dependency one-directional.
+ */
+function currentAcademicStamp(state: DataStore): Record<string, string> | null {
+  const profile = state.profile;
+  const stage =
+    state.academicStages.find((s) => s.status === 'current') ??
+    state.academicStages.find((s) => s.id === profile?.currentStageId) ??
+    null;
+  if (!stage && !profile?.academicYear) return null;
+  const link: Record<string, string> = {};
+  if (stage?.id) link.stageId = stage.id;
+  if (stage?.level) link.level = stage.level;
+  const year = stage?.academicYear ?? profile?.academicYear;
+  if (year) link.academicYear = year;
+  const periodId = profile?.currentPeriodId;
+  if (periodId && state.academicPeriods.some((p) => p.id === periodId)) link.periodId = periodId;
+  return Object.keys(link).length ? link : null;
+}
+
+/** Modules that carry academic context so data links across the journey. */
+const STAMPED_MODULES: ModuleType[] = [
+  'day', 'disease', 'medicine', 'investigation', 'question', 'lesson',
+  'revision', 'bundle', 'quiz', 'wardRound',
+];
+
 const LIST_KEY: Partial<Record<ModuleType, keyof DataStore>> = {
   wardRound: 'wardRounds',
   wardEntry: 'wardEntries',
@@ -92,6 +120,9 @@ const LIST_KEY: Partial<Record<ModuleType, keyof DataStore>> = {
   academicPeriod: 'academicPeriods',
   course: 'courses',
   activity: 'activities',
+  // 'quiz' + 's' = 'quizs', which is not a key on the store — without this the
+  // quizzes array silently never updated after a save.
+  quiz: 'quizzes',
 };
 
 function listKeyFor(module: ModuleType, state: Record<string, unknown>): keyof DataStore {
@@ -260,7 +291,15 @@ export const useData = create<DataStore>((set, get) => ({
     // Records applied from a sync must keep the server's updatedAt and must
     // NOT be re-enqueued, otherwise every pull pushes everything back up and
     // the sync never converges.
-    const rec = fromSync ? { ...record } : { ...record, updatedAt: now };
+    let rec: any = fromSync ? { ...record } : { ...record, updatedAt: now };
+    // ONE LINKED DATASET: stamp the academic context (level / year / semester)
+    // onto every learning record as it is written, from wherever it was
+    // created — UI, quick add, ward rounds, importers or automation. Existing
+    // stamps are never overwritten, so history stays true after promotion.
+    if (!fromSync && STAMPED_MODULES.includes(module) && !rec.academic?.stageId) {
+      const link = currentAcademicStamp(get());
+      if (link) rec = { ...rec, academic: { ...link, ...(rec.academic ?? {}) } };
+    }
     await adapter.put(module, rec.id, rec, rec.createdAt, rec.updatedAt);
     if (!fromSync && backendConfigured()) enqueue({ op: 'upsert', module, id: rec.id, data: rec, createdAt: rec.createdAt, updatedAt: rec.updatedAt });
     set((s) => {
@@ -275,6 +314,8 @@ export const useData = create<DataStore>((set, get) => ({
     // 1) sync its conditions/medicines/investigations/lessons into the
     //    respective compartments, and
     // 2) try today's auto bundle (and the pending-AI queue).
+    // Keep the AI's app-wide memory fresh after any write.
+    import('../services/aiTools').then((m) => m.invalidateAppContext()).catch(() => {});
     if (!fromSync && module === 'day') {
       import('../services/daySync').then((m) => m.syncDayToCompartments(rec.id)).catch(() => {});
       import('../services/autoBundle').then((m) => m.processAiWhenOnline()).catch(() => {});

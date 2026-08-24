@@ -66,6 +66,10 @@ export function SearchModal({ open, onClose }: { open: boolean; onClose: () => v
       ...s.days.filter((d) => matches(d.date, ...d.conditions, ...d.medicines)).map((d) => ({ icon: '📋', kind: 'Day' as const, title: `Clinical Day ${d.dayNumber}`, subtitle: `${d.date} · ${d.site}`, route: '/clinical' })),
       ...s.wardRounds.filter((r) => matches(r.ward, r.date, r.focus)).map((r) => ({ icon: '🏥', kind: 'Ward round' as const, title: `${r.ward}`, subtitle: `${r.date}${r.focus ? ' · ' + r.focus : ''}`, route: `/ward-rounds?round=${r.id}` })),
       ...s.wardEntries.filter((e) => matches(e.title, e.content)).map((e) => ({ icon: '🏥', kind: 'Ward capture' as const, title: e.title || e.content.slice(0, 60), subtitle: e.title && e.content ? e.content.slice(0, 70) : 'Ward round capture', route: `/ward-rounds?round=${e.roundId}` })),
+      // PharmD-side records are part of the SAME dataset, so they are
+      // searchable from anywhere in the app.
+      ...s.academicStages.filter((a) => matches(a.name, a.academicYear, a.level)).map((a) => ({ icon: '🎓', kind: 'Academic year' as const, title: a.name, subtitle: `${a.academicYear} · ${a.status}`, route: '/archive' })),
+      ...s.courses.filter((c) => matches(c.title, c.code)).map((c) => ({ icon: '📚', kind: 'Course' as const, title: c.title, subtitle: c.code || 'Course', route: '/courses' })),
     ];
   }
 

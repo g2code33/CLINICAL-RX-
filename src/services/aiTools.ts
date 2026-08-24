@@ -2,6 +2,7 @@ import { useData } from '../stores/data';
 import { aiChat, type AiChatOpts, type AiResult } from './ai';
 import { useTasks, type TaskKind } from '../stores/tasks';
 import type { AiModuleConfig } from '../types';
+import { buildUnifiedContext } from './learning';
 
 export type AiModuleKey =
   | 'tutor'
@@ -76,10 +77,42 @@ function studentContext(): string {
   return [
     `Student: ${p?.programme ?? 'Pharmacy'} Level ${p?.level ?? '200'} at ${p?.site ?? 'clinical site'}.`,
     `Preferred explanation: ${prefs.length ? prefs.join(', ') : 'simple first, step-by-step'}.`,
-    `My data: ${s.days.length} clinical days, ${s.diseases.length} conditions, ${s.medicines.length} medicines, ${s.investigations.length} investigations, ${s.questions.length} questions (${s.questions.filter((q) => q.status === 'open').length} open).`,
     'You are a learning aid, not a replacement for the student\'s clinical supervisor or pharmacist.',
   ].join('\n');
 }
+
+/**
+ * FULL APP MEMORY for every AI call.
+ *
+ * CLINICAL Rx is ONE application with ONE dataset. The Clinical workspace and
+ * the PharmD Journey workspace are two views of the same information, so any
+ * AI module must be able to reason across all of it — academic journey,
+ * courses, clinical days, ward rounds, diseases, medicines, investigations,
+ * learning notes, questions, revision, quizzes and bundles.
+ *
+ * Built lazily and cached briefly so a burst of AI calls doesn't rebuild it
+ * repeatedly.
+ */
+let ctxCache: { text: string; ts: number } | null = null;
+
+export function fullAppContext(): string {
+  const now = Date.now();
+  if (ctxCache && now - ctxCache.ts < 4000) return ctxCache.text;
+  let text = '';
+  try {
+    text = buildUnifiedContext();
+  } catch {
+    text = ''; // never let context building break an AI call
+  }
+  ctxCache = { text, ts: now };
+  return text;
+}
+
+/** Invalidate the cache whenever data changes materially. */
+export function invalidateAppContext(): void {
+  ctxCache = null;
+}
+
 
 /**
  * Cross-section memory: recent messages from ALL the student's other chat
@@ -186,7 +219,22 @@ export async function runAiModule(
   // session's own thread is provided via opts.history, so exclude it here to
   // avoid duplication.
   const memory = buildMemoryContext(key, opts.excludeSessionId, 24);
-  const system = `You are CLINICAL Rx, a clinical learning assistant.\n${studentContext()}\n${memory ? memory + '\n' : ''}${extraContext}`.trim();
+  // ONE MEMORY: every AI module sees the student's ENTIRE app — the academic
+  // journey (PharmD workspace) and the clinical knowledge base together — so
+  // it can answer across years, courses, ward rounds, notes and revision.
+  const appData = fullAppContext();
+  const system = [
+    'You are CLINICAL Rx, a clinical learning assistant.',
+    studentContext(),
+    appData
+      ? `THE STUDENT'S COMPLETE RECORDS (one app, one memory — the PharmD Journey and Clinical workspaces are two views of this same data). Use anything here to answer, and cite what they actually recorded rather than inventing facts:\n${appData}`
+      : '',
+    memory,
+    extraContext,
+  ]
+    .filter(Boolean)
+    .join('\n\n')
+    .trim();
   // Every AI module runs in the global task store — it survives navigation
   // and exposes live progress for the Arena-style indicator.
   const label = MODULE_LABEL[key] || key;

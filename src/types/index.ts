@@ -87,6 +87,8 @@ export interface ClinicalDay extends BaseRecord {
   uncertainties: string[];
   topicsToResearch: string[];
   sample?: boolean; // true when created from demo/sample data
+  /** Academic context at the time the day was logged. */
+  academic?: AcademicLink;
 }
 
 export interface Disease extends BaseRecord, LearningMeta {
@@ -189,6 +191,7 @@ export interface Bundle extends BaseRecord {
   body: Record<string, unknown>;
   version: number;
   followUps: BundleFollowUp[];
+  academic?: AcademicLink;
 }
 
 export interface BundleFollowUp {
@@ -279,6 +282,7 @@ export interface SavedQuiz extends BaseRecord {
   durationSeconds: number;
   weekly?: boolean; // true for auto-generated weekly quizzes
   weekStart?: string; // yyyy-mm-dd Monday of the covered week
+  academic?: AcademicLink;
 }
 
 // ---- Calendar reminders (persisted, synced, desktop notifications) ----
