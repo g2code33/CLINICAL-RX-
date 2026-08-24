@@ -27,6 +27,7 @@ export function buildBackup(): string {
       academicStages: st.academicStages,
       academicPeriods: st.academicPeriods,
       courses: st.courses,
+      activities: st.activities,
     },
   };
   return JSON.stringify(data, null, 2);

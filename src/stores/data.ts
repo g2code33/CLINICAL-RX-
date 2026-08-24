@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import type {
   AcademicPeriod,
   AcademicStage,
+  ActivityEntry,
   BaseRecord,
   Course,
   Bundle,
@@ -51,6 +52,7 @@ export interface DataStore {
   academicStages: AcademicStage[];
   academicPeriods: AcademicPeriod[];
   courses: Course[];
+  activities: ActivityEntry[];
   status: string;
   removed: Array<{ module: ModuleType; record: any }>;
 
@@ -89,6 +91,7 @@ const LIST_KEY: Partial<Record<ModuleType, keyof DataStore>> = {
   academicStage: 'academicStages',
   academicPeriod: 'academicPeriods',
   course: 'courses',
+  activity: 'activities',
 };
 
 function listKeyFor(module: ModuleType, state: Record<string, unknown>): keyof DataStore {
@@ -121,6 +124,7 @@ export const useData = create<DataStore>((set, get) => ({
   academicStages: [],
   academicPeriods: [],
   courses: [],
+  activities: [],
   removed: [],
   status: 'Initializing…',
 
@@ -129,7 +133,7 @@ export const useData = create<DataStore>((set, get) => ({
     set({ status: 'Loading local data…' });
     try {
       const platform = await adapter.platform();
-      const [profiles, settingsList, days, diseases, medicines, investigations, questions, lessons, revisions, bundles, chats, quizzes, reminders, wardRounds, wardEntries, wardAnalyses, academicStages, academicPeriods, courses] =
+      const [profiles, settingsList, days, diseases, medicines, investigations, questions, lessons, revisions, bundles, chats, quizzes, reminders, wardRounds, wardEntries, wardAnalyses, academicStages, academicPeriods, courses, activities] =
         await Promise.all([
           adapter.list('profile'),
           adapter.list('settings'),
@@ -150,6 +154,7 @@ export const useData = create<DataStore>((set, get) => ({
           adapter.list('academicStage'),
           adapter.list('academicPeriod'),
           adapter.list('course'),
+          adapter.list('activity'),
         ]);
       // Defensive parse: skip any corrupt record instead of throwing, so the
       // app can never be locked on the splash screen by bad stored data.
@@ -182,6 +187,7 @@ export const useData = create<DataStore>((set, get) => ({
         academicStages: sortByUpdated(parse(academicStages)),
         academicPeriods: sortByUpdated(parse(academicPeriods)),
         courses: sortByUpdated(parse(courses)),
+        activities: sortByUpdated(parse(activities)),
         ready: true,
         status: 'Ready · ' + (hasElectronBridge() ? 'SQLite (offline)' : 'Web storage'),
       });
@@ -238,6 +244,7 @@ export const useData = create<DataStore>((set, get) => ({
       academicStage: get().academicStages,
       academicPeriod: get().academicPeriods,
       course: get().courses,
+      activity: get().activities,
     };
     return map[module] as Array<BaseRecord & Record<string, any>>;
   },

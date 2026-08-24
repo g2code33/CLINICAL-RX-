@@ -77,7 +77,13 @@ try{
   chk('switch button exists', !!toPharmd);
 
   toPharmd.dispatchEvent(new dom.window.MouseEvent('click',{bubbles:true}));
-  await new Promise(r=>setTimeout(r,1200));
+  // Splash should appear immediately on switch, then clear itself.
+  await new Promise(r=>setTimeout(r,150));
+  const splash = doc.querySelector('[role="status"]');
+  chk('splash shown during switch', !!splash && (splash.textContent||'').includes('CLINICAL Rx'));
+  chk('splash names the target workspace', !!splash && (splash.textContent||'').includes('PharmD Journey'));
+  await new Promise(r=>setTimeout(r,1400));
+  chk('splash cleared after switch', !doc.querySelector('[role="status"]'));
 
   console.log('PHARMD mode (after one click):');
   chk('navigated to journey', dom.window.location.hash.includes('/journey'));

@@ -17,7 +17,8 @@ export type ModuleType =
   | 'wardAnalysis'
   | 'academicStage'
   | 'academicPeriod'
-  | 'course';
+  | 'course'
+  | 'activity';
 
 export interface BaseRecord {
   id: string;
@@ -88,7 +89,7 @@ export interface ClinicalDay extends BaseRecord {
   sample?: boolean; // true when created from demo/sample data
 }
 
-export interface Disease extends BaseRecord {
+export interface Disease extends BaseRecord, LearningMeta {
   name: string;
   who: string;
   what: string;
@@ -104,7 +105,7 @@ export interface Disease extends BaseRecord {
   revision: { etiology: boolean; pathogenesis: boolean; clinical: boolean; diagnosis: boolean; treatment: boolean; counselling: boolean };
 }
 
-export interface Medicine extends BaseRecord {
+export interface Medicine extends BaseRecord, LearningMeta {
   name: string;
   className: string;
   mechanism: string;
@@ -119,7 +120,7 @@ export interface Medicine extends BaseRecord {
   lastSeen: string;
 }
 
-export interface Investigation extends BaseRecord {
+export interface Investigation extends BaseRecord, LearningMeta {
   name: string;
   whyRequested: string;
   result: string;
@@ -131,15 +132,20 @@ export interface Investigation extends BaseRecord {
   lastSeen: string;
 }
 
-export interface Question extends BaseRecord {
+export interface Question extends BaseRecord, LearningMeta {
   text: string;
   category: 'pharmacology' | 'pathology' | 'microbiology' | 'therapeutics' | 'clinical-pharmacy' | 'other';
   priority: 'high' | 'medium' | 'low';
-  status: 'open' | 'answered';
+  /** 'open'/'answered' are the original values; the rest were added in Phase 2. */
+  status: 'open' | 'answered' | 'researching' | 'review-later';
   answer?: string;
+  /** Explicit links to the knowledge this question is about. */
+  diseaseId?: string;
+  medicineId?: string;
+  investigationId?: string;
 }
 
-export interface Lesson extends BaseRecord {
+export interface Lesson extends BaseRecord, LearningMeta {
   title: string;
   content: string;
   date: string;
@@ -157,6 +163,11 @@ export interface RevisionItem extends BaseRecord {
   nextReview?: number; // epoch ms when it becomes due again
   failCount?: number;
   passCount?: number;
+  /** Self-rated confidence 1 (don't understand) … 5 (confident). */
+  confidence?: 1 | 2 | 3 | 4 | 5;
+  /** What this revision item points at, so it can deep-link back. */
+  sourceModule?: ModuleType;
+  sourceId?: string;
 }
 
 export type BundleType = 'auto-daily' | 'auto-weekly' | 'manual-day' | 'manual-week' | 'manual-custom' | 'merged';
@@ -404,4 +415,30 @@ export interface AcademicLink {
   stageId?: string;
   periodId?: string;
   academicYear?: string;
+  /** Denormalised for fast filtering/among archived stages. */
+  level?: string;
+  courseId?: string;
+}
+
+/**
+ * Metadata shared by every clinical-learning record (Phase 2).
+ * All optional so records created before this existed remain valid.
+ */
+export interface LearningMeta {
+  academic?: AcademicLink;
+  tags?: string[];
+  favorite?: boolean;
+  /** Free-text personal learning attached to any knowledge record. */
+  personalNotes?: string;
+  /** Soft delete — hidden from lists but recoverable. */
+  archived?: boolean;
+}
+
+/** A single entry in the user's learning activity history. */
+export interface ActivityEntry extends BaseRecord {
+  action: 'created' | 'updated' | 'answered' | 'reviewed' | 'favorited' | 'deleted';
+  module: ModuleType;
+  recordId: string;
+  label: string;
+  academic?: AcademicLink;
 }

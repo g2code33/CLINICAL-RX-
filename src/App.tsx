@@ -14,6 +14,9 @@ import { WardRounds } from './pages/WardRounds';
 import { Journey } from './pages/Journey';
 import { Archive } from './pages/Archive';
 import { Courses } from './pages/Courses';
+import { LearningOverview } from './pages/LearningOverview';
+import { LearningNotes } from './pages/LearningNotes';
+import { Favorites } from './pages/Favorites';
 import { CalendarPage } from './pages/Calendar';
 import { Diseases } from './pages/Diseases';
 import { Medicines } from './pages/Medicines';
@@ -133,6 +136,9 @@ export default function App() {
         <Route path="/journey" element={<Journey />} />
         <Route path="/archive" element={<Archive />} />
         <Route path="/courses" element={<Courses />} />
+        <Route path="/learning" element={<LearningOverview />} />
+        <Route path="/notes" element={<LearningNotes />} />
+        <Route path="/favorites" element={<Favorites />} />
         <Route path="/clinical" element={<ClinicalDays />} />
         <Route path="/ward-rounds" element={<WardRounds />} />
         <Route path="/calendar" element={<CalendarPage />} />

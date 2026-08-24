@@ -6,6 +6,20 @@ import { explainEntity, runAiModule } from '../services/aiTools';
 import type { ModuleType } from '../types';
 import { useContextMenu, ctxHandlers, type CtxItem } from './ContextMenu';
 import { copyToClipboard } from '../services/export';
+import {
+  academicLabel,
+  addToRevision,
+  applyFilter,
+  isInRevision,
+  logActivity,
+  markViewed,
+  relatedTo,
+  softDelete,
+  stampAcademic,
+  toggleFavorite,
+  type LearningFilter,
+} from '../services/learning';
+import { LearningFilterBar } from './LearningFilterBar';
 
 export interface FieldConfig {
   key: string;
@@ -40,6 +54,9 @@ export function EntityManager({ module, title, subtitle, icon, emptyText, emptyH
   const [explain, setExplain] = useState<{ rec: any; text: string; loading: boolean; error?: string } | null>(null);
   const [focusAi, setFocusAi] = useState<{ rec: any; messages: Array<{ role: 'user' | 'ai'; text: string }>; input: string; busy: boolean } | null>(null);
   const [view, setView] = useState<'cards' | 'list'>('cards');
+  const [filter, setFilter] = useState<LearningFilter>({});
+  const [formError, setFormError] = useState('');
+  const [related, setRelated] = useState<any | null>(null);
   const showMenu = useContextMenu();
 
   /** Open a focused AI chat on just this card — ask anything about it. */
@@ -87,7 +104,31 @@ export function EntityManager({ module, title, subtitle, icon, emptyText, emptyH
       icon: '📋',
       onClick: () => { void copyToClipboard(String(rec?.name ?? '')); },
     });
-    items.push({ label: 'Delete', icon: '🗑', danger: true, onClick: () => void remove(module, rec.id) });
+    items.push({
+      label: 'Related knowledge',
+      icon: '🔗',
+      onClick: () => setRelated(rec),
+    });
+    items.push({
+      label: rec.favorite ? 'Remove favourite' : 'Add to favourites',
+      icon: rec.favorite ? '★' : '☆',
+      onClick: () => void toggleFavorite(module, rec.id),
+    });
+    items.push({
+      label: isInRevision(rec.id) ? 'Already in revision' : 'Mark for revision',
+      icon: '📚',
+      onClick: () => void addToRevision(module, rec.id),
+    });
+    items.push({
+      label: 'Delete',
+      icon: '🗑',
+      danger: true,
+      onClick: () => {
+        const label = String(rec?.name ?? 'this record');
+        if (!confirm(`Delete "${label}"?\n\nThis removes the record and its direct relationships. Your unrelated learning notes are NOT deleted.`)) return;
+        void softDelete(module, rec.id);
+      },
+    });
     return items;
   }
 
@@ -101,16 +142,26 @@ export function EntityManager({ module, title, subtitle, icon, emptyText, emptyH
 
   async function persist() {
     if (!editing) return;
+    const name = String(editing.name ?? editing.title ?? editing.text ?? '').trim();
+    if (!name) {
+      setFormError('Give this a name before saving.');
+      return;
+    }
     const now = Date.now();
-    const rec = { ...editing, updatedAt: now, createdAt: editing.createdAt || now };
+    // Stamp the academic context on creation; existing records keep theirs so
+    // history is never rewritten when the student is promoted.
+    const rec = stampAcademic({ ...editing, updatedAt: now, createdAt: editing.createdAt || now });
     await save(module, rec);
+    await logActivity(creating ? 'created' : 'updated', module, rec.id, name);
+    setFormError('');
     setEditing(null);
     setCreating(false);
   }
 
+  const scoped = applyFilter(all as any[], filter);
   const filtered = query
-    ? all.filter((r) => (searchKeys ?? ['name']).some((k) => String(r[k] ?? '').toLowerCase().includes(query.toLowerCase())))
-    : all;
+    ? scoped.filter((r) => (searchKeys ?? ['name']).some((k) => String(r[k] ?? '').toLowerCase().includes(query.toLowerCase())))
+    : scoped;
 
   return (
     <div>
@@ -139,6 +190,10 @@ export function EntityManager({ module, title, subtitle, icon, emptyText, emptyH
         </div>
       </div>
 
+      <div className="mb-4">
+        <LearningFilterBar value={filter} onChange={setFilter} compact />
+      </div>
+
       {filtered.length === 0 ? (
         <EmptyState icon={icon} title={emptyText} hint={emptyHint} actions={emptyActions} />
       ) : view === 'cards' ? (
@@ -165,7 +220,9 @@ export function EntityManager({ module, title, subtitle, icon, emptyText, emptyH
                     🤖 Explain
                   </button>
                 )}
-                <button className="btn-secondary !py-1 text-xs" onClick={(e) => { e.stopPropagation(); openEdit(rec); }}>Edit</button>
+                <button className="btn-secondary !py-1 text-xs" onClick={(e) => { e.stopPropagation(); markViewed(module, rec.id, String(rec?.name ?? '')); openEdit(rec); }}>Edit</button>
+                <button className="btn-ghost !px-2 !py-1 text-xs" title="Related knowledge" onClick={(e) => { e.stopPropagation(); setRelated(rec); }}>🔗</button>
+                <button className="btn-ghost !px-2 !py-1 text-xs" title={rec.favorite ? 'Remove favourite' : 'Add to favourites'} onClick={(e) => { e.stopPropagation(); void toggleFavorite(module, rec.id); }}>{rec.favorite ? '★' : '☆'}</button>
                 <button className="btn-ghost !py-1 text-xs hover:text-red-500" onClick={(e) => { e.stopPropagation(); void remove(module, rec.id); }}>Delete</button>
               </div>
             </div>
@@ -196,7 +253,14 @@ export function EntityManager({ module, title, subtitle, icon, emptyText, emptyH
         </div>
       )}
 
-      <Modal open={!!editing} onClose={() => { setEditing(null); setCreating(false); }} title={creating ? `Add ${title}` : `Edit ${title}`} wide>
+      {related && (
+        <Modal open onClose={() => setRelated(null)} title={`🔗 Related to ${related.name ?? related.title ?? ''}`} wide>
+          <RelatedPanel module={module} id={related.id} />
+        </Modal>
+      )}
+
+      <Modal open={!!editing} onClose={() => { setEditing(null); setCreating(false); setFormError(''); }} title={creating ? `Add ${title}` : `Edit ${title}`} wide>
+        {formError && <div className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950 dark:text-red-300">{formError}</div>}
         {editing && (
           <div className="space-y-4">
             {fields.map((f) => (
@@ -335,6 +399,61 @@ function FieldRow({ field, value, onChange }: { field: FieldConfig; value: any; 
     <div>
       <label className="label">{field.label}</label>
       <input className={inputCls} value={value ?? ''} placeholder={field.placeholder} onChange={(e) => onChange(e.target.value)} />
+    </div>
+  );
+}
+
+
+/**
+ * Related knowledge for a record — the relationship hub.
+ * Links are resolved from the existing name-based fields AND explicit ids, so
+ * they work for records created long before relationships existed.
+ */
+export function RelatedPanel({ module, id }: { module: ModuleType; id: string }) {
+  const rel = relatedTo(module, id);
+  const groups: Array<[string, string, any[]]> = [
+    ['💊', 'Related medicines', rel.medicines],
+    ['🦠', 'Related diseases', rel.diseases],
+    ['🧪', 'Related investigations', rel.investigations],
+    ['💡', 'Related learning', rel.lessons],
+    ['❓', 'Related questions', rel.questions],
+  ];
+  const total = groups.reduce((n, g) => n + g[2].length, 0);
+
+  if (!total) {
+    return (
+      <p className="text-sm text-slate-500 dark:text-slate-400">
+        Nothing linked yet. Relationships build automatically as you record medicines, conditions and investigations that
+        mention each other — or link them explicitly when adding a question.
+      </p>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {groups.map(([icon, label, list]) =>
+        list.length ? (
+          <div key={label}>
+            <div className="label">
+              {icon} {label} ({list.length})
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {list.map((r: any) => (
+                <span
+                  key={r.id}
+                  className="rounded-lg bg-slate-100 px-2.5 py-1 text-sm text-slate-700 dark:bg-slate-700 dark:text-slate-200"
+                  title={academicLabel(r)}
+                >
+                  {r.name ?? r.title ?? r.text}
+                </span>
+              ))}
+            </div>
+          </div>
+        ) : null
+      )}
+      <p className="border-t border-slate-200 pt-2 text-[11px] text-slate-400 dark:border-slate-700">
+        These connections are what future AI, ward rounds and bundlers will use to reason across your knowledge.
+      </p>
     </div>
   );
 }

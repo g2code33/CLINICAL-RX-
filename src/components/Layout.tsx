@@ -3,7 +3,7 @@ import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import type { ReactNode } from 'react';
 import pkg from '../../package.json';
 import { useData } from '../stores/data';
-import { useUi } from '../stores/ui';
+import { useUi, type AppMode } from '../stores/ui';
 import { SearchModal } from './SearchModal';
 import { SyncIndicator } from './SyncIndicator';
 import { ShortcutHelp } from './ShortcutHelp';
@@ -13,13 +13,16 @@ import { UndoToast } from './UndoToast';
 import { ContextMenuProvider } from './ContextMenu';
 import { TaskIndicator } from './TaskIndicator';
 import { NotificationBanner } from './NotificationBanner';
+import { ModeSplash } from './ModeSplash';
 
 const APP_VERSION = pkg.version;
 
 // ---- CLINICAL workspace navigation (unchanged) ----
 const NAV = [
   { to: '/', icon: '🏠', label: 'Home' },
-  { to: '/clinical', icon: '📋', label: 'Clinical Days' },
+  { to: '/learning', icon: '📋', label: 'Clinical Learning' },
+  { to: '/notes', icon: '💡', label: 'Learning Notes' },
+  { to: '/clinical', icon: '📆', label: 'Clinical Days' },
   { to: '/ward-rounds', icon: '🏥', label: 'Ward Rounds' },
   { to: '/calendar', icon: '📅', label: 'Calendar' },
   { to: '/diseases', icon: '🦠', label: 'Diseases' },
@@ -80,11 +83,16 @@ export function Layout({ children }: { children: ReactNode }) {
   const bottomItems = isPharmd ? PHARMD_BOTTOM_NAV : BOTTOM_NAV;
   const workspaceName = isPharmd ? 'PharmD Journey' : 'Clinical Companion';
 
+  // Splash shown over the shell while the workspace swaps.
+  const [splash, setSplash] = useState<AppMode | null>(null);
+
   function switchMode() {
+    if (splash) return; // ignore double-clicks mid-transition
     const next = toggleAppMode();
     setDrawerOpen(false);
-    // Land on the new workspace's home so the user is never left on a page
-    // that doesn't belong to the mode they just switched into.
+    // Raise the splash first so the nav/page swap happens behind it, then
+    // land on the new workspace's home.
+    setSplash(next);
     navigate(next === 'pharmd' ? '/journey' : '/');
   }
 
@@ -437,6 +445,7 @@ export function Layout({ children }: { children: ReactNode }) {
         <UndoToast />
         <TaskIndicator />
         <NotificationBanner />
+        {splash && <ModeSplash mode={splash} onDone={() => setSplash(null)} />}
       </div>
     </ContextMenuProvider>
   );

@@ -64,3 +64,19 @@ body {
   .app-shell { height: 100dvh; }
 }
 
+
+/* ---- Workspace switch splash ---- */
+@keyframes splashPop {
+  0%   { transform: scale(0.7); opacity: 0; }
+  60%  { transform: scale(1.06); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+@keyframes splashBar {
+  from { transform: scaleX(0); }
+  to   { transform: scaleX(1); }
+}
+/* Respect users who prefer reduced motion: show the splash, skip the motion. */
+@media (prefers-reduced-motion: reduce) {
+  .animate-\[splashPop_500ms_cubic-bezier\(0\.34\2c 1\.56\2c 0\.64\2c 1\)\],
+  .animate-\[splashBar_800ms_ease-out\] { animation: none !important; }
+}

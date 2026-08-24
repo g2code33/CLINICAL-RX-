@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Modal } from './Modal';
 import { useData } from '../stores/data';
 import { newDisease, newMedicine, newInvestigation, newQuestion, todayIso } from '../services/defaults';
+import { logActivity, stampAcademic } from '../services/learning';
 
 type Kind = 'disease' | 'medicine' | 'investigation' | 'question' | 'lesson' | null;
 
@@ -29,36 +30,43 @@ export function QuickAdd({ open, onClose }: { open: boolean; onClose: () => void
       : null;
 
     if (kind === 'disease') {
-      const d = newDisease(text);
+      const d = stampAcademic(newDisease(text));
       await save('disease', d);
+      await logActivity('created', 'disease', d.id, text);
       if (day) {
         if (!day.conditions.includes(text)) day.conditions.push(text);
         day.updatedAt = Date.now();
         await save('day', day);
       }
     } else if (kind === 'medicine') {
-      const m = newMedicine(text);
+      const m = stampAcademic(newMedicine(text));
       await save('medicine', m);
+      await logActivity('created', 'medicine', m.id, text);
       if (day) {
         if (!day.medicines.includes(text)) day.medicines.push(text);
         day.updatedAt = Date.now();
         await save('day', day);
       }
     } else if (kind === 'investigation') {
-      const i = newInvestigation(text);
+      const i = stampAcademic(newInvestigation(text));
       await save('investigation', i);
+      await logActivity('created', 'investigation', i.id, text);
       if (day) {
         if (!day.investigations.includes(text)) day.investigations.push(text);
         day.updatedAt = Date.now();
         await save('day', day);
       }
     } else if (kind === 'question') {
-      await save('question', newQuestion(text));
+      const q = stampAcademic(newQuestion(text));
+      await save('question', q);
+      await logActivity('created', 'question', q.id, text);
     } else if (kind === 'lesson') {
-      await save('lesson', {
+      const lesson = stampAcademic({
         id: crypto.randomUUID ? crypto.randomUUID() : 'l' + Date.now(),
         createdAt: Date.now(), updatedAt: Date.now(), title: text, content: text, date: todayIso(), important: false,
-      });
+      } as any);
+      await save('lesson', lesson);
+      await logActivity('created', 'lesson', lesson.id, text);
       if (day) {
         if (!day.lessons.includes(text)) day.lessons.push(text);
         day.updatedAt = Date.now();

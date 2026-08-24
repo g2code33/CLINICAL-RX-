@@ -194,7 +194,7 @@ export function SettingsPage() {
       // Ward rounds + academic journey (added in later versions; older
       // backups simply have no such records and are skipped safely).
       await put('wardRound', recs.wardRounds); await put('wardEntry', recs.wardEntries); await put('wardAnalysis', recs.wardAnalyses);
-      await put('academicStage', recs.academicStages); await put('academicPeriod', recs.academicPeriods); await put('course', recs.courses);
+      await put('academicStage', recs.academicStages); await put('academicPeriod', recs.academicPeriods); await put('course', recs.courses); await put('activity', recs.activities);
       await st.init(); setStatus('✓ Backup imported');
     } catch (e: any) { setStatus('⚠️ Import failed: ' + e.message); }
   }
@@ -202,7 +202,7 @@ export function SettingsPage() {
   async function clearAll() {
     if (!confirm('Delete ALL local data? This cannot be undone.')) return;
     const st = useData.getState();
-    const modules: any[] = ['day', 'disease', 'medicine', 'investigation', 'question', 'lesson', 'revision', 'bundle', 'chat', 'quiz', 'reminder', 'wardRound', 'wardEntry', 'wardAnalysis', 'academicStage', 'academicPeriod', 'course', 'profile', 'settings'];
+    const modules: any[] = ['day', 'disease', 'medicine', 'investigation', 'question', 'lesson', 'revision', 'bundle', 'chat', 'quiz', 'reminder', 'wardRound', 'wardEntry', 'wardAnalysis', 'academicStage', 'academicPeriod', 'course', 'activity', 'profile', 'settings'];
     for (const m of modules) { const items = await st.adapter.list(m); for (const it of items) await st.adapter.remove(m, it.id); }
     // Also drop the offline sync queue and the question bank so no stale
     // operations or questions survive a full reset.
