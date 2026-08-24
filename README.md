@@ -301,7 +301,7 @@ warns if it detects anything identifying.
 
 ## 🗺️ Roadmap & Changelog
 
-**Current status:** v1.5.0 — core + AI + bundles + sync + Ward Rounds + desktop/web/Android builds all functional.
+**Current status:** v1.6.0 — production ready. Core + AI + bundles + sync + Ward Rounds + PharmD Journey + portfolio + security hardening + accessibility, with desktop/web/Android builds all functional.
 
 ### Already built
 - ✅ Full offline-first core (Clinical Days, Diseases, Medicines, Investigations, Questions, Revision, Progress)
