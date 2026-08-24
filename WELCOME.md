@@ -9,6 +9,7 @@
 1. **Install** the app (Windows `.exe`, Linux `.deb`/`.AppImage`) or open the web version.
 2. On first launch, create a **local profile** — no account, no email, no internet required. Pick your programme, level and clinical site.
 3. Tap **＋ Start Today's Clinical Log** and type a few things you saw today (e.g. "Malaria", "Artemether").
+   On a ward round? Tap **🏥 Ward Rounds → ＋ Start Ward Round** instead and capture as you go.
 4. That's it — the app starts building your streak, your knowledge bank, and your revision plan.
 
 > 💡 New to it? Use **🧪 Load sample data** on the Diseases/Medicines pages (or in Settings) to fill the app with realistic example records so you can explore every feature immediately.
@@ -21,6 +22,7 @@
 |---|---|
 | **🏠 Home / Dashboard** | Your streak, stats, today's log, quick capture and daily bundle — the command center |
 | **📋 Clinical Days** | Log each clinical day: conditions seen, medicines prescribed, investigations, lessons learned. Export any day as **PDF, Markdown or CSV** |
+| **🏥 Ward Rounds** | Capture what you learn **during** a ward round in a couple of taps — learning points, medicines, conditions, investigations, questions and notes. AI analyses the whole round afterwards. Works completely offline |
 | **📅 Calendar** | See your logged days on a calendar, plus **reminders** you set (they fire as in-app broadcast + desktop notification + sound) |
 | **🦠 Diseases / Conditions** | Capture conditions using the **WHO → WHAT → WHERE → WHY → HOW → DT** framework — symptoms, linked medicines, clinical reasoning, encounters |
 | **💊 Medicines** | Build a personal formulary: class, mechanism, indications, dosage, routes, contraindications, adverse effects, interactions, counselling points |
@@ -53,6 +55,57 @@ Every module has its own provider, API key and model. Configure once in Settings
 **Providers supported:** OpenAI · Anthropic · OpenRouter · NVIDIA NIM · Custom (any OpenAI-compatible endpoint). Model picker built in, with a 🔌 **Test key** button.
 
 > 🔐 **Privacy first:** AI only runs when *you* trigger it, with *your* key. All other features work fully offline.
+
+---
+
+## 🏥 Ward Rounds — Capture While You're On The Round
+
+Ward rounds move fast. This module is built so recording something takes a
+couple of taps, even standing in a corridor with no signal.
+
+**How it works**
+
+1. **🏥 Ward Rounds → ＋ Start Ward Round** — pick the ward (or type your own),
+   the date, and optionally a focus like *Pharmacotherapy*. That's it.
+2. **Capture as you go.** Tap one of six buttons and type:
+
+   💡 Learning Point · 💊 Medicine · 🦠 Condition · 🧪 Investigation · ❓ Question · 📝 Quick Note
+
+   Press `Ctrl/⌘ + Enter` to save and immediately start the next one.
+3. **Finish Ward Round** when you're done. You get a summary of everything you
+   captured, and it's already saved.
+
+**Don't want to categorise anything?** Use **🧠 Just write it** and type the way
+you'd talk:
+
+> *"I learned that amlodipine is a calcium channel blocker and can cause ankle edema."*
+
+AI suggests a structure (medicine: Amlodipine, class: CCB, adverse effect: ankle
+edema) and you **Accept**, **Edit** or **Reject** it. Your original sentence is
+never changed, and you can always just save it as written.
+
+**Afterwards**
+
+- **🤖 Analyze Ward Round** gives you a summary, key learning points, your
+  knowledge gaps, follow-up questions, revision recommendations, connections
+  between the disease/drug/test, and which topics need deeper study.
+- **🤖 Ask AI** on any single capture — explain a mechanism, answer a question,
+  or go deeper. Choose *Explain simply · Explain at my level · Go deeper ·
+  Teach me · Quiz me*.
+- Everything you captured flows into **Medicines, Diseases, Investigations,
+  Questions and Lessons** automatically, and into your **daily and weekly
+  bundles**.
+- **📦 Create Bundle** from one round, several rounds, a date range, or just the
+  captures you tick.
+
+**No internet? No problem.** Starting, capturing, editing, deleting, searching
+and finishing all work completely offline. If AI can't be reached, the analysis
+is queued and runs by itself the moment you're back online — you'll never lose a
+round because AI was unavailable.
+
+> 🔒 **Never record patient details.** There's deliberately nowhere to put a
+> name, hospital number or contact detail. Record what *you* learned — not who
+> you saw.
 
 ---
 

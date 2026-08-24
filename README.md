@@ -20,6 +20,10 @@ online. Built around the **WHO → WHAT → WHERE → WHY → HOW → DT** learn
 - **Home dashboard** — clinical day count, conditions, medicines, investigations, today's log, quick actions
 - **⚡ Quick Capture** — record a disease / medicine / investigation / question / lesson in ≤3 taps
 - **Clinical Days** — per-day log: conditions, medicines, investigations, observations, lessons, uncertainties, topics to research
+- **🏥 Ward Rounds** — capture clinical learning *during* an active round in a couple of taps:
+  six capture types (learning point / medicine / condition / investigation / question / note),
+  live counts, natural-language capture with accept-edit-reject AI suggestions, a 7-section
+  AI round analysis, history + search, and one-tap bundling. Fully offline; **no patient data**
 - **Diseases / Conditions** — WHO → WHAT → WHERE → WHY → HOW → DT framework + linked medicines + revision coverage
 - **Medicines** — class, mechanism, indications, dosage, routes, contraindications, adverse effects, interactions, counselling
 - **Investigations / Labs** — why requested, result, reference range, interpretation, clinical significance
@@ -70,17 +74,64 @@ clinical-rx/
 │   ├── main.tsx           # React entry
 │   ├── App.tsx            # Router + theme + init
 │   ├── components/        # Layout, Modal, QuickAdd, EntityManager, UI helpers
-│   ├── pages/             # Dashboard, ClinicalDays, Diseases, Medicines,
+│   ├── pages/             # Dashboard, ClinicalDays, WardRounds, Diseases, Medicines,
 │   │                      # Investigations, Questions, Revision, Progress,
 │   │                      # Bundles, AiChat, Settings
 │   ├── db/                # StorageAdapter + localStorage & Electron impls
 │   ├── stores/data.ts     # Zustand data store
-│   ├── services/          # ai, bundler, export, privacy, defaults
+│   ├── services/          # ai, wardRounds, wardAi, bundler, export, privacy, defaults
 │   └── types/index.ts     # TypeScript types
 ├── .github/workflows/     # Desktop CI (Windows + Linux)
 ├── vercel.json            # Vercel web deployment config
 └── package.json
 ```
+
+---
+
+## 🏥 Ward Rounds
+
+A dedicated module for capturing clinical **learning** while you're on an active
+ward round — built to be fast enough to use standing up, and to work with no
+internet at all.
+
+```
+Start Ward Round  →  Quick Capture (×N)  →  Finish  →  saved locally
+                                                    ↓
+                          AI analyses it when online (queued if not)
+                                                    ↓
+                  daily & weekly bundlers pick it up automatically
+```
+
+**Capture types** — 💡 Learning Point · 💊 Medicine · 🦠 Condition ·
+🧪 Investigation · ❓ Question · 📝 Quick Note
+
+| Feature | What it does |
+| --- | --- |
+| **Quick Capture** | One tap to pick a type, type, save. `Ctrl/⌘+Enter` saves and stays open for the next capture |
+| **Natural language** | Write freely — AI proposes a structure you can **accept, edit or reject**. "Save as written" is always available |
+| **Ask AI** | On any capture: explain a mechanism, answer a question, or go deeper. Five depths: *simple · my level · deeper · teach me · quiz me* |
+| **Round analysis** | Seven sections — summary, key learning points, knowledge gaps, follow-up questions, revision recommendations, connections (disease→pharmacology→medicine→investigation→therapeutics) and learning difficulty |
+| **History & search** | Grouped by month; search finds any medicine, condition, investigation, question or learning point across every round |
+| **Bundles** | Bundle a whole round, several rounds, a date range, or just selected captures |
+
+### Design guarantees
+
+- 🔒 **No patient data.** There is no field anywhere for a name, ID, hospital
+  number, contact detail or demographic — and a test fails the build if one is
+  ever added. You record *what you learned*, never *who you saw*.
+- ✍️ **Your words are yours.** AI never rewrites a capture. Round analysis is
+  stored in a separate record, and per-entry AI output only lands after you
+  accept it.
+- 📴 **Offline-first.** Starting, capturing, editing, deleting, searching,
+  finishing and local bundling all work with zero connectivity. If AI isn't
+  reachable the analysis is queued (`pending → processing → completed`) and
+  retried automatically when you're back online — the round is never lost.
+- 🎓 **Learning aid, not a supervisor.** AI is prompted to stay educational and
+  to point you back to approved guidelines, the formulary or your supervisor.
+
+Run the module's test suite with `npm run test:ward` (34 checks covering offline
+capture, restart persistence, compartment sync, AI queueing, search and bundle
+independence).
 
 ---
 
@@ -250,7 +301,7 @@ warns if it detects anything identifying.
 
 ## 🗺️ Roadmap & Changelog
 
-**Current status:** v1.0.0 — core + AI + bundles + sync + desktop/web builds all functional.
+**Current status:** v1.5.0 — core + AI + bundles + sync + Ward Rounds + desktop/web/Android builds all functional.
 
 ### Already built
 - ✅ Full offline-first core (Clinical Days, Diseases, Medicines, Investigations, Questions, Revision, Progress)
@@ -263,6 +314,8 @@ warns if it detects anything identifying.
 - ✅ Mobile-responsive web layout + day/bundle export (MD/PDF)
 - ✅ Online sync backend (Vercel KV) + offline queue
 - ✅ In-app updater (electron-updater, GitHub Releases) + version banner
+- ✅ **Ward Rounds module** — fast offline capture during rounds, AI round analysis,
+  per-entry Ask AI, offline AI queue, and full bundler integration
 
 ### Planned / ideas
 - ☐ Multi-device conflict resolution UI refinements
