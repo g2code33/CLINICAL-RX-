@@ -28,9 +28,118 @@ export function buildBackup(): string {
       academicPeriods: st.academicPeriods,
       courses: st.courses,
       activities: st.activities,
+
+      // ---- Phase 6 professional / career records ----
+      // These were missing from the backup entirely: a user could export a
+      // backup, reinstall, restore, and silently lose every skill, project,
+      // goal and certification they had recorded. Found in the Phase 10 audit.
+      clinicalExperiences: st.clinicalExperiences,
+      skills: st.skills,
+      achievements: st.achievements,
+      certifications: st.certifications,
+      projects: st.projects,
+      research: st.research,
+      leadership: st.leadership,
+      goals: st.goals,
     },
   };
   return JSON.stringify(data, null, 2);
+}
+
+/**
+ * Every module a backup carries, paired with the key it uses in the file.
+ * Restoring walks this list, so adding a module to buildBackup() and here is
+ * all that is needed to keep export and import in step.
+ */
+const BACKUP_MODULES: Array<[module: string, key: string]> = [
+  ['day', 'days'],
+  ['disease', 'diseases'],
+  ['medicine', 'medicines'],
+  ['investigation', 'investigations'],
+  ['question', 'questions'],
+  ['lesson', 'lessons'],
+  ['revision', 'revisions'],
+  ['bundle', 'bundles'],
+  ['chat', 'chats'],
+  ['quiz', 'quizzes'],
+  ['reminder', 'reminders'],
+  ['wardRound', 'wardRounds'],
+  ['wardEntry', 'wardEntries'],
+  ['wardAnalysis', 'wardAnalyses'],
+  ['academicStage', 'academicStages'],
+  ['academicPeriod', 'academicPeriods'],
+  ['course', 'courses'],
+  ['activity', 'activities'],
+  ['clinicalExperience', 'clinicalExperiences'],
+  ['skill', 'skills'],
+  ['achievement', 'achievements'],
+  ['certification', 'certifications'],
+  ['project', 'projects'],
+  ['research', 'research'],
+  ['leadership', 'leadership'],
+  ['goal', 'goals'],
+];
+
+export interface RestoreOutcome {
+  ok: boolean;
+  restored: number;
+  skipped: string[];
+  message: string;
+}
+
+/**
+ * Restore a backup file.
+ *
+ * Extracted from the Settings page so it can be tested and reused (the only
+ * copy used to live inside a React event handler).
+ *
+ * §45 — data safety: this MERGES rather than wiping. Records in the backup
+ * overwrite same-id records; anything present locally but absent from the
+ * backup is left alone. A restore can therefore never be worse than a no-op.
+ * Modules unknown to this version are skipped rather than aborting the whole
+ * restore, so a backup from a newer build still restores what it can.
+ */
+export async function restoreBackup(json: string): Promise<RestoreOutcome> {
+  let data: any;
+  try {
+    data = JSON.parse(json);
+  } catch {
+    return { ok: false, restored: 0, skipped: [], message: 'That file is not valid JSON.' };
+  }
+  if (!data || data.app !== 'clinical-rx') {
+    return { ok: false, restored: 0, skipped: [], message: 'That file is not a CLINICAL Rx backup.' };
+  }
+
+  const recs = data.records ?? {};
+  const st = useData.getState();
+  let restored = 0;
+  const skipped: string[] = [];
+
+  const put = async (module: string, list: any) => {
+    if (!Array.isArray(list)) return;
+    for (const r of list) {
+      if (!r || typeof r !== 'object' || !r.id) continue; // never write malformed rows
+      try {
+        await st.adapter.put(module as any, r.id, r, r.createdAt ?? Date.now(), r.updatedAt ?? Date.now());
+        restored++;
+      } catch {
+        skipped.push(`${module}:${r.id}`);
+      }
+    }
+  };
+
+  if (recs.profile) await put('profile', [recs.profile]);
+  if (recs.settings) await put('settings', [recs.settings]);
+  for (const [module, key] of BACKUP_MODULES) await put(module, recs[key]);
+
+  await st.init();
+
+  return {
+    ok: true,
+    restored,
+    skipped,
+    message: `Restored ${restored} record(s).${skipped.length ? ` ${skipped.length} could not be read and were skipped.` : ''}`,
+  };
 }
 
 /** Trigger a backup file download. */

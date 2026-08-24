@@ -195,21 +195,15 @@ export function SettingsPage() {
   }
 
   async function importBackup(file: File) {
+    // Restore logic lives in services/backup so it is testable and shared;
+    // this page only handles the file input and the status message.
+    const { restoreBackup } = await import('../services/backup');
     try {
-      const text = await file.text(); const data = JSON.parse(text);
-      if (data.app !== 'clinical-rx') throw new Error('Not a CLINICAL Rx backup');
-      const recs = data.records; const st = useData.getState();
-      const put = async (module: any, list: any) => { for (const r of list ?? []) await st.adapter.put(module, r.id, r, r.createdAt, r.updatedAt); };
-      await put('profile', [recs.profile]); await put('settings', [recs.settings]);
-      await put('day', recs.days); await put('disease', recs.diseases); await put('medicine', recs.medicines);
-      await put('investigation', recs.investigations); await put('question', recs.questions);
-      await put('lesson', recs.lessons); await put('revision', recs.revisions); await put('bundle', recs.bundles); await put('chat', recs.chats); await put('quiz', recs.quizzes); await put('reminder', recs.reminders);
-      // Ward rounds + academic journey (added in later versions; older
-      // backups simply have no such records and are skipped safely).
-      await put('wardRound', recs.wardRounds); await put('wardEntry', recs.wardEntries); await put('wardAnalysis', recs.wardAnalyses);
-      await put('academicStage', recs.academicStages); await put('academicPeriod', recs.academicPeriods); await put('course', recs.courses); await put('activity', recs.activities);
-      await st.init(); setStatus('✓ Backup imported');
-    } catch (e: any) { setStatus('⚠️ Import failed: ' + e.message); }
+      const result = await restoreBackup(await file.text());
+      setStatus(result.ok ? `✓ ${result.message}` : `⚠️ ${result.message}`);
+    } catch (e: any) {
+      setStatus('⚠️ Import failed: ' + (e?.message ?? 'unknown error') + ' — your existing data was not changed.');
+    }
   }
 
   async function clearAll() {
