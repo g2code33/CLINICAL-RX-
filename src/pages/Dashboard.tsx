@@ -4,6 +4,7 @@ import { useData } from '../stores/data';
 import { StatCard, EmptyState } from '../components/ui';
 import { QuickAdd } from '../components/QuickAdd';
 import { CloudSyncPrompt } from '../components/CloudSyncPrompt';
+import { AiHomePanel } from '../components/AiHomePanel';
 import { newDay, todayIso } from '../services/defaults';
 import { computeStreak } from '../services/streaks';
 import { countDue } from '../services/srs';
@@ -158,8 +159,10 @@ export function Dashboard() {
         </button>
       )}
 
+      <AiHomePanel />
+
       <div className="grid gap-4 lg:grid-cols-2">
-        <button className="card flex flex-wrap items-center gap-3 text-left transition-colors hover:border-brand-400" onClick={() => navigate('/ai')}>
+        <button className="card flex flex-wrap items-center gap-3 text-left transition-colors hover:border-brand-400" onClick={() => navigate('/ai-capture')}>
           <div className="flex-1 min-w-52">
             <h2 className="font-semibold">🗣 Capture by typing</h2>
             <p className="text-xs text-slate-400">Describe your day naturally — AI extracts diseases, medicines, investigations &amp; lessons for you.</p>

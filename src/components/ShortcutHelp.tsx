@@ -23,7 +23,8 @@ export function ShortcutHelp() {
       <div className="space-y-4 text-sm">
         <div>
           <div className="label mb-2">Global</div>
-          <ShortcutRow keys={['Ctrl/⌘+K']} desc="Global search" />
+          <ShortcutRow keys={['Ctrl/⌘+K']} desc="Command bar — navigate, search records, ask AI" />
+          <ShortcutRow keys={['Ctrl/⌘+Shift+F']} desc="Global search" />
           <ShortcutRow keys={['Ctrl/⌘+N']} desc="Quick capture (today's log)" />
           <ShortcutRow keys={['Ctrl/⌘+,']} desc="Settings" />
           <ShortcutRow keys={['?']} desc="Show this help" />

@@ -49,6 +49,29 @@ export interface AiModuleConfig {
   apiKey: string;
   model: string;
   baseUrl?: string;
+  /** Cloud / local / automatic execution preference for THIS module. */
+  mode?: 'auto' | 'cloud' | 'local';
+  temperature?: number;
+  /** Extra persona instructions appended to the module's system prompt. */
+  instructions?: string;
+  /** Local model identifier when mode uses the local runtime. */
+  localModel?: string;
+}
+
+/** One entry in the AI activity log. Never contains API keys. */
+export interface AiLogEntry {
+  id: string;
+  ts: number;
+  module: string;
+  runtime: 'cloud' | 'local' | 'none';
+  provider?: string;
+  model?: string;
+  ok: boolean;
+  durationMs: number;
+  approxTokens?: number;
+  error?: string;
+  /** How many knowledge records were retrieved for the request. */
+  contextRecords?: number;
 }
 
 export interface Settings extends BaseRecord {

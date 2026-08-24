@@ -532,8 +532,29 @@ export function contextForRecord(module: ModuleType | string, id: string): Recor
       /* ignore */
     }
 
-    // Ward rounds that reference this record, plus its revision state.
     const s = useData.getState();
+
+    // A ward round's OWN captured entries are the heart of "what did I learn
+    // during that round?" — without this the round looks empty to the AI.
+    if (module === 'wardRound') {
+      const entrySrc = getSource('wardEntry');
+      if (entrySrc) {
+        const mine = new Set(s.wardEntries.filter((e) => e.roundId === id).map((e) => e.id));
+        for (const r of entrySrc.list()) if (mine.has(r.id)) related.push(r);
+      }
+    }
+
+    // Conversely, a ward entry should carry its parent round.
+    if (module === 'wardEntry') {
+      const parent = s.wardEntries.find((e) => e.id === id)?.roundId;
+      const roundSrc = getSource('wardRound');
+      if (parent && roundSrc) {
+        const r = roundSrc.list().find((x) => x.id === parent);
+        if (r) related.push(r);
+      }
+    }
+
+    // Ward rounds that reference this record, plus its revision state.
     const roundIds = new Set(
       s.wardEntries.filter((e) => e.linkedRecordId === id).map((e) => e.roundId)
     );

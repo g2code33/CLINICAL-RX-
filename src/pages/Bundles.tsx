@@ -17,6 +17,7 @@ import { BundleCreator } from '../components/BundleCreator';
 import { bundleToMarkdown, bundleToJson, bundleToPdf, downloadText, copyToClipboard } from '../services/export';
 import { scanForPhi, privacyWarning } from '../services/privacy';
 import { aiChat } from '../services/ai';
+import { aiEnhancementAvailable, enrichBundleWithAi } from '../services/bundleEngine';
 import { CloudSyncPrompt } from '../components/CloudSyncPrompt';
 import { ViewToggle } from '../components/ViewToggle';
 import type { Bundle } from '../types';
@@ -498,6 +499,8 @@ function BundleDetail({ bundle, onClose, onOpenBundle }: { bundle: Bundle; onClo
           </div>
         )}
 
+        <BundlerAiPanel bundle={bundle} />
+
         <div>
           <h3 className="label">Summary</h3>
           <div className="whitespace-pre-wrap rounded-lg bg-slate-50 p-3 dark:bg-slate-700">{bundle.summary || 'No summary.'}</div>
@@ -604,5 +607,47 @@ function BundleDetail({ bundle, onClose, onOpenBundle }: { bundle: Bundle; onClo
         )}
       </div>
     </Modal>
+  );
+}
+
+
+/**
+ * 📦 BUNDLER AI
+ *
+ * Analyses the bundle's FROZEN SNAPSHOT — not live data — so re-running it on
+ * an old bundle still describes the period as it actually was. The AI writes
+ * only to the AI fields; the captured records are never touched.
+ */
+function BundlerAiPanel({ bundle }: { bundle: Bundle }) {
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState('');
+  const available = aiEnhancementAvailable();
+  const records = bundle.snapshot?.length ?? 0;
+
+  const run = async () => {
+    setBusy(true);
+    setMsg('Analysing the frozen snapshot…');
+    const res = await enrichBundleWithAi(bundle.id);
+    setBusy(false);
+    setMsg(res.ok ? '✅ Analysis added. Reopen the bundle to see it.' : `⚠️ ${res.error}`);
+  };
+
+  return (
+    <div className="rounded-lg border border-slate-200 p-3 text-xs dark:border-slate-700">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <strong>🤖 Bundler AI</strong>
+        <button className="btn-secondary" disabled={busy || !available || records === 0} onClick={() => void run()}>
+          {busy ? 'Analysing…' : 'Analyse this bundle'}
+        </button>
+      </div>
+      <p className="mt-1 opacity-75">
+        {records === 0
+          ? 'This bundle captured no records, so there is nothing to analyse.'
+          : available
+            ? `Reads the ${records} frozen record${records === 1 ? '' : 's'} in this snapshot — never live data — and adds a summary, key points and gaps.`
+            : 'AI is not available right now. Configure a provider in AI Settings, or install a local model to work offline.'}
+      </p>
+      {msg && <p className="mt-1">{msg}</p>}
+    </div>
   );
 }

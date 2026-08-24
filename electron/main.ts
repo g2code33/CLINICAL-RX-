@@ -1,5 +1,6 @@
-import { app, BrowserWindow, ipcMain, Notification } from 'electron';
+import { app, BrowserWindow, ipcMain, Notification, safeStorage } from 'electron';
 import path from 'node:path';
+import fs from 'node:fs';
 import { autoUpdater } from 'electron-updater';
 import { SqliteKV } from './db/database';
 
@@ -112,8 +113,110 @@ function createWindow(): BrowserWindow {
   return win;
 }
 
+/**
+ * 🔐 SECURE API KEY STORAGE
+ *
+ * API keys are NEVER kept in localStorage, in the SQLite records, in the React
+ * tree, or in the repository. They are encrypted with Electron's safeStorage,
+ * which is backed by the operating system's credential facility (DPAPI on
+ * Windows, Keychain on macOS, libsecret/kwallet on Linux), and written to a
+ * file only the current OS user account can decrypt.
+ *
+ * The renderer can SET a key, ASK WHETHER one exists, and DELETE it. It can
+ * never read one back — decryption happens in the main process only, at the
+ * moment a request is sent.
+ */
+function secretsPath() {
+  return path.join(app.getPath('userData'), 'ai-secrets.bin');
+}
+
+type SecretMap = Record<string, string>;
+
+function readSecrets(): SecretMap {
+  try {
+    if (!fs.existsSync(secretsPath())) return {};
+    const buf = fs.readFileSync(secretsPath());
+    if (!buf.length) return {};
+    if (!safeStorage.isEncryptionAvailable()) return {};
+    const json = safeStorage.decryptString(buf);
+    const parsed = JSON.parse(json);
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function writeSecrets(map: SecretMap): boolean {
+  try {
+    if (!safeStorage.isEncryptionAvailable()) return false;
+    const buf = safeStorage.encryptString(JSON.stringify(map));
+    fs.writeFileSync(secretsPath(), buf, { mode: 0o600 });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function initSecretsIpc() {
+  ipcMain.handle('secret:available', () => {
+    try {
+      return safeStorage.isEncryptionAvailable();
+    } catch {
+      return false;
+    }
+  });
+
+  // Store a key. Returns only ok/false — never echoes the value back.
+  ipcMain.handle('secret:set', (_e, account: string, value: string) => {
+    if (!account || typeof value !== 'string') return { ok: false };
+    const map = readSecrets();
+    if (value.trim()) map[account] = value;
+    else delete map[account];
+    return { ok: writeSecrets(map) };
+  });
+
+  // Existence + a masked hint only. The plaintext never crosses the bridge.
+  ipcMain.handle('secret:status', (_e, account: string) => {
+    const map = readSecrets();
+    const v = map[account];
+    if (!v) return { present: false };
+    return { present: true, hint: `••••${v.slice(-4)}`, length: v.length };
+  });
+
+  ipcMain.handle('secret:delete', (_e, account: string) => {
+    const map = readSecrets();
+    delete map[account];
+    return { ok: writeSecrets(map) };
+  });
+
+  ipcMain.handle('secret:list', () => Object.keys(readSecrets()));
+
+  /**
+   * Send an AI request using a stored key. The key is decrypted here, used for
+   * the outbound HTTPS call, and discarded — the renderer only ever sees the
+   * model's reply.
+   */
+  ipcMain.handle('secret:aiFetch', async (_e, account: string, url: string, init: any) => {
+    const map = readSecrets();
+    const key = map[account];
+    if (!key) return { ok: false, error: 'No API key is stored for this module.' };
+    try {
+      const headers: Record<string, string> = { ...(init?.headers ?? {}) };
+      for (const [h, v] of Object.entries(headers)) {
+        if (typeof v === 'string') headers[h] = v.replace('{{KEY}}', key);
+      }
+      const res = await fetch(url, { method: init?.method ?? 'POST', headers, body: init?.body });
+      const text = await res.text();
+      return { ok: res.ok, status: res.status, body: text };
+    } catch (err: any) {
+      return { ok: false, error: err?.message ?? 'Network error.' };
+    }
+  });
+}
+
 function initIpc() {
   store = new SqliteKV();
+  initSecretsIpc();
 
   ipcMain.handle('kv:list', async (_e, module: string) => {
     return store!.list(module);

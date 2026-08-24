@@ -3,6 +3,7 @@ import { emptyBundle, todayIso } from './defaults';
 import { getStage } from './academic';
 import { retrieveKnowledge, type KnowledgeRecord, type RetrieveOptions } from './intelligence';
 import { monthBounds, weekBounds } from './wardRounds';
+import { availability } from './aiOrchestrator';
 import type { Bundle, BundleSnapshotItem, BundleType } from '../types';
 
 /**
@@ -686,7 +687,96 @@ export function bundleToJsonSnapshot(b: Bundle): string {
   );
 }
 
-/** Placeholder marker for Phase 5 AI enhancement of a snapshot. */
+/**
+ * 📦 BUNDLER AI (Phase 5)
+ *
+ * AI enrichment runs over the FROZEN SNAPSHOT, never over live data — so
+ * enriching a three-month-old bundle analyses what was true when it was made.
+ * AI output is written to dedicated AI fields (summary / highlights /
+ * knowledgeGaps), leaving the captured records untouched.
+ */
 export function aiEnhancementAvailable(): boolean {
-  return false; // Phase 5
+  try {
+    return availability('bundler').effective !== 'none';
+  } catch {
+    return false;
+  }
+}
+
+/** Render a snapshot as plain text for the model. */
+export function snapshotToText(bundle: Bundle): string {
+  const items = bundle.snapshot ?? [];
+  if (!items.length) return '';
+  const byType = new Map<string, BundleSnapshotItem[]>();
+  for (const it of items) {
+    const list = byType.get(it.sourceType) ?? [];
+    list.push(it);
+    byType.set(it.sourceType, list);
+  }
+  const lines: string[] = [`PERIOD: ${bundle.periodStart} → ${bundle.periodEnd}`, `RECORDS: ${items.length}`, ''];
+  for (const [type, list] of byType) {
+    lines.push(`## ${type.toUpperCase()} (${list.length})`);
+    for (const it of list) {
+      lines.push(`- ${it.title}${it.date ? ` [${it.date}]` : ''}${it.summary ? `: ${it.summary}` : ''}`);
+    }
+    lines.push('');
+  }
+  return lines.join('\n');
+}
+
+export interface EnrichResult {
+  ok: boolean;
+  error?: string;
+  bundle?: Bundle;
+}
+
+/**
+ * Enrich one bundle with AI analysis of its snapshot.
+ * Returns ok:false with a clear reason when AI is unavailable — it never
+ * invents a summary and never mutates the frozen records.
+ */
+export async function enrichBundleWithAi(bundleId: string): Promise<EnrichResult> {
+  const st = useData.getState();
+  const bundle = st.bundles.find((b) => b.id === bundleId);
+  if (!bundle) return { ok: false, error: 'Bundle not found.' };
+
+  const text = snapshotToText(bundle);
+  if (!text) return { ok: false, error: 'This bundle captured no records, so there is nothing to analyse.' };
+
+  const { analyseSnapshot } = await import('./aiService');
+  const res = await analyseSnapshot(text, `${bundle.periodStart} → ${bundle.periodEnd}`);
+  if (!res.ok || !res.analysis) {
+    // Keep the bundle usable and remember to retry when AI comes back.
+    st.save('bundle', { ...bundle, aiPending: true } as any);
+    return { ok: false, error: res.error ?? 'AI analysis failed.' };
+  }
+
+  const a = res.analysis;
+  st.save('bundle', {
+    ...bundle,
+    summary: a.summary,
+    highlights: a.key_points,
+    knowledgeGaps: a.weak_areas,
+    aiPending: false,
+    aiModel: 'ai',
+  } as any);
+
+  return { ok: true, bundle: useData.getState().bundles.find((b) => b.id === bundleId) };
+}
+
+/** Enrich every bundle still waiting for AI. Safe to call when offline. */
+export async function enrichPendingBundles(limit = 5): Promise<{ done: number; failed: number }> {
+  if (!aiEnhancementAvailable()) return { done: 0, failed: 0 };
+  const pending = useData
+    .getState()
+    .bundles.filter((b) => b.aiPending && (b.snapshot?.length ?? 0) > 0)
+    .slice(0, limit);
+  let done = 0;
+  let failed = 0;
+  for (const b of pending) {
+    const res = await enrichBundleWithAi(b.id);
+    if (res.ok) done++;
+    else failed++;
+  }
+  return { done, failed };
 }

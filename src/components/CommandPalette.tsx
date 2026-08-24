@@ -2,12 +2,28 @@ import { useMemo, useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useData } from '../stores/data';
 import { useUi } from '../stores/ui';
+import { retrieveKnowledge } from '../services/intelligence';
+
+/**
+ * ⌘K COMMAND BAR
+ *
+ * One bar, four destinations. Whatever the student types is routed to the
+ * right place:
+ *   - a page name        → NAVIGATE
+ *   - words in a record  → SEARCH their real data (deterministic, offline-safe)
+ *   - a question         → ASK AI
+ *   - a verb like "new"  → APP ACTION
+ *
+ * Records are matched through the Intelligence Layer, so the bar reaches
+ * everything in the app and keeps working with no internet and no AI.
+ */
 
 interface Command {
   id: string;
   icon: string;
   label: string;
   hint?: string;
+  group?: 'ai' | 'record' | 'action' | 'navigate';
   run: () => void;
 }
 
@@ -44,24 +60,108 @@ export function CommandPalette() {
       { id: 'revision', icon: '📚', label: 'Revision', run: go('/revision') },
       { id: 'bundles', icon: '📦', label: 'Bundles', run: go('/bundles') },
       { id: 'progress', icon: '📊', label: 'Progress', run: go('/progress') },
-      { id: 'ai', icon: '🤖', label: 'AI Chat', run: go('/ai') },
+      { id: 'ai', icon: '🤖', label: 'AI Workspace', run: go('/ai') },
       { id: 'settings', icon: '⚙️', label: 'Settings', run: go('/settings') },
       { id: 'search', icon: '🔍', label: 'Open global search', run: () => { setOpen(false); setSearchOpen(true); } },
       { id: 'newday', icon: '＋', label: 'New clinical day', run: () => { setOpen(false); navigate('/clinical'); } },
       { id: 'newround', icon: '🏥', label: 'Start ward round', run: () => { setOpen(false); navigate('/ward-rounds'); } },
-      { id: 'quickadd', icon: '⚡', label: 'Quick capture (open AI)', run: () => { setOpen(false); navigate('/ai'); } },
+      { id: 'quickadd', icon: '⚡', label: 'Capture by typing (AI extract)', run: () => { setOpen(false); navigate('/ai-capture'); } },
       { id: 'autodaily', icon: '🤖', label: 'Generate auto daily bundle', hint: 'Bundle Library', run: () => { setOpen(false); navigate('/bundles'); } },
     ];
+    for (const b of base) b.group = b.group ?? 'navigate';
     const dynamic: Command[] = [];
-    for (const d of s.diseases.slice(0, 5)) dynamic.push({ id: 'd-' + d.id, icon: '🦠', label: 'Disease: ' + d.name, hint: 'Open', run: () => { setOpen(false); navigate('/diseases'); } });
-    for (const m of s.medicines.slice(0, 5)) dynamic.push({ id: 'm-' + m.id, icon: '💊', label: 'Medicine: ' + m.name, hint: 'Open', run: () => { setOpen(false); navigate('/medicines'); } });
+    for (const d of s.diseases.slice(0, 5)) dynamic.push({ id: 'd-' + d.id, icon: '🦠', label: 'Disease: ' + d.name, hint: 'Open', group: 'record', run: () => { setOpen(false); navigate('/diseases'); } });
+    for (const m of s.medicines.slice(0, 5)) dynamic.push({ id: 'm-' + m.id, icon: '💊', label: 'Medicine: ' + m.name, hint: 'Open', group: 'record', run: () => { setOpen(false); navigate('/medicines'); } });
     return [...base, ...dynamic];
   }, [navigate, setOpen, setSearchOpen]);
 
-  const filtered = commands.filter((c) => {
+  /** Route map from a record's module to the page that shows it. */
+  const ROUTES: Record<string, string> = {
+    disease: '/diseases',
+    medicine: '/medicines',
+    investigation: '/investigations',
+    question: '/questions',
+    lesson: '/notes',
+    wardRound: '/ward-rounds',
+    wardEntry: '/ward-rounds',
+    bundle: '/bundles',
+    course: '/courses',
+    revision: '/revision',
+    quiz: '/quiz',
+    day: '/clinical',
+    academicStage: '/journey',
+  };
+
+  /**
+   * Live results from the student's real records, plus an "Ask AI" row when
+   * the input reads like a question. Retrieval is deterministic, so this list
+   * appears whether or not AI is configured.
+   */
+  const smart = useMemo<Command[]>(() => {
+    const query = q.trim();
+    if (query.length < 2) return [];
+    const out: Command[] = [];
+
+    const looksLikeQuestion =
+      /\?$/.test(query) ||
+      /^(what|why|how|when|where|which|who|explain|compare|summar|quiz|tell me)\b/i.test(query) ||
+      query.split(/\s+/).length >= 4;
+
+    if (looksLikeQuestion) {
+      out.push({
+        id: 'ask-ai',
+        icon: '🤖',
+        label: `Ask AI: "${query}"`,
+        hint: 'AI',
+        group: 'ai',
+        run: () => {
+          setOpen(false);
+          navigate(`/ai?q=${encodeURIComponent(query)}`);
+        },
+      });
+    }
+
+    try {
+      const found = retrieveKnowledge({ query, limit: 6 });
+      for (const r of found.records) {
+        out.push({
+          id: `r-${r.module}-${r.id}`,
+          icon: '📄',
+          label: r.title,
+          hint: String(r.module),
+          group: 'record',
+          run: () => {
+            setOpen(false);
+            navigate(ROUTES[String(r.module)] ?? '/');
+          },
+        });
+      }
+    } catch {
+      /* retrieval must never break the bar */
+    }
+
+    out.push({
+      id: 'full-search',
+      icon: '🔍',
+      label: `Search all records for "${query}"`,
+      hint: 'Search',
+      group: 'action',
+      run: () => {
+        setOpen(false);
+        setSearchOpen(true);
+      },
+    });
+
+    return out;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [q, navigate, setOpen, setSearchOpen]);
+
+  const matches = commands.filter((c) => {
     if (!q.trim()) return true;
     return c.label.toLowerCase().includes(q.toLowerCase()) || (c.hint ?? '').toLowerCase().includes(q.toLowerCase());
   });
+  // Smart results (AI + real records) lead; static commands follow.
+  const filtered = q.trim().length >= 2 ? [...smart, ...matches.slice(0, 6)] : matches;
 
   useEffect(() => {
     setSel(0);
@@ -79,7 +179,7 @@ export function CommandPalette() {
           <input
             ref={inputRef}
             className="w-full bg-transparent text-sm outline-none placeholder:text-slate-400"
-            placeholder="Type a command or search…"
+            placeholder="Search records, ask AI, or jump to a page…"
             value={q}
             onChange={(e) => setQ(e.target.value)}
             onKeyDown={(e) => {
@@ -92,7 +192,7 @@ export function CommandPalette() {
         </div>
         <div className="max-h-80 overflow-y-auto p-2">
           {filtered.length === 0 ? (
-            <p className="px-3 py-4 text-center text-sm text-slate-400">No commands found.</p>
+            <p className="px-3 py-4 text-center text-sm text-slate-400">Nothing matched. Try different words.</p>
           ) : (
             filtered.map((c, i) => (
               <button

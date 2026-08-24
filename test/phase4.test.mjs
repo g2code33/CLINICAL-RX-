@@ -219,7 +219,8 @@ try {
   console.log('\nSTATUS + AI READINESS');
   check('bundles report completed status', revived.status === 'completed');
   check('generation timestamp recorded', typeof revived.generatedAt === 'number');
-  check('AI enhancement correctly unavailable (Phase 5)', engine.aiEnhancementAvailable() === false);
+  // Phase 5 made this a real check: offline with no key and no local model => unavailable.
+  check('AI enhancement unavailable while offline with no provider', engine.aiEnhancementAvailable() === false);
 } finally {
   const origErr = console.error;
   console.error = () => {};

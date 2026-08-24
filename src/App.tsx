@@ -28,6 +28,8 @@ import { QuestionBank } from './pages/QuestionBank';
 import { Progress } from './pages/Progress';
 import { Bundles } from './pages/Bundles';
 import { AiChat } from './pages/AiChat';
+import AiWorkspace from './pages/AiWorkspace';
+import AiSettings from './pages/AiSettings';
 import { SettingsPage } from './pages/Settings';
 import { ResetPassword } from './pages/ResetPassword';
 import { AuthPage } from './pages/Auth';
@@ -151,8 +153,10 @@ export default function App() {
         <Route path="/question-bank" element={<QuestionBank />} />
         <Route path="/progress" element={<Progress />} />
         <Route path="/bundles" element={<Bundles />} />
-        <Route path="/ai" element={<AiChat />} />
+        <Route path="/ai" element={<AiWorkspace />} />
+        <Route path="/ai-capture" element={<AiChat />} />
         <Route path="/settings" element={<SettingsPage />} />
+        <Route path="/settings/ai" element={<AiSettings />} />
         <Route path="/admin" element={<AdminPage />} />
         <Route path="/auth" element={<AuthPage />} />
         <Route path="/reset" element={<ResetPassword />} />

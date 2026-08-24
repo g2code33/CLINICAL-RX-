@@ -380,6 +380,13 @@ export function SettingsPage() {
         <h2 className="mb-1 font-semibold">🤖 AI Configuration</h2>
         <p className="mb-4 text-xs text-slate-400">Each AI module has its own provider, API key and model. Keys are required only to use AI online; the rest of the app works offline without them.</p>
         <div className="space-y-4">
+          <div className="mb-3 rounded border border-brand-400/40 bg-brand-500/10 p-3 text-sm">
+            <strong>⚙️ Full AI Settings</strong>
+            <p className="mt-1 text-xs opacity-80">
+              Per-module modes, secure key storage, local AI, privacy, context, usage and diagnostics.
+            </p>
+            <a className="btn-primary mt-2 inline-block" href="#/settings/ai">Open AI Settings →</a>
+          </div>
           {AI_MODULES.map((m) => {
             const cfg = draft.ai?.[m.key]; if (!cfg) return null;
             return (

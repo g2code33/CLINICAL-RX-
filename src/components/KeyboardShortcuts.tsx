@@ -32,8 +32,15 @@ export function KeyboardShortcuts() {
       // Ignore most shortcuts while typing, except Ctrl/Cmd combos.
       const mod = e.ctrlKey || e.metaKey;
 
-      // Ctrl/Cmd+K -> search
+      // Ctrl/Cmd+K -> command bar (navigate / search records / ask AI / act)
       if (mod && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        useUi.getState().setPaletteOpen(true);
+        return;
+      }
+
+      // Ctrl/Cmd+Shift+F -> classic full-text search modal
+      if (mod && e.shiftKey && e.key.toLowerCase() === 'f') {
         e.preventDefault();
         useUi.getState().setSearchOpen(true);
         return;
