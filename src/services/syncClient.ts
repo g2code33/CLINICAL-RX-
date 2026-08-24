@@ -29,15 +29,23 @@ async function requestWithHeaders(backendUrl: string | undefined, path: string, 
     res = await fetch(url, { method, headers: { 'Content-Type': 'application/json', ...headers }, body: body ? JSON.stringify(body) : undefined });
   } catch (e: any) {
     const detail = e?.message || 'network error';
+    const offline = typeof navigator !== 'undefined' && navigator.onLine === false;
+
+    // Being offline, or the server being briefly down, is a NORMAL state for
+    // an offline-first app — not a misconfiguration. Say something reassuring
+    // and true rather than sending the user to change settings that are fine.
+    if (offline) {
+      return { ok: false, error: 'You are offline. Your changes are saved locally and will sync when you reconnect.' };
+    }
     if (!root) {
       return {
         ok: false,
-        error: `No backend URL set (${detail}). Enter your server URL — e.g. ${DEFAULT_BACKEND_URL} — in the "Backend URL" field (desktop app) or sign in from the web app.`,
+        error: `Cloud sync is temporarily unavailable (${detail}). Your changes are safely stored locally and will sync later. If this persists, set your server URL — e.g. ${DEFAULT_BACKEND_URL} — in Settings.`,
       };
     }
     return {
       ok: false,
-      error: `Could not reach ${root} (${detail}). Check the URL, your internet connection, and that the server is running.`,
+      error: `Cloud sync is temporarily unavailable — could not reach ${root} (${detail}). Your changes are safely stored locally and will sync later.`,
     };
   }
   let json: any = null;

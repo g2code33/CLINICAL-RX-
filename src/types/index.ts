@@ -101,6 +101,30 @@ export interface Settings extends BaseRecord {
     backendUrl?: string; // '' or '/' = same origin (/api); else e.g. https://you.vercel.app
     lastSynced?: number;
     syncing?: boolean;
+    // --- Phase 7: optional account, sync & backup ---
+    /** Cloud user id, associated with (never replacing) the local profile. */
+    cloudUserId?: string;
+    /** AI conversations sync ONLY when the user opts in (§35). Default off. */
+    syncAiConversations?: boolean;
+    /** Automatic background sync while signed in and online (§18). */
+    autoSync?: boolean;
+    /** True once the user has explicitly approved the first upload (§13). */
+    firstSyncApproved?: boolean;
+    /** Last sync error, surfaced in the Sync Center. */
+    lastError?: string;
+    /** Consecutive failures, for backoff (§47). */
+    failureCount?: number;
+    /** Epoch ms before which no automatic retry should be attempted. */
+    retryAfter?: number;
+  };
+
+  /** This installation's identity. Independent of any cloud account (§10). */
+  device?: {
+    deviceId: string;
+    deviceName?: string;
+    platform?: string;
+    lastSeen?: number;
+    lastSync?: number;
   };
   aiPendingBundles: string[]; // bundle ids awaiting AI enrichment once online
   autoBackup?: 'off' | 'daily' | 'weekly';

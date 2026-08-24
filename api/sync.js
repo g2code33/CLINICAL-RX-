@@ -45,7 +45,33 @@ async function handler(req, res) {
         createdAt: typeof rec.createdAt === 'number' ? rec.createdAt : Date.now(),
         updatedAt: typeof rec.updatedAt === 'number' ? rec.updatedAt : Date.now(),
       };
-      await redis.hset(`sync:${userId}`, { [`${rec.module}:${rec.id}`]: JSON.stringify(safe) });
+
+      const key = `${rec.module}:${rec.id}`;
+
+      // LAST-WRITER-WINS PROTECTION (Phase 7 §21).
+      //
+      // A blind overwrite here would let a slow device silently destroy a
+      // newer edit made on another device — and the client could never even
+      // detect it, because the push response would echo back its own data.
+      //
+      // If the stored copy is NEWER than the incoming one, keep the stored
+      // copy. The client sees the newer record in the response and raises a
+      // conflict for the user instead of losing anyone's work.
+      //
+      // Deletions are exempt: a tombstone must always win so a delete can
+      // propagate (§24).
+      if (!safe.deleted) {
+        const existingRaw = await redis.hget(`sync:${userId}`, key);
+        if (existingRaw) {
+          let existing = null;
+          try { existing = JSON.parse(existingRaw); } catch { existing = null; }
+          if (existing && !existing.deleted && typeof existing.updatedAt === 'number' && existing.updatedAt > safe.updatedAt) {
+            continue; // keep the newer server copy; client resolves the conflict
+          }
+        }
+      }
+
+      await redis.hset(`sync:${userId}`, { [key]: JSON.stringify(safe) });
     }
     const all = await redis.hgetall(`sync:${userId}`);
     const result = all ? Object.values(all).map((v) => { try { return JSON.parse(v); } catch { return null; } }).filter(Boolean) : [];

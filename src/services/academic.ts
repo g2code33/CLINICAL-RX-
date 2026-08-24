@@ -103,10 +103,15 @@ export function coursesFor(stageId: string, periodId?: string): Course[] {
 export function currentAcademicLink(): AcademicLink {
   const stage = currentStage();
   const period = currentPeriod();
+  const profile = useData.getState().profile;
   return {
     stageId: stage?.id,
     periodId: period?.id,
-    academicYear: stage?.academicYear ?? useData.getState().profile?.academicYear,
+    academicYear: stage?.academicYear ?? profile?.academicYear,
+    // Denormalised so archived records can be filtered by level without
+    // resolving the stage — which matters once a stage is years in the past,
+    // and after a record has travelled to another device via sync.
+    level: stage?.level ?? profile?.level,
   };
 }
 

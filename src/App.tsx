@@ -30,6 +30,7 @@ import { Bundles } from './pages/Bundles';
 import { AiChat } from './pages/AiChat';
 import AiWorkspace from './pages/AiWorkspace';
 import AiSettings from './pages/AiSettings';
+import SyncCenter from './pages/SyncCenter';
 // Phase 6 — PharmD Journey + Professional Career Engine
 import JourneyHome, { JourneyTimeline } from './pages/journey/JourneyHome';
 import { AcademicArchive, PortfolioPage } from './pages/journey/ArchiveAndPortfolio';
@@ -54,6 +55,21 @@ export default function App() {
   const profile = useData((s) => s.profile);
 
   useEffect(() => { init(); }, [init]);
+
+  // Background sync: batched, backed off, and entirely optional (§18).
+  useEffect(() => {
+    if (!ready) return;
+    let stop = () => {};
+    import('./services/syncScheduler')
+      .then((m) => {
+        m.startSyncScheduler();
+        stop = m.stopSyncScheduler;
+      })
+      .catch(() => {});
+    // Give every installation a stable identity, independent of any account.
+    import('./services/authService').then((m) => m.ensureDeviceIdentity()).catch(() => {});
+    return () => stop();
+  }, [ready]);
 
   useEffect(() => {
     if (ready) { const cleanup = setupAutoAndReconnect(); return cleanup; }
@@ -182,6 +198,7 @@ export default function App() {
         <Route path="/ai-capture" element={<AiChat />} />
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="/settings/ai" element={<AiSettings />} />
+        <Route path="/sync" element={<SyncCenter />} />
         <Route path="/admin" element={<AdminPage />} />
         <Route path="/auth" element={<AuthPage />} />
         <Route path="/reset" element={<ResetPassword />} />

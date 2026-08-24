@@ -35,6 +35,7 @@ const NAV = [
   { to: '/bundles', icon: '📦', label: 'Bundles' },
   { to: '/progress', icon: '📊', label: 'Progress' },
   { to: '/ai', icon: '🤖', label: 'AI' },
+  { to: '/sync', icon: '☁️', label: 'Sync & Backup' },
   { to: '/settings', icon: '⚙️', label: 'Settings' },
 ];
 
@@ -54,11 +55,12 @@ const PHARMD_NAV = [
   { to: '/journey/archive', icon: '📚', label: 'Academic Archive' },
   { to: '/courses', icon: '📚', label: 'Courses' },
   { to: '/progress', icon: '📊', label: 'Progress' },
+  { to: '/sync', icon: '☁️', label: 'Sync & Backup' },
   { to: '/settings', icon: '⚙️', label: 'Settings' },
 ];
 
 /** Routes that belong to BOTH workspaces, so they never force a mode change. */
-const SHARED_ROUTES = ['/progress', '/settings', '/admin', '/auth', '/reset'];
+const SHARED_ROUTES = ['/progress', '/settings', '/admin', '/auth', '/reset', '/sync'];
 
 const PHARMD_BOTTOM_NAV = [
   { to: '/journey', icon: '🎓', label: 'Journey' },

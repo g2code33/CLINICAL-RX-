@@ -35,7 +35,7 @@ import type {
 import { LocalStorageAdapter } from '../db/localStorageAdapter';
 import { ElectronAdapter } from '../db/electronAdapter';
 import { hasElectronBridge } from '../db/adapter';
-import { enqueue, backendConfigured } from '../services/syncEngine';
+import { enqueue, backendConfigured, addTombstone } from '../services/syncEngine';
 
 export interface DataStore {
   ready: boolean;
@@ -358,7 +358,12 @@ export const useData = create<DataStore>((set, get) => ({
       if (link) rec = { ...rec, academic: { ...link, ...(rec.academic ?? {}) } };
     }
     await adapter.put(module, rec.id, rec, rec.createdAt, rec.updatedAt);
-    if (!fromSync && backendConfigured()) enqueue({ op: 'upsert', module, id: rec.id, data: rec, createdAt: rec.createdAt, updatedAt: rec.updatedAt });
+    if (!fromSync && backendConfigured()) {
+      enqueue({ op: 'upsert', module, id: rec.id, data: rec, createdAt: rec.createdAt, updatedAt: rec.updatedAt });
+      // Nudge the scheduler; it debounces a burst of edits into one sync.
+      // Imported lazily so the store never depends on the scheduler at boot.
+      import('../services/syncScheduler').then((m) => m.notifyLocalChange()).catch(() => {});
+    }
     set((s) => {
       const listKey = listKeyFor(module, s as unknown as Record<string, unknown>);
       const existing = (s[listKey] as BaseRecord[]) || [];
@@ -391,7 +396,13 @@ export const useData = create<DataStore>((set, get) => ({
     let snapshot: any = null;
     if (!fromSync) snapshot = get().all(module).find((r) => r.id === id) ?? null;
     await adapter.remove(module, id);
-    if (!fromSync && backendConfigured()) enqueue({ op: 'delete', module, id });
+    if (!fromSync && backendConfigured()) {
+      enqueue({ op: 'delete', module, id });
+      import('../services/syncScheduler').then((m) => m.notifyLocalChange()).catch(() => {});
+    }
+    // Tombstone every local delete, even when signed out — the user may sign
+    // in later, and a pull must not resurrect what they deleted offline (§24).
+    if (!fromSync) addTombstone(module, id);
     set((s) => {
       const listKey = listKeyFor(module, s as unknown as Record<string, unknown>);
       const existing = (s[listKey] as BaseRecord[]) || [];
