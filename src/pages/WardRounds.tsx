@@ -23,6 +23,7 @@ import {
   setArchived,
   startRound,
 } from '../services/wardRounds';
+import { activityForDay, activityForWeek, monthBounds, activityBetween } from '../services/wardRounds';
 import { EXPLAIN_MODES, analyzeRound, canRunAi, queueAnalysis, type ExplainMode } from '../services/wardAi';
 import { bundleFromWardEntries, bundleFromWardRounds } from '../services/bundler';
 import { downloadText } from '../services/export';
@@ -206,6 +207,8 @@ function Home({
         ＋ Start Ward Round
       </button>
 
+      <PeriodSummary />
+
       <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
         <button className="card text-center transition-colors hover:border-brand-400" onClick={onHistory}>
           <div className="text-xl">🗂</div>
@@ -316,6 +319,8 @@ function StartRoundModal({
   const [date, setDate] = useState(todayIso());
   const [focus, setFocus] = useState(WARD_FOCUS_PRESETS[0] as string);
   const [customFocus, setCustomFocus] = useState('');
+  const [rotation, setRotation] = useState('');
+  const [objective, setObjective] = useState('');
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
@@ -325,6 +330,8 @@ function StartRoundModal({
       setDate(todayIso());
       setFocus(WARD_FOCUS_PRESETS[0]);
       setCustomFocus('');
+      setRotation('');
+      setObjective('');
     }
   }, [open, defaultWard]);
 
@@ -335,7 +342,7 @@ function StartRoundModal({
     if (!finalWard || busy) return;
     setBusy(true);
     try {
-      const r = await startRound(finalWard, date, finalFocus);
+      const r = await startRound(finalWard, date, finalFocus, { rotation, objective });
       onStarted(r);
     } finally {
       setBusy(false);
@@ -399,6 +406,17 @@ function StartRoundModal({
           {focus === 'Other' && (
             <input className="input mt-2" placeholder="Focus" value={customFocus} onChange={(e) => setCustomFocus(e.target.value)} />
           )}
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="label">Rotation (optional)</label>
+            <input className="input" placeholder="e.g. Internal Medicine" value={rotation} onChange={(e) => setRotation(e.target.value)} />
+          </div>
+          <div>
+            <label className="label">Learning objective (optional)</label>
+            <input className="input" placeholder="What do you want to learn?" value={objective} onChange={(e) => setObjective(e.target.value)} />
+          </div>
         </div>
 
         <p className="rounded-lg bg-slate-50 px-3 py-2 text-[11px] text-slate-500 dark:bg-slate-800 dark:text-slate-400">
@@ -1231,5 +1249,56 @@ function BundleFromRoundsModal({ open, rounds, onClose }: { open: boolean; round
         </div>
       </div>
     </Modal>
+  );
+}
+
+
+/**
+ * Today / This week / This month at a glance.
+ *
+ * Built on the generic date-range retrieval in services/wardRounds, which is
+ * the same foundation the future Daily and Weekly Bundlers will consume.
+ */
+function PeriodSummary() {
+  useData((s) => s.wardRounds);
+  useData((s) => s.wardEntries);
+  useData((s) => s.lessons);
+  useData((s) => s.questions);
+
+  const iso = todayIso();
+  const month = monthBounds(iso);
+  const periods = [
+    { key: 'today', label: 'Today', data: activityForDay(iso) },
+    { key: 'week', label: 'This week', data: activityForWeek(iso) },
+    { key: 'month', label: 'This month', data: activityBetween(month.start, month.end) },
+  ];
+
+  return (
+    <div className="grid gap-3 sm:grid-cols-3">
+      {periods.map((p) => {
+        const c = p.data.counts;
+        const total = Object.values(c).reduce((n, v) => n + v, 0);
+        return (
+          <div key={p.key} className="card">
+            <div className="flex items-baseline justify-between">
+              <span className="text-xs font-bold uppercase tracking-wide text-slate-400">{p.label}</span>
+              <span className="text-lg font-extrabold text-brand-600">{c['Ward rounds']}</span>
+            </div>
+            {total === 0 ? (
+              <p className="mt-1 text-xs text-slate-400">Nothing recorded yet.</p>
+            ) : (
+              <div className="mt-1.5 flex flex-wrap gap-x-2.5 gap-y-1 text-[11px] text-slate-500 dark:text-slate-400">
+                {c['Ward captures'] > 0 && <span>✍️ {c['Ward captures']}</span>}
+                {c['Learning notes'] > 0 && <span>💡 {c['Learning notes']}</span>}
+                {c['Diseases'] > 0 && <span>🦠 {c['Diseases']}</span>}
+                {c['Medicines'] > 0 && <span>💊 {c['Medicines']}</span>}
+                {c['Investigations'] > 0 && <span>🧪 {c['Investigations']}</span>}
+                {c['Questions'] > 0 && <span>❓ {c['Questions']}</span>}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
   );
 }

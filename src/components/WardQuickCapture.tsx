@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Modal } from './Modal';
 import { WARD_ENTRY_META } from '../services/defaults';
-import { ENTRY_TYPES, addEntry } from '../services/wardRounds';
+import { ENTRY_TYPES, addEntry, findExistingKnowledge, moduleForEntryType, type KnowledgeMatch } from '../services/wardRounds';
 import { canRunAi, interpretNote, type WardSuggestion } from '../services/wardAi';
 import type { WardEntryType } from '../types';
 
@@ -30,6 +30,11 @@ export function WardQuickCapture({
   const [content, setContent] = useState('');
   const [saving, setSaving] = useState(false);
   const [justSaved, setJustSaved] = useState<string | null>(null);
+  // Link-to-existing: suggestions shown as the user types a subject.
+  const [linkId, setLinkId] = useState<string | null>(null);
+  const [linkName, setLinkName] = useState<string>('');
+  // Structured clinical reasoning fields.
+  const [reasoning, setReasoning] = useState({ considered: '', relevantInfo: '', understood: '', confused: '', investigateFurther: '' });
 
   // Natural-language mode
   const [nlOpen, setNlOpen] = useState(false);
@@ -45,6 +50,9 @@ export function WardQuickCapture({
       setType(initialType ?? null);
       setTitle('');
       setContent('');
+      setLinkId(null);
+      setLinkName('');
+      setReasoning({ considered: '', relevantInfo: '', understood: '', confused: '', investigateFurther: '' });
       setJustSaved(null);
       setNlOpen(false);
       setNlText('');
@@ -58,17 +66,40 @@ export function WardQuickCapture({
   }, [type]);
 
   const meta = type ? WARD_ENTRY_META[type] : null;
+  // Suggest existing records so the SAME knowledge accumulates across rounds.
+  const matches: KnowledgeMatch[] =
+    type && moduleForEntryType(type) && title.trim().length >= 2 ? findExistingKnowledge(type, title) : [];
   const needsTitle = !!meta?.titleLabel;
-  const canSave = needsTitle ? !!title.trim() || !!content.trim() : !!content.trim() || !!title.trim();
+  const reasoningFilled = Object.values(reasoning).some((v) => v.trim());
+  const canSave =
+    type === 'reasoning'
+      ? reasoningFilled || !!content.trim()
+      : needsTitle
+      ? !!title.trim() || !!content.trim()
+      : !!content.trim() || !!title.trim();
 
   async function save(keepOpen: boolean) {
     if (!type || !canSave || saving) return;
     setSaving(true);
     try {
-      await addEntry(roundId, type, needsTitle ? title : '', content || title);
-      setJustSaved(`${meta?.icon} Saved`);
+      const isReasoning = type === 'reasoning';
+      await addEntry(
+        roundId,
+        type,
+        needsTitle ? title : '',
+        content || title,
+        'medium',
+        {
+          linkId: linkId ?? undefined,
+          reasoning: isReasoning ? { ...reasoning } : undefined,
+        }
+      );
+      setJustSaved(linkId ? `${meta?.icon} Saved · linked to ${linkName}` : `${meta?.icon} Saved`);
       setTitle('');
       setContent('');
+      setLinkId(null);
+      setLinkName('');
+      setReasoning({ considered: '', relevantInfo: '', understood: '', confused: '', investigateFurther: '' });
       onSaved?.();
       if (!keepOpen) onClose();
       else setTimeout(() => firstFieldRef.current?.focus(), 0);
@@ -277,7 +308,11 @@ export function WardQuickCapture({
                 className="input"
                 placeholder={meta?.titleLabel}
                 value={title}
-                onChange={(e) => setTitle(e.target.value)}
+                onChange={(e) => {
+                  setTitle(e.target.value);
+                  setLinkId(null);
+                  setLinkName('');
+                }}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') {
                     e.preventDefault();
@@ -285,6 +320,65 @@ export function WardQuickCapture({
                   }
                 }}
               />
+              {/* Link to an existing record instead of duplicating it. */}
+              {!linkId && title.trim().length >= 2 && matches.length > 0 && (
+                <div className="mt-1.5 rounded-lg border border-slate-200 p-2 dark:border-slate-700">
+                  <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                    Already in your knowledge base — link instead of duplicating
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {matches.map((m) => (
+                      <button
+                        key={m.id}
+                        className="rounded-full bg-brand-100 px-2.5 py-1 text-xs font-medium text-brand-800 transition-colors hover:bg-brand-200 dark:bg-brand-900 dark:text-brand-200"
+                        onClick={() => {
+                          setLinkId(m.id);
+                          setLinkName(m.name);
+                          setTitle(m.name);
+                        }}
+                      >
+                        🔗 {m.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {linkId && (
+                <div className="mt-1.5 flex items-center gap-2 rounded-lg bg-emerald-50 px-2.5 py-1.5 text-xs text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200">
+                  🔗 Linking to your existing <strong>{linkName}</strong> record
+                  <button
+                    className="ml-auto text-emerald-700 hover:underline dark:text-emerald-300"
+                    onClick={() => {
+                      setLinkId(null);
+                      setLinkName('');
+                    }}
+                  >
+                    unlink
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Structured clinical reasoning — learning and reflection only. */}
+          {type === 'reasoning' && (
+            <div className="space-y-2">
+              {([
+                ['considered', 'What was being considered?'],
+                ['relevantInfo', 'What information was relevant?'],
+                ['understood', 'What did I understand?'],
+                ['confused', 'What confused me?'],
+                ['investigateFurther', 'What would I like to investigate further?'],
+              ] as const).map(([key, label]) => (
+                <div key={key}>
+                  <label className="label !mb-1 !text-[11px]">{label}</label>
+                  <textarea
+                    className="input min-h-[48px] resize-y text-sm"
+                    value={reasoning[key]}
+                    onChange={(e) => setReasoning((r) => ({ ...r, [key]: e.target.value }))}
+                  />
+                </div>
+              ))}
             </div>
           )}
 

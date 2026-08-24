@@ -254,6 +254,8 @@ function entryPrompt(entry: WardEntry, round: WardRound | null, mode: ExplainMod
     question: `Help me answer this question: "${subject}".`,
     learning: `Explain this concept more deeply: "${subject}".`,
     note: `Help me understand and expand on this note: "${subject}".`,
+    reasoning: `Review my clinical reasoning and show me what I understood well and what I may have missed: "${subject}".`,
+    reflection: `Help me turn this reflection into concrete next study steps: "${subject}".`,
   };
   return [
     ask[entry.type],

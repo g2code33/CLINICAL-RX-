@@ -10,7 +10,7 @@ import {
   todayIso,
   WARD_ENTRY_META,
 } from './defaults';
-import type { WardAnalysis, WardEntry, WardEntryType, WardRound } from '../types';
+import type { ModuleType, WardAnalysis, WardEntry, WardEntryType, WardRound } from '../types';
 
 /**
  * Ward Rounds — capture clinical LEARNING during an active ward round.
@@ -75,7 +75,12 @@ export function countsSummary(counts: WardCounts): string {
 
 // ---- Rounds ------------------------------------------------------------
 
-export async function startRound(ward: string, date: string, focus: string): Promise<WardRound> {
+export async function startRound(
+  ward: string,
+  date: string,
+  focus: string,
+  extra: { rotation?: string; objective?: string } = {}
+): Promise<WardRound> {
   const st = useData.getState();
   const round = newWardRound(ward.trim() || 'Ward', date || todayIso(), focus.trim() || 'General');
   // Stamp the academic context (stage / semester / year) so this round stays
@@ -89,6 +94,8 @@ export async function startRound(ward: string, date: string, focus: string): Pro
   // bundlers and Clinical Days page can relate them without duplicating data.
   const day = st.days.find((d) => d.date === round.date);
   if (day) round.dayId = day.id;
+  if (extra.rotation?.trim()) round.rotation = extra.rotation.trim();
+  if (extra.objective?.trim()) round.objective = extra.objective.trim();
   await st.save('wardRound', round);
   st.setStatus(`🏥 Ward round started — ${round.ward}`);
   return round;
@@ -150,14 +157,32 @@ export async function addEntry(
   type: WardEntryType,
   title: string,
   content: string,
-  priority: WardEntry['priority'] = 'medium'
+  priority: WardEntry['priority'] = 'medium',
+  opts: { linkId?: string; reasoning?: WardEntry['reasoning']; noLink?: boolean } = {}
 ): Promise<WardEntry | null> {
   const text = content.trim();
   const name = title.trim();
   // A capture needs *something* — either a subject or a body.
-  if (!text && !name) return null;
+  if (!text && !name && !opts.reasoning) return null;
   const entry = newWardEntry(roundId, type, name, text);
   entry.priority = priority;
+  if (opts.reasoning) entry.reasoning = opts.reasoning;
+
+  // LINK-ON-CAPTURE: resolve the canonical Clinical Learning record straight
+  // away (reusing an existing one where possible) so the ward round points at
+  // shared knowledge instead of creating a duplicate copy of it.
+  if (!opts.noLink) {
+    try {
+      const link = await linkOrCreateKnowledge(type, name, text, opts.linkId);
+      if (link) {
+        entry.linkedRecordId = link.id;
+        entry.linkedModule = link.module;
+      }
+    } catch {
+      /* linking is best-effort; the capture must never be lost */
+    }
+  }
+
   await useData.getState().save('wardEntry', entry);
   return entry;
 }
@@ -408,4 +433,193 @@ export async function duplicateRound(roundId: string): Promise<WardRound | null>
     await st.save('wardEntry', { ...e, id: uid(), roundId: copy.id, createdAt: Date.now(), updatedAt: Date.now() });
   }
   return copy;
+}
+
+// ---- Phase 3: link-on-capture (no duplicate knowledge records) ---------
+
+/** Which Clinical Learning module a ward entry type maps onto. */
+export function moduleForEntryType(type: WardEntryType): ModuleType | null {
+  if (type === 'medicine') return 'medicine';
+  if (type === 'condition') return 'disease';
+  if (type === 'investigation') return 'investigation';
+  if (type === 'question') return 'question';
+  if (type === 'learning') return 'lesson';
+  return null; // note / reasoning / reflection stay ward-round-local
+}
+
+export interface KnowledgeMatch {
+  id: string;
+  name: string;
+  module: ModuleType;
+  subtitle?: string;
+}
+
+/**
+ * Find existing Clinical Learning records matching a name, so a ward round can
+ * LINK to them instead of creating duplicates. Exact matches rank first.
+ */
+export function findExistingKnowledge(type: WardEntryType, term: string, limit = 6): KnowledgeMatch[] {
+  const module = moduleForEntryType(type);
+  if (!module || !term.trim()) return [];
+  const q = term.trim().toLowerCase();
+  const st = useData.getState();
+  const rows: any[] = (st.all(module) as any[]).filter((r) => !r.archived);
+  const label = (r: any) => String(r.name ?? r.title ?? r.text ?? '');
+  return rows
+    .filter((r) => label(r).toLowerCase().includes(q))
+    .sort((a, b) => {
+      const la = label(a).toLowerCase();
+      const lb = label(b).toLowerCase();
+      if (la === q && lb !== q) return -1;
+      if (lb === q && la !== q) return 1;
+      return la.length - lb.length;
+    })
+    .slice(0, limit)
+    .map((r) => ({
+      id: r.id,
+      name: label(r),
+      module,
+      subtitle: r.className ?? r.what ?? r.whyRequested ?? r.category ?? undefined,
+    }));
+}
+
+/**
+ * Resolve the canonical record for an entry: reuse an exact existing match, or
+ * create the record once. Returns the id + module so the ward entry can link.
+ *
+ * This is what stops the same disease/medicine being re-created on every round —
+ * a single record accumulates learning across the whole programme.
+ */
+export async function linkOrCreateKnowledge(
+  type: WardEntryType,
+  name: string,
+  content: string,
+  explicitId?: string
+): Promise<{ id: string; module: ModuleType; created: boolean } | null> {
+  const module = moduleForEntryType(type);
+  if (!module) return null;
+  const st = useData.getState();
+  const label = name.trim() || content.trim();
+  if (!label) return null;
+
+  // 1) Explicit choice from the picker.
+  if (explicitId) {
+    const found = (st.all(module) as any[]).find((r) => r.id === explicitId);
+    if (found) return { id: found.id, module, created: false };
+  }
+
+  // 2) Exact name match — reuse it.
+  const lower = label.toLowerCase();
+  const existing = (st.all(module) as any[]).find(
+    (r) => String(r.name ?? r.title ?? r.text ?? '').toLowerCase() === lower && !r.archived
+  );
+  if (existing) return { id: existing.id, module, created: false };
+
+  // 3) Create the canonical record once. The store stamps academic context.
+  let rec: any;
+  if (module === 'medicine') rec = newMedicine(label);
+  else if (module === 'disease') rec = newDisease(label);
+  else if (module === 'investigation') rec = newInvestigation(label);
+  else if (module === 'question') rec = newQuestion(content.trim() || label);
+  else rec = newLesson(content.trim() || label, todayIso());
+  await st.save(module, rec);
+  return { id: rec.id, module, created: true };
+}
+
+// ---- Phase 3: day / week retrieval (foundation for future bundlers) ----
+
+export interface ClinicalActivity {
+  date: string;
+  rounds: WardRound[];
+  entries: WardEntry[];
+  days: any[];
+  lessons: any[];
+  questions: any[];
+  diseases: any[];
+  medicines: any[];
+  investigations: any[];
+  counts: Record<string, number>;
+}
+
+function inRange(iso: string, start: string, end: string): boolean {
+  return iso >= start && iso <= end;
+}
+
+function dateOf(rec: any): string {
+  if (rec.date) return rec.date;
+  if (rec.lastSeen) return rec.lastSeen;
+  const d = new Date(rec.createdAt);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+/**
+ * Everything recorded between two dates, across every module.
+ * Deliberately generic so the future Daily/Weekly Bundlers can call it
+ * unchanged — this phase only builds reliable retrieval.
+ */
+export function activityBetween(start: string, end: string): ClinicalActivity {
+  const s = useData.getState();
+  const rounds = s.wardRounds.filter((r) => !r.archived && inRange(r.date, start, end));
+  const roundIds = new Set(rounds.map((r) => r.id));
+  const entries = s.wardEntries.filter((e) => roundIds.has(e.roundId));
+  const pick = (list: any[]) => list.filter((r) => !r.archived && inRange(dateOf(r), start, end));
+
+  const days = s.days.filter((d) => inRange(d.date, start, end));
+  const lessons = pick(s.lessons);
+  const questions = pick(s.questions);
+  const diseases = pick(s.diseases);
+  const medicines = pick(s.medicines);
+  const investigations = pick(s.investigations);
+
+  return {
+    date: start === end ? start : `${start}→${end}`,
+    rounds,
+    entries,
+    days,
+    lessons,
+    questions,
+    diseases,
+    medicines,
+    investigations,
+    counts: {
+      'Ward rounds': rounds.length,
+      'Ward captures': entries.length,
+      'Clinical days': days.length,
+      'Learning notes': lessons.length,
+      Questions: questions.length,
+      Diseases: diseases.length,
+      Medicines: medicines.length,
+      Investigations: investigations.length,
+    },
+  };
+}
+
+export function activityForDay(iso: string): ClinicalActivity {
+  return activityBetween(iso, iso);
+}
+
+/** Monday-start week containing `iso`. */
+export function weekBounds(iso: string): { start: string; end: string } {
+  const d = new Date(iso + 'T00:00:00');
+  const day = (d.getDay() + 6) % 7;
+  const monday = new Date(d);
+  monday.setDate(d.getDate() - day);
+  const sunday = new Date(monday);
+  sunday.setDate(monday.getDate() + 6);
+  const fmt = (x: Date) => `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}`;
+  return { start: fmt(monday), end: fmt(sunday) };
+}
+
+export function activityForWeek(iso: string): ClinicalActivity {
+  const { start, end } = weekBounds(iso);
+  return activityBetween(start, end);
+}
+
+/** Month bounds for `iso` (yyyy-mm-dd). */
+export function monthBounds(iso: string): { start: string; end: string } {
+  const d = new Date(iso + 'T00:00:00');
+  const start = new Date(d.getFullYear(), d.getMonth(), 1);
+  const end = new Date(d.getFullYear(), d.getMonth() + 1, 0);
+  const fmt = (x: Date) => `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}`;
+  return { start: fmt(start), end: fmt(end) };
 }

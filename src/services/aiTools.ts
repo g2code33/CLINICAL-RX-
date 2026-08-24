@@ -3,6 +3,7 @@ import { aiChat, type AiChatOpts, type AiResult } from './ai';
 import { useTasks, type TaskKind } from '../stores/tasks';
 import type { AiModuleConfig } from '../types';
 import { buildUnifiedContext } from './learning';
+import { contextForRecord, formatForAi, retrieveKnowledge } from './intelligence';
 
 export type AiModuleKey =
   | 'tutor'
@@ -111,6 +112,44 @@ export function fullAppContext(): string {
 /** Invalidate the cache whenever data changes materially. */
 export function invalidateAppContext(): void {
   ctxCache = null;
+}
+
+/**
+ * Focused retrieval through the Intelligence Layer.
+ *
+ * Where fullAppContext() gives an AI the whole picture, this pulls only the
+ * records relevant to a query/scope — the same bridge every future AI persona
+ * (Clinical, Revision, Search, Bundler, Career) will use. No AI module reaches
+ * into the database directly.
+ */
+export function retrieveContext(options: Parameters<typeof retrieveKnowledge>[0] = {}): string {
+  try {
+    return formatForAi(retrieveKnowledge({ includeRelationships: true, limit: 30, ...options }));
+  } catch {
+    return '';
+  }
+}
+
+/** Everything connected to one record — powers a future "Ask AI about this". */
+export function retrieveRecordContext(module: string, id: string): string {
+  try {
+    const ctx = contextForRecord(module, id);
+    if (!ctx.focus) return '';
+    const lines = [
+      `FOCUS RECORD — ${ctx.focus.title}${ctx.focus.academicLabel ? ` [${ctx.focus.academicLabel}]` : ''}`,
+      ctx.focus.summary,
+      ctx.academic.stage ? `Academic context: ${ctx.academic.stage}${ctx.academic.year ? `, ${ctx.academic.year}` : ''}${ctx.academic.course ? `, ${ctx.academic.course}` : ''}` : '',
+    ].filter(Boolean);
+    if (ctx.related.length) {
+      lines.push('', 'CONNECTED RECORDS:');
+      for (const r of ctx.related) {
+        lines.push(`- [${r.type}] ${r.title}${r.summary ? `: ${r.summary}` : ''}`);
+      }
+    }
+    return lines.join('\n');
+  } catch {
+    return '';
+  }
 }
 
 

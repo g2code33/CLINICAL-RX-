@@ -201,6 +201,8 @@ export const WARD_ENTRY_META: Record<
   investigation: { icon: '🧪', label: 'Investigation', plural: 'Investigations', placeholder: 'What did I learn / observe?', titleLabel: 'Investigation name' },
   question: { icon: '❓', label: 'Question', plural: 'Questions', placeholder: 'e.g. Why was losartan preferred?' },
   note: { icon: '📝', label: 'Quick Note', plural: 'Quick Notes', placeholder: 'Anything else worth remembering…' },
+  reasoning: { icon: '🧠', label: 'Clinical Reasoning', plural: 'Clinical Reasoning', placeholder: 'What was being considered, and what did you make of it?' },
+  reflection: { icon: '📖', label: 'Reflection', plural: 'Reflections', placeholder: 'What did you learn? What surprised you? What will you study next?' },
 };
 
 export function newWardRound(ward: string, date: string, focus = 'General'): WardRound {

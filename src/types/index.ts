@@ -315,10 +315,25 @@ export interface WardRound extends BaseRecord {
   sample?: boolean; // created by demo/sample data
   /** Academic context at capture time (stage / semester / year). */
   academic?: AcademicLink;
+  /** Rotation this round belongs to, e.g. "Internal Medicine". */
+  rotation?: string;
+  /** What the student set out to learn. */
+  objective?: string;
+  /** End-of-round reflection (the student's own words). */
+  reflection?: string;
+  durationMinutes?: number;
 }
 
 /** The six capture types available during a round. */
-export type WardEntryType = 'learning' | 'medicine' | 'condition' | 'investigation' | 'question' | 'note';
+export type WardEntryType =
+  | 'learning'
+  | 'medicine'
+  | 'condition'
+  | 'investigation'
+  | 'question'
+  | 'note'
+  | 'reasoning'
+  | 'reflection';
 
 export interface WardEntry extends BaseRecord {
   roundId: string;
@@ -331,8 +346,26 @@ export interface WardEntry extends BaseRecord {
    * student's original `content`. Only set once the student accepts it.
    */
   aiSuggestion?: WardEntryAiSuggestion;
-  /** Set when the entry has been pushed into Diseases/Medicines/etc. */
+  /**
+   * The canonical Clinical Learning record this entry points at
+   * (disease / medicine / investigation / question / lesson). Set as soon as
+   * the entry is created so the SAME record accumulates learning across every
+   * ward round instead of being duplicated.
+   */
   linkedRecordId?: string;
+  /** Which module `linkedRecordId` lives in. */
+  linkedModule?: ModuleType;
+  /** Structured clinical reasoning (only for type 'reasoning'). */
+  reasoning?: ClinicalReasoning;
+}
+
+/** Structured clinical reasoning — for learning and reflection, not diagnosis. */
+export interface ClinicalReasoning {
+  considered?: string;
+  relevantInfo?: string;
+  understood?: string;
+  confused?: string;
+  investigateFurther?: string;
 }
 
 export interface WardEntryAiSuggestion {
