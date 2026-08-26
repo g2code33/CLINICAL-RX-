@@ -67,7 +67,7 @@ export function Modal({ open, onClose, title, children, wide }: { open: boolean;
         aria-modal="true"
         aria-labelledby={titleId}
         tabIndex={-1}
-        className={`max-h-[90vh] w-full ${wide ? 'max-w-3xl' : 'max-w-xl'} overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl outline-none dark:bg-slate-800`}
+        className={`max-h-[90vh] w-full ${wide ? 'max-w-3xl' : 'max-w-xl'} overflow-y-auto rounded-2xl bg-white p-6 text-slate-900 shadow-2xl outline-none dark:bg-slate-800 dark:text-slate-100`}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-4 flex items-center justify-between">

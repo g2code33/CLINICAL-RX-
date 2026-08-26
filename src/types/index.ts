@@ -428,6 +428,7 @@ export type WardEntryType =
 
 export interface WardEntry extends BaseRecord {
   roundId: string;
+  patientLabel?: string; // e.g. "Patient 1" — groups captures under a patient within the round
   type: WardEntryType;
   title: string; // short subject, e.g. "Amlodipine" (may be empty for notes)
   content: string; // the student's own words — NEVER modified by AI
