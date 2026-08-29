@@ -20,13 +20,16 @@ import type {
 } from '../types';
 
 export const AI_MODULES = [
-  { key: 'tutor', label: '🧑‍🏫 AI Clinical Tutor' },
-  { key: 'analyzer', label: '🩺 AI Case / Learning Analyzer' },
+  { key: 'chat', label: '🤖 General Assistant' },
+  { key: 'tutor', label: '🩺 Clinical Assistant' },
+  { key: 'revision', label: '📚 Revision Coach' },
+  { key: 'search', label: '🔎 AI Search' },
+  { key: 'bundler', label: '📦 Bundler AI' },
+  { key: 'career', label: '🎓 Career Assistant' },
+  { key: 'research', label: '🔬 Research Assistant' },
+  { key: 'analyzer', label: '📊 AI Learning Analyzer' },
   { key: 'notes', label: '📝 AI Note Organizer' },
   { key: 'questionGen', label: '❓ AI Question Generator' },
-  { key: 'revision', label: '📚 AI Revision Coach' },
-  { key: 'chat', label: '💬 AI Clinical Chat' },
-  { key: 'bundler', label: '📦 AI Daily/Weekly Bundler' },
   { key: 'wardRound', label: '🏥 Ward Round AI' },
 ] as const;
 

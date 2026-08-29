@@ -221,3 +221,8 @@ html, body { overflow-x: hidden; }
   :where(input:not([class*='text-']), textarea:not([class*='text-']), select:not([class*='text-'])) {
   color: rgb(15 23 42);
 }
+
+/* Hide scrollbar but keep scrolling for tab strips etc. */
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
