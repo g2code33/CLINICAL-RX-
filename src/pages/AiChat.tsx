@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { PageHeader, EmptyState } from '../components/ui';
 import { useData, uid } from '../stores/data';
@@ -10,6 +10,69 @@ import { runAiModule, aiReady, aiModuleLabel, analyzeLearning, generateQuestions
 import type { AiModuleKey, RunOpts } from '../services/aiTools';
 import type { ChatSession, WardRound, WardEntry } from '../types';
 import { useConfirm } from '../components/ui/primitives';
+
+/* ======================================================================
+   Slash commands — type "/" anywhere in the composer to open the menu.
+   Each command can either INSERT text into the input (so the student can
+   edit before sending) or RUN an action directly (e.g. new chat, switch
+   mode, open ward picker). Groups are user-togglable via /settings.
+   ====================================================================== */
+
+type SlashCmdGroup = 'universal' | 'prompt' | 'teach' | 'ward' | 'study' | 'career';
+
+interface SlashCommand {
+  id: string;
+  cmd: string;          // the "/xyz" token
+  label: string;        // short label shown in the menu
+  hint: string;         // one-line description
+  group: SlashCmdGroup;
+  icon: string;
+  /** Modes in which this command is offered. `undefined` = everywhere. */
+  modes?: Mode[];
+  /** If set, running the command inserts this prompt into the composer. */
+  insert?: string;
+  /** If set, running the command fires this action immediately. */
+  run?: (ctx: SlashRunCtx) => void | Promise<void>;
+}
+
+interface SlashRunCtx {
+  setInput: (v: string) => void;
+  send: (text?: string) => Promise<void>;
+  setMode: (m: Mode) => void;
+  newChat: () => void;
+  openWardPicker: () => void;
+  focusInput: () => void;
+  openSlashSettings: () => void;
+  attachImages: () => void;
+  setStatus: (msg: string) => void;
+}
+
+const SLASH_CMD_GROUPS: { key: SlashCmdGroup; label: string; icon: string }[] = [
+  { key: 'universal', label: 'General', icon: '⚡' },
+  { key: 'prompt',    label: 'Quick prompts', icon: '💬' },
+  { key: 'teach',     label: 'Teach me', icon: '🧠' },
+  { key: 'ward',      label: 'Ward round', icon: '🏥' },
+  { key: 'study',     label: 'Study / revision', icon: '📚' },
+  { key: 'career',    label: 'Career', icon: '🎓' },
+];
+
+const SLASH_SETTINGS_KEY = 'clinical-rx:slash-groups';
+
+function loadSlashGroups(): Record<SlashCmdGroup, boolean> {
+  const def: Record<SlashCmdGroup, boolean> = {
+    universal: true, prompt: true, teach: true, ward: true, study: true, career: true,
+  };
+  try {
+    const raw = localStorage.getItem(SLASH_SETTINGS_KEY);
+    if (!raw) return def;
+    const parsed = JSON.parse(raw);
+    return { ...def, ...parsed };
+  } catch { return def; }
+}
+
+function saveSlashGroups(g: Record<SlashCmdGroup, boolean>) {
+  try { localStorage.setItem(SLASH_SETTINGS_KEY, JSON.stringify(g)); } catch { /* ignore */ }
+}
 
 /** Logical groups for the AI mode strip so the 11 tabs don't feel scattered. */
 type ModeGroup = 'assistants' | 'tools' | 'special';
@@ -38,7 +101,6 @@ interface ModeDef {
 }
 
 const MODES: ModeDef[] = [
-  // ——— Everyday AI assistants (the 7 original personas, restored) ———
   { key: 'general',  icon: '🤖', label: 'General',      group: 'assistants', module: 'chat',       placeholder: 'Ask anything — attach images (🖼) for AI vision: prescriptions, drug labels, slides, notes…', hint: 'Free-form assistant — accepts images on vision-capable models' },
   { key: 'clinical', icon: '🩺', label: 'Clinical',     group: 'assistants', module: 'tutor',      placeholder: 'e.g. Explain hypertension, how amlodipine works, an investigation…', hint: 'Disease / medicine / investigation explainer with WHO→WHAT→WHERE→WHY→HOW→DT' },
   { key: 'revision', icon: '📚', label: 'Revision',     group: 'assistants', module: 'revision',   placeholder: 'Generate my revision plan', auto: true, hint: 'Spaced-repetition revision coach' },
@@ -46,11 +108,9 @@ const MODES: ModeDef[] = [
   { key: 'bundler',  icon: '📦', label: 'Bundler',      group: 'assistants', module: 'bundler',    placeholder: 'Summarise a day/week of learning, find gaps and revision priorities', auto: true },
   { key: 'career',   icon: '🎓', label: 'Career',       group: 'assistants', module: 'career',     placeholder: 'CV help, interview prep, rotation reflection, goals…' },
   { key: 'research', icon: '🔬', label: 'Research',     group: 'assistants', module: 'research',   placeholder: 'Form a research question, plan a study, organise reading…' },
-  // ——— Productivity / study tools ———
   { key: 'analyze',  icon: '📊', label: 'Analyze',      group: 'tools',      module: 'analyzer',   placeholder: 'Analyze my recent clinical learning', auto: true },
   { key: 'organize', icon: '📝', label: 'Organize',     group: 'tools',      module: 'notes',      placeholder: 'Turn a rough note into structured records (e.g. "Saw a patient with high BP…")' },
   { key: 'questions',icon: '❓', label: 'Questions',    group: 'tools',      module: 'questionGen',placeholder: 'Focus (optional, e.g. antihypertensives) or leave blank → Enter' },
-  // ——— Deep, dedicated mode ———
   { key: 'wardround',icon: '🏥', label: 'Ward Round',   group: 'special',    module: 'wardRound',  placeholder: 'Pick a round/patient (🏥 button), then ask anything — meds, reasoning, quizzes…', hint: 'Deep ward-round teacher — pick a round and patient for a case-specific chat' },
 ];
 
@@ -98,19 +158,16 @@ export function AiChat() {
   const [renameVal, setRenameVal] = useState('');
   const [listOpen, setListOpen] = useState(true);
   const [pendingImages, setPendingImages] = useState<string[]>([]);
+  const [wardPickerOpen, setWardPickerOpen] = useState(false);
+  const [slashSettingsOpen, setSlashSettingsOpen] = useState(false);
+  const [slashGroups, setSlashGroups] = useState<Record<SlashCmdGroup, boolean>>(() => loadSlashGroups());
+  const [slashOpen, setSlashOpen] = useState(false);
+  const [slashQuery, setSlashQuery] = useState('');
+  const [slashSel, setSlashSel] = useState(0);
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
-  // Ward Round AI picker state (visible from the typing bar).
-  const [wardPickerOpen, setWardPickerOpen] = useState(false);
-  // Collapsible AI mode groups: all collapsed by default to reduce scatter;
-  // tapping a group header toggles it, and selecting a mode auto-closes all
-  // groups (except when the active mode's group is shown in its header chip).
-  const [openGroup, setOpenGroup] = useState<ModeGroup | null>(null);
-  // Auto-open the group that contains the active mode when the mode changes
-  // via deep links / ward-round auto-open, so the selected tab is always
-  // reachable even if the user hasn't manually expanded anything yet.
-  useEffect(() => { setOpenGroup(null); }, [mode]);
+  const slashRef = useRef<HTMLDivElement>(null);
 
   const chats = useData((s) => s.chats);
   const wardRounds = useData((s) => s.wardRounds);
@@ -137,16 +194,149 @@ export function AiChat() {
   const hiddenCount = sessions.filter((c) => c.hidden).length;
   const currentSession = activeId ? chats.find((c) => c.id === activeId) ?? null : null;
 
-  // Ward Round attachment: resolve from current session title (keyed [wr:roundId:patient]).
   const wardAttachment: { roundId: string; patientLabel: string | null; round?: WardRound } | null = (() => {
     if (mode !== 'wardround' || !currentSession) return null;
     const m = /\[wr:([^:]+)(?::([^\]]+))?\]/.exec(currentSession.title || '');
     if (!m) return null;
-    const roundId = m[1];
-    const patientLabel = m[2] || null;
-    const r = wardRounds.find((x) => x.id === roundId);
-    return { roundId, patientLabel, round: r };
+    return { roundId: m[1], patientLabel: m[2] || null, round: wardRounds.find((x) => x.id === m[1]) };
   })();
+
+  /* ---------- Slash command catalogue ---------- */
+  const slashCommands: SlashCommand[] = useMemo(() => [
+    // Universal
+    { id: 'help', cmd: '/help', label: 'Help — what can this AI do?', hint: 'Show a short help card for the current mode', group: 'universal', icon: '❓', insert: 'What can you help me with right now in this mode? Give me a short list of the kinds of questions I can ask, with examples.' },
+    { id: 'settings', cmd: '/settings', label: 'Slash command settings', hint: 'Choose which slash-command groups to show', group: 'universal', icon: '⚙️', run: ({ openSlashSettings }) => openSlashSettings() },
+    { id: 'new', cmd: '/new', label: 'New chat', hint: 'Start a fresh conversation in the current section', group: 'universal', icon: '➕', run: ({ newChat }) => newChat() },
+    { id: 'image', cmd: '/image', label: 'Attach image(s)', hint: 'Add photos (prescriptions, slides, notes) for AI vision', group: 'universal', icon: '🖼', run: ({ attachImages }) => attachImages() },
+    { id: 'clear', cmd: '/clear', label: 'Clear input', hint: 'Empty the composer', group: 'universal', icon: '🧹', run: ({ setInput }) => setInput('') },
+    // Quick prompts
+    { id: 'summarize', cmd: '/summarize', label: 'Summarise this chat', hint: 'Bullet-point recap of what we have discussed so far', group: 'prompt', icon: '📋', insert: 'Summarise our conversation so far in 5–8 bullet points, highlighting the key takeaways and anything I should remember.' },
+    { id: 'simplify', cmd: '/simplify', label: 'Explain like I\'m a Level 100 student', hint: 'Re-explain the last topic in very simple language', group: 'prompt', icon: '🪶', insert: 'Explain the last topic we discussed like I am a first-year pharmacy student. Avoid jargon; use analogies where helpful.' },
+    { id: 'deeper', cmd: '/deeper', label: 'Go deeper', hint: 'Advanced detail, biochem / pharmacology depth', group: 'prompt', icon: '🔬', insert: 'Take me one level deeper into the last topic. Add biochemical / pharmacological mechanism, key evidence, and any nuances that separate mediocre from excellent answers.' },
+    { id: 'example', cmd: '/example', label: 'Give me a clinical example', hint: 'Concrete patient-style scenario (educational, not real)', group: 'prompt', icon: '🧪', insert: 'Give me a realistic, de-identified clinical scenario that illustrates the concept we are discussing. End with 2–3 questions I should be able to answer.' },
+    { id: 'mistakes', cmd: '/mistakes', label: 'Common student mistakes', hint: 'What students get wrong about this topic', group: 'prompt', icon: '⚠️', insert: 'What are the most common mistakes or misconceptions pharmacy students have on this topic? For each, state the wrong idea, the correct idea, and a one-line memory hook.' },
+    { id: 'counselling', cmd: '/counsel', label: 'Patient counselling points', hint: 'What would you actually tell a patient?', group: 'prompt', icon: '💬', insert: 'Give me the 5–8 patient counselling points I should deliver for the medicine we are discussing, in plain language a patient would understand.' },
+    { id: 'adr', cmd: '/adr', label: 'Adverse effects & monitoring', hint: 'ADRs, interactions, monitoring parameters', group: 'prompt', icon: '🛑', insert: 'List the most important adverse effects, red-flag interactions (with common drug classes), and the monitoring parameters (labs/clinical) for what we are discussing.' },
+    // Teach me
+    { id: 'teach-what', cmd: '/what', label: 'Teach me: WHAT is it', hint: 'Define and describe the concept / drug / disease', group: 'teach', icon: '📘', insert: 'Teach me WHAT it is — start with a one-sentence definition, then classification, key features, and how I\'d recognise it.' },
+    { id: 'teach-why', cmd: '/why', label: 'Teach me: WHY it matters', hint: 'Clinical significance / why we care', group: 'teach', icon: '🎯', insert: 'Teach me WHY this matters clinically — what happens if I miss it, get it wrong, or don\'t counsel the patient properly.' },
+    { id: 'teach-how', cmd: '/how', label: 'Teach me: HOW to manage', hint: 'General management framework (educational)', group: 'teach', icon: '🧭', insert: 'Teach me HOW we generally approach this — classes of drug used, non-drug measures, and the sequence of thinking (NOT patient-specific advice).' },
+    { id: 'teach-dt', cmd: '/dt', label: 'Teach me: Drug Talk', hint: 'Counselling script I can rehearse', group: 'teach', icon: '🗣', insert: 'Give me a patient-friendly counselling script (Drug Talk) I can rehearse, in plain English, under 60 seconds.' },
+    { id: 'teach-quiz', cmd: '/quizme', label: 'Quiz me on it', hint: '3 MCQs with trap-busting explanations', group: 'teach', icon: '❓', insert: 'Quiz me on the current topic with 3 MCQs. Hide the answers first, then give full teaching explanations that also bust common wrong-option traps.' },
+    { id: 'compare', cmd: '/compare', label: 'Compare two things', hint: 'e.g. amlodipine vs nifedipine, ACEi vs ARB', group: 'teach', icon: '⚖️', insert: 'Compare [DRUG/CLASS A] vs [DRUG/CLASS B] across: mechanism, indications, ADRs, monitoring, counselling, and when you would pick one over the other. Give the answer as a clean table (markdown) followed by a one-sentence take-home.' },
+    { id: 'mnemonic', cmd: '/mnemonic', label: 'Make a mnemonic', hint: 'C memorable mnemonic for the key points', group: 'teach', icon: '🧩', insert: 'Give me a memorable mnemonic for the key points we just covered, and walk me through each letter so I actually remember it.' },
+    // Ward-round specific
+    { id: 'ward-load', cmd: '/load', label: 'Load ward round / patient', hint: 'Pick a round (and optionally a patient) to discuss', group: 'ward', icon: '🏥', modes: ['wardround'], run: ({ openWardPicker }) => openWardPicker() },
+    { id: 'ward-walkthrough', cmd: '/walkthrough', label: 'Full patient walkthrough', hint: 'Case summary → meds → conditions → reasoning → gaps', group: 'ward', icon: '🛏️', modes: ['wardround'], insert: 'Give me the full teaching walkthrough for the loaded patient/round: case summary, medications (class/MOA/counselling/monitoring/ADRs), conditions (pathophys/typical first-line class), investigations (interpretation pearls), clinical reasoning, gaps I still have, and 3 quick quiz questions.' },
+    { id: 'ward-meds', cmd: '/meds', label: 'Drug-by-drug breakdown', hint: 'Every captured medicine, one by one', group: 'ward', icon: '💊', modes: ['wardround'], insert: 'Go through EVERY captured medicine one by one: class, mechanism, indication in this context, key counselling, top 2-3 ADRs, 1 interaction to watch, and 1 monitoring parameter. Bullet points.' },
+    { id: 'ward-reasoning', cmd: '/reasoning', label: 'Walk through my reasoning', hint: 'Challenge & refine my recorded clinical reasoning', group: 'ward', icon: '🧠', modes: ['wardround'], insert: 'Walk through the clinical-reasoning captures I made. For each one, point out what I got right, what I missed, what I am confused about, and how I could have thought about it more clearly.' },
+    { id: 'ward-gaps', cmd: '/gaps', label: 'My knowledge gaps', hint: 'What I need to go and study, prioritised', group: 'ward', icon: '🕳', modes: ['wardround'], insert: 'From everything in this round, what are my biggest knowledge gaps? Prioritise them: 1) will-patient-safety gaps, 2) will-come-up-in-exam gaps, 3) nice-to-know. For each, tell me exactly what to study and one exam-style MCQ.' },
+    { id: 'ward-quiz', cmd: '/quiz', label: 'Quiz me on this case', hint: '5-question mini-viva based on the round', group: 'ward', icon: '🎯', modes: ['wardround'], insert: 'Give me a 5-question mini-viva on this loaded round/patient. Mix MCQs and short-answer. Wait for my answers before marking; then give full teaching explanations.' },
+    { id: 'ward-sbar', cmd: '/sbar', label: 'Write an SBAR handover', hint: 'Practice an SBAR from the case', group: 'ward', icon: '📞', modes: ['wardround'], insert: 'Help me draft a concise SBAR (Situation, Background, Assessment, Recommendation) handover for this patient based on what I captured. Flag any gaps where I don\'t have enough data yet.' },
+    { id: 'ward-soap', cmd: '/soap', label: 'Write a SOAP note', hint: 'Turn my captures into a SOAP-style note', group: 'ward', icon: '📝', modes: ['wardround'], insert: 'Reorganise my captures for this patient into a SOAP note (Subjective, Objective, Assessment, Plan), clearly marking anything I didn\'t actually capture so I don\'t invent data.' },
+    { id: 'ward-drp', cmd: '/drp', label: 'Spot drug-related problems', hint: 'Find potential DRPs in the captured medicines', group: 'ward', icon: '⚠️', modes: ['wardround'], insert: 'From the captured medicines and conditions, flag potential drug-related problems (indication, effectiveness, safety, adherence) that I should think about. Be explicit that these are educational prompts, not recommendations.' },
+    { id: 'ward-counselling', cmd: '/counselpatient', label: 'Counselling per medicine', hint: 'Patient-friendly scripts for every med', group: 'ward', icon: '💬', modes: ['wardround'], insert: 'For every captured medicine, write a 30-second patient-friendly counselling script I could actually use on the ward.' },
+    // Study / revision
+    { id: 'mcq', cmd: '/mcq', label: 'Generate MCQs', hint: '5 MCQs on the topic or week', group: 'study', icon: '❓', modes: ['general', 'clinical', 'revision', 'questions', 'wardround'], insert: 'Generate 5 high-quality MCQs on the topic/week/round we are discussing, with 4 options each and a full 3–6 sentence teaching explanation per question that busts the wrong options.' },
+    { id: 'plan', cmd: '/plan', label: 'Revision plan', hint: 'Realistic plan for the next 3-7 days', group: 'study', icon: '🗓', modes: ['general', 'clinical', 'revision', 'analyze', 'wardround'], insert: 'Give me a realistic 7-day revision plan based on my recent learning / this round: 20–40 min per day, active recall first, with exact topics and why they are prioritised.' },
+    { id: 'flashcards', cmd: '/flashcards', label: 'Make flashcards', hint: 'Q/A flashcards I can copy into Anki', group: 'study', icon: '🗂', insert: 'Turn what we just covered into 8–12 Anki-style flashcards (Q: on one side, A: on the other). Make cards atomic (one fact per card), not multi-question.' },
+    { id: 'recall', cmd: '/recall', label: 'Active recall test', hint: 'Blank-page active recall prompts', group: 'study', icon: '🧠', insert: 'Give me 10 active-recall prompts (short-answer questions) on this topic/round. I\'ll answer from memory before scrolling on — don\'t give the answers yet; after I reply, mark and explain.' },
+    // Career
+    { id: 'cv', cmd: '/cv', label: 'Draft CV bullet', hint: 'Turn an experience into a CV line', group: 'career', icon: '📄', modes: ['career', 'general'], insert: 'Help me turn this rotation / experience into a strong CV bullet using the STAR + quantified-impact style. I\'ll paste my rough note next.' },
+    { id: 'interview', cmd: '/interview', label: 'Interview question', hint: 'Practice a pharmacy/clinical interview question', group: 'career', icon: '🎙', modes: ['career', 'general'], insert: 'Ask me a realistic pharmacy-student / intern interview question (clinical or behavioural), wait for my answer, then give me structured feedback: what worked, what to tighten, and a model answer.' },
+    { id: 'swot', cmd: '/swot', label: 'SWOT analysis', hint: 'SWOT on my current progress / an opportunity', group: 'career', icon: '📊', modes: ['career', 'general'], insert: 'Using my saved PharmD Journey / rotations / skills, help me do a SWOT analysis (Strengths, Weaknesses, Opportunities, Threats) of my current professional position. Only use what\'s actually saved; flag what is missing.' },
+  ], []);
+
+  const activeSlashCommands = useMemo(() => {
+    return slashCommands
+      .filter((c) => slashGroups[c.group] && (!c.modes || c.modes.includes(mode)))
+      .filter((c) => {
+        if (!slashQuery) return true;
+        const q = slashQuery.toLowerCase();
+        return c.cmd.toLowerCase().includes(q) || c.label.toLowerCase().includes(q) || c.hint.toLowerCase().includes(q);
+      });
+  }, [slashCommands, slashGroups, mode, slashQuery]);
+
+  // Close slash menu when clicking outside.
+  useEffect(() => {
+    function onDoc(e: MouseEvent) {
+      if (!slashRef.current) return;
+      if (!slashRef.current.contains(e.target as Node)) setSlashOpen(false);
+    }
+    document.addEventListener('mousedown', onDoc);
+    return () => document.removeEventListener('mousedown', onDoc);
+  }, []);
+
+  // Keep selection in bounds when the filtered list changes.
+  useEffect(() => {
+    if (slashSel >= activeSlashCommands.length) setSlashSel(Math.max(0, activeSlashCommands.length - 1));
+  }, [activeSlashCommands.length, slashSel]);
+
+  function runSlashCmd(cmd: SlashCommand) {
+    setSlashOpen(false);
+    setSlashQuery('');
+    // Strip the /xyz token from the input (replace from last slash to cursor).
+    const newInput = input.replace(/\/[^\s]*$/, '').trimEnd();
+    setInput(newInput);
+    const ctx: SlashRunCtx = {
+      setInput,
+      send,
+      setMode,
+      newChat,
+      openWardPicker: () => setWardPickerOpen(true),
+      focusInput: () => inputRef.current?.focus(),
+      openSlashSettings: () => setSlashSettingsOpen(true),
+      attachImages: () => fileRef.current?.click(),
+      setStatus,
+    };
+    if (cmd.run) {
+      void Promise.resolve(cmd.run(ctx));
+      setTimeout(() => inputRef.current?.focus(), 30);
+      return;
+    }
+    if (cmd.insert) {
+      const joined = newInput ? newInput + '\n\n' + cmd.insert : cmd.insert;
+      setInput(joined);
+      // Move caret to end and focus.
+      setTimeout(() => {
+        inputRef.current?.focus();
+        const len = joined.length;
+        try { inputRef.current?.setSelectionRange(len, len); } catch { /* ignore */ }
+      }, 30);
+    }
+  }
+
+  function onChangeInput(e: React.ChangeEvent<HTMLInputElement>) {
+    const v = e.target.value;
+    setInput(v);
+    // Detect "/"-trigger: last "word" starts with "/"
+    const m = /\/([^\s/]*)$/.exec(v);
+    if (m) {
+      setSlashQuery(m[1]);
+      setSlashOpen(true);
+      setSlashSel(0);
+    } else {
+      setSlashOpen(false);
+      setSlashQuery('');
+    }
+  }
+
+  function onKeyDownInput(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (slashOpen && activeSlashCommands.length) {
+      if (e.key === 'ArrowDown') { e.preventDefault(); setSlashSel((i) => (i + 1) % activeSlashCommands.length); return; }
+      if (e.key === 'ArrowUp')   { e.preventDefault(); setSlashSel((i) => (i - 1 + activeSlashCommands.length) % activeSlashCommands.length); return; }
+      if (e.key === 'Enter' || e.key === 'Tab') {
+        e.preventDefault();
+        runSlashCmd(activeSlashCommands[slashSel]);
+        return;
+      }
+      if (e.key === 'Escape') { e.preventDefault(); setSlashOpen(false); return; }
+    }
+    if (e.key === 'Enter' && !thisBusy && !e.shiftKey) {
+      e.preventDefault();
+      void send();
+    }
+  }
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -155,24 +345,20 @@ export function AiChat() {
   useEffect(() => {
     setParsedRecords(null);
     setWardPickerOpen(false);
+    setSlashOpen(false);
   }, [mode]);
 
-  // Jump into a Ward Round AI session if signalled from ward rounds page.
   useEffect(() => {
     try {
       const sid = sessionStorage.getItem('crx:wardAiSession');
       if (!sid) return;
       sessionStorage.removeItem('crx:wardAiSession');
       const exists = useData.getState().chats.find((c) => c.id === sid);
-      if (exists) {
-        setMode('wardround');
-        setActiveId(sid);
-      }
+      if (exists) { setMode('wardround'); setActiveId(sid); }
     } catch { /* ignore */ }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Honour ?q=... deep-link prompt.
   useEffect(() => {
     const q = search.get('q');
     if (!q) return;
@@ -183,7 +369,6 @@ export function AiChat() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Switching section: keep the last-used session for that section if any.
   useEffect(() => {
     const list = chats.filter((c) => c.section === active.module);
     if (list.length) setActiveId(list[0].id);
@@ -253,7 +438,6 @@ export function AiChat() {
     const t = title.trim();
     const s = chats.find((c) => c.id === id);
     if (!s || !t) { setRenameId(null); return; }
-    // Preserve internal [wr:...] prefix when renaming Ward Round sessions.
     const prefix = /^(\[[^\]]+\]\s*)/.exec(s.title || '')?.[1] || '';
     const cleanTitle = t.replace(/^\[[^\]]+\]\s*/, '');
     await save('chat', { ...s, title: prefix + cleanTitle.slice(0, 60), updatedAt: Date.now() });
@@ -265,19 +449,15 @@ export function AiChat() {
     if (!s) return;
     const lines = [
       `# 💊 CLINICAL Rx — ${s.title.replace(/^\[[^\]]+\]\s*/, '')}`,
-      `**Section:** ${active.label} · **Saved:** ${fmtTime(s.updatedAt)} · **Messages:** ${s.messages.length}`,
-      '',
+      `**Section:** ${active.label} · **Saved:** ${fmtTime(s.updatedAt)} · **Messages:** ${s.messages.length}`, '',
     ];
-    for (const m of s.messages) {
-      lines.push(`**${m.role === 'user' ? 'Student' : 'AI'}:** ${m.text}`);
-      lines.push('');
-    }
+    for (const m of s.messages) { lines.push(`**${m.role === 'user' ? 'Student' : 'AI'}:** ${m.text}`); lines.push(''); }
     await copyToClipboard(lines.join('\n'));
-    setStatus(`✓ Chat "${s.title.replace(/^\[[^\]]+\]\s*/, '')}" copied — paste it anywhere to share`);
+    setStatus(`✓ Chat copied — paste it anywhere to share`);
   }
 
-  function extractStructured(text: string): { medicines: string[]; diseases: string[]; investigations: string[]; lessons: string[]; questions: string[] } {
-    const empty = { medicines: [], diseases: [], investigations: [], lessons: [], questions: [] };
+  function extractStructured(text: string) {
+    const empty = { medicines: [] as string[], diseases: [] as string[], investigations: [] as string[], lessons: [] as string[], questions: [] as string[] };
     try {
       const start = text.indexOf('{'); const end = text.lastIndexOf('}');
       if (start < 0 || end <= start) return empty;
@@ -320,11 +500,12 @@ export function AiChat() {
 
     setInput('');
     setPendingImages([]);
+    setSlashOpen(false);
 
     if (typeof navigator !== 'undefined' && !navigator.onLine) {
       const { queueAiTask } = await import('../services/aiTaskQueue');
       queueAiTask({ section: sectionKey, mode, userText, sessionTitle: afterUser.title });
-      await save('chat', { ...afterUser, messages: [...afterUser.messages, { id: uid(), role: 'ai' as const, text: '📡 You are offline — this task is queued and will run automatically when you reconnect.', ts: Date.now() }], updatedAt: Date.now() });
+      await save('chat', { ...afterUser, messages: [...afterUser.messages, { id: uid(), role: 'ai' as const, text: '📡 You are offline — queued, will run when you reconnect.', ts: Date.now() }], updatedAt: Date.now() });
       setStatus("📡 Queued — will run when you're back online");
       return;
     }
@@ -361,7 +542,7 @@ export function AiChat() {
           const m = /\[wr:([^:]+)(?::([^\]]+))?\]/.exec(afterUser.title || '');
           if (m) wardCtx = buildRoundAiContext(m[1], m[2] || null);
           else wardHint =
-            'The student hasn\'t loaded a specific round or patient into this chat yet. If the question is about ward-round practice or clinical pharmacy in general, answer directly; if it needs specific round/patient data, invite them to tap the 🏥 "Load ward round" button in the typing bar.';
+            'The student hasn\'t loaded a specific round/patient yet. Answer general ward-round / clinical-pharmacy questions directly; if a question needs case-specific data, invite them to use /load or tap the 🏥 button.';
         } catch { /* ignore */ }
         const sysExtra = [
           wardHint,
@@ -404,9 +585,7 @@ export function AiChat() {
     for (const name of parsedRecords.investigations) { if (!name.trim()) continue; await saveRec('investigation', newInvestigation(name)); if (day && !day.investigations.includes(name)) day.investigations.push(name); saved.push('🧪 ' + name); }
     for (const text of parsedRecords.lessons) { if (!text.trim()) continue; await saveRec('lesson', newLesson(text, todayIso())); if (day && !day.lessons.includes(text)) day.lessons.push(text); saved.push('💡 ' + text); }
     for (const text of parsedRecords.questions) { if (!text.trim()) continue; await saveRec('question', newQuestion(text)); saved.push('❓ ' + text); }
-    if (day && (parsedRecords.diseases.length || parsedRecords.medicines.length || parsedRecords.investigations.length || parsedRecords.lessons.length)) {
-      day.updatedAt = Date.now(); await saveRec('day', day);
-    }
+    if (day && (parsedRecords.diseases.length || parsedRecords.medicines.length || parsedRecords.investigations.length || parsedRecords.lessons.length)) { day.updatedAt = Date.now(); await saveRec('day', day); }
     setParsedRecords(null);
     setMsgsInline(saved.length ? `✓ Saved ${saved.length} record(s):\n${saved.join('\n')}` : 'Nothing to save.');
   }
@@ -414,14 +593,10 @@ export function AiChat() {
   async function pickWardRound(roundId: string, patientLabel?: string | null) {
     try {
       const { openRoundAi } = await import('../services/wardAi');
-      const { sessionId } = await openRoundAi(roundId, patientLabel);
-      setActiveId(sessionId);
-      setMode('wardround');
-      setWardPickerOpen(false);
+      const { sessionId } = await openRoundAi(roundId, patientLabel ?? null);
+      setActiveId(sessionId); setMode('wardround'); setWardPickerOpen(false);
       inputRef.current?.focus();
-    } catch (e: any) {
-      setStatus('⚠️ ' + (e?.message || 'Could not open Ward Round AI'));
-    }
+    } catch (e: any) { setStatus('⚠️ ' + (e?.message || 'Could not open Ward Round AI')); }
   }
 
   const showStreaming = streaming && streaming.sessionId === currentSession?.id;
@@ -431,72 +606,28 @@ export function AiChat() {
       {confirmDialog}
       <PageHeader
         title="Ask Clinical AI"
-        subtitle="Each section keeps its own saved chats, but every section remembers your other conversations across the app."
+        subtitle="Type / in the composer for quick actions · each section keeps its own chats, but memory is shared."
         action={<button className="btn-primary" onClick={newChat}>＋ New chat</button>}
       />
 
-      {/* Collapsible grouped mode picker — groups hidden by default to
-          cut scatter; tap a group chip to expand and pick. The active mode
-          always shows on its group's chip so you can see what's selected
-          at a glance without any group open. */}
+      {/* Collapsible grouped mode picker */}
       <div className="mb-3 flex flex-wrap items-center gap-2">
         {(['assistants', 'tools', 'special'] as ModeGroup[]).map((g) => {
           const groupModes = MODES.filter((m) => m.group === g);
           const activeInGroup = groupModes.find((m) => m.key === mode);
-          const isOpen = openGroup === g;
-          return (
-            <div key={g} className="relative">
-              <button
-                onClick={() => setOpenGroup(isOpen ? null : g)}
-                className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
-                  activeInGroup
-                    ? 'border-brand-300 bg-brand-50 text-brand-800 dark:border-brand-700 dark:bg-brand-900/40 dark:text-brand-200'
-                    : 'border-slate-200 bg-white text-slate-600 hover:border-brand-300 hover:text-brand-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:border-brand-600'
-                }`}
-                aria-expanded={isOpen}
-                title={GROUP_LABEL[g]}
-              >
-                {activeInGroup ? <>{activeInGroup.icon} {activeInGroup.label}</> : <>▸ {GROUP_LABEL[g]}</>}
-                <span className={`text-[9px] transition-transform ${isOpen ? 'rotate-180' : ''}`}>▾</span>
-              </button>
-              {isOpen && (
-                <div className="absolute left-0 top-full z-30 mt-1.5 flex max-w-[calc(100vw-2rem)] flex-wrap gap-1.5 rounded-xl border border-slate-200 bg-white p-2 shadow-xl dark:border-slate-700 dark:bg-slate-800" style={{ minWidth: 200 }}>
-                  <div className="w-full pb-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                    {GROUP_LABEL[g]}
-                  </div>
-                  {groupModes.map((m) => (
-                    <button
-                      key={m.key}
-                      onClick={() => { setMode(m.key); setOpenGroup(null); }}
-                      className={`whitespace-nowrap rounded-full px-2.5 py-1 text-[11px] font-semibold transition ${
-                        mode === m.key
-                          ? 'bg-brand-600 text-white shadow-sm'
-                          : 'bg-slate-100 text-slate-700 hover:bg-brand-50 hover:text-brand-700 dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-brand-900/40'
-                      }`}
-                      title={m.hint || aiModuleLabel(m.module)}
-                    >
-                      {m.icon} {m.label}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          );
+          return <ModeGroupChip key={g} group={g} modes={groupModes} activeMode={mode} onPick={(k) => setMode(k)} label={GROUP_LABEL[g]} activeInGroup={activeInGroup} />;
         })}
       </div>
 
       <div className="relative flex min-h-0 flex-1 flex-col gap-3 md:flex-row">
         {!listOpen ? (
-          <button
-            className="flex h-fit shrink-0 flex-col items-center gap-1 self-start rounded-lg border border-slate-200 px-2.5 py-2 text-sm hover:bg-slate-100 dark:border-slate-700 dark:hover:bg-slate-700"
+          <button className="flex h-fit shrink-0 flex-col items-center gap-1 self-start rounded-lg border border-slate-200 px-2.5 py-2 text-sm hover:bg-slate-100 dark:border-slate-700 dark:hover:bg-slate-700"
             onClick={() => setListOpen(true)} title="Show chat list">
             <span>☰</span><span className="text-[10px] text-slate-400">{sessions.length}</span>
           </button>
         ) : (
         <>
-        {listOpen && (
-          <div className="absolute inset-0 z-20 bg-slate-900/30 md:hidden" onClick={() => setListOpen(false)} />
-        )}
+        {listOpen && (<div className="absolute inset-0 z-20 bg-slate-900/30 md:hidden" onClick={() => setListOpen(false)} />)}
         <div className="absolute inset-y-0 left-0 z-30 flex w-64 max-w-[80vw] flex-col bg-white p-1.5 text-slate-900 shadow-xl dark:bg-slate-800 dark:text-slate-100 md:static md:z-auto md:w-60 md:shrink-0 md:p-0 md:shadow-none">
           <div className="mb-1 flex items-center justify-between px-1 text-xs font-semibold text-slate-400">
             <div className="flex items-center gap-1">
@@ -510,34 +641,25 @@ export function AiChat() {
             )}
           </div>
           <div className="min-h-0 flex-1 space-y-1 overflow-y-auto rounded-lg border border-slate-200 p-1.5 dark:border-slate-700">
-            {visibleSessions.length === 0 && (
-              <p className="p-2 text-xs text-slate-400">{hiddenCount ? 'All chats hidden — tap "Show hidden".' : 'No chats yet. Start one below.'}</p>
-            )}
+            {visibleSessions.length === 0 && (<p className="p-2 text-xs text-slate-400">{hiddenCount ? 'All chats hidden.' : 'No chats yet — type / below to start.'}</p>)}
             {visibleSessions.map((s) => (
               <div key={s.id}>
                 {renameId === s.id ? (
                   <div className="flex items-center gap-1 rounded-md bg-slate-100 p-1 dark:bg-slate-700">
-                    <input
-                      className="input !px-1.5 !py-0.5 text-xs" autoFocus
-                      value={renameVal}
+                    <input className="input !px-1.5 !py-0.5 text-xs" autoFocus value={renameVal}
                       onChange={(e) => setRenameVal(e.target.value)}
                       onKeyDown={(e) => { if (e.key === 'Enter') void renameSession(s.id, renameVal); if (e.key === 'Escape') setRenameId(null); }}
-                      onBlur={() => void renameSession(s.id, renameVal)}
-                      placeholder="New title…" />
+                      onBlur={() => void renameSession(s.id, renameVal)} placeholder="New title…" />
                   </div>
                 ) : (
-                  <div
-                    className={`group flex cursor-pointer items-center gap-1 rounded-md px-2 py-1.5 text-left text-xs ${s.id === activeId ? 'bg-brand-600 text-white' : 'hover:bg-slate-100 dark:hover:bg-slate-700'} ${s.hidden ? 'opacity-50' : ''}`}
-                    onClick={() => { setActiveId(s.id); setStreaming(null); }}
-                    {...ctxHandlers(showMenu, sessionMenu(s))}
-                  >
+                  <div className={`group flex cursor-pointer items-center gap-1 rounded-md px-2 py-1.5 text-left text-xs ${s.id === activeId ? 'bg-brand-600 text-white' : 'hover:bg-slate-100 dark:hover:bg-slate-700'} ${s.hidden ? 'opacity-50' : ''}`}
+                    onClick={() => { setActiveId(s.id); setStreaming(null); }} {...ctxHandlers(showMenu, sessionMenu(s))}>
                     <span className="min-w-0 flex-1 truncate">
                       {s.hidden && '🙈 '}{(s.title || 'Untitled').replace(/^\[[^\]]+\]\s*/, '')}
                       <span className={`ml-1 opacity-60 ${s.id === activeId ? 'text-white' : 'text-slate-400'}`}>{s.messages.length} msg{s.messages.length === 1 ? '' : 's'} · {fmtTime(s.updatedAt)}</span>
                     </span>
                     <button className={`shrink-0 opacity-0 group-hover:opacity-100 ${s.id === activeId ? 'text-white/80 hover:text-white' : 'text-slate-400 hover:text-brand-600'}`}
-                      title={s.hidden ? 'Show chat' : 'Hide chat'}
-                      onClick={(e) => { e.stopPropagation(); void setHidden(s.id, !s.hidden); }}>{s.hidden ? '👁' : '🙈'}</button>
+                      title={s.hidden ? 'Show' : 'Hide'} onClick={(e) => { e.stopPropagation(); void setHidden(s.id, !s.hidden); }}>{s.hidden ? '👁' : '🙈'}</button>
                     <button className={`shrink-0 opacity-0 group-hover:opacity-100 ${s.id === activeId ? 'text-white/80 hover:text-white' : 'text-slate-400 hover:text-brand-600'}`}
                       title="Rename" onClick={(e) => { e.stopPropagation(); setRenameId(s.id); setRenameVal(s.title || ''); }}>✏️</button>
                     <button className={`shrink-0 opacity-0 group-hover:opacity-100 ${s.id === activeId ? 'text-white/80 hover:text-white' : 'text-slate-400 hover:text-brand-600'}`}
@@ -554,12 +676,13 @@ export function AiChat() {
         )}
 
         {/* Chat area */}
-        <div className="card flex min-h-0 min-w-0 flex-1 flex-col">
+        <div className="card relative flex min-h-0 min-w-0 flex-1 flex-col">
           {!currentSession && !streaming ? (
             <div className="flex flex-1 flex-col items-center justify-center gap-3 p-6 text-center">
               <div className="text-4xl">{active.icon}</div>
               <div className="text-sm font-semibold">{active.label} · {aiModuleLabel(active.module)}</div>
               <p className="max-w-md text-xs text-slate-400">{active.placeholder}</p>
+              <p className="max-w-md text-[11px] text-slate-400">Tip: type <code className="rounded bg-slate-100 px-1 dark:bg-slate-700">/</code> in the box below for quick prompts, teaching actions, and ward-round shortcuts.</p>
               {mode === 'wardround' ? (
                 <WardRoundLauncher rounds={wardRounds} entries={wardEntries} onPick={pickWardRound} />
               ) : active.auto ? (
@@ -567,7 +690,6 @@ export function AiChat() {
               ) : (
                 <button className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700" onClick={() => inputRef.current?.focus()}>✍️ Start typing</button>
               )}
-              <p className="text-[11px] text-slate-400">Conversations save automatically. All sections share cross-chat memory.</p>
             </div>
           ) : (
             <div className="flex-1 space-y-3 overflow-y-auto p-4">
@@ -585,10 +707,7 @@ export function AiChat() {
               ))}
               {thisBusy && (
                 <div className="flex justify-start">
-                  <div className="w-full max-w-[92%]">
-                    <AiThinking moduleLabel={aiModuleLabel(sectionKey)} live={showStreaming ? streaming.text : undefined}
-                      detail={showStreaming ? undefined : `Working on: ${currentSession?.title.replace(/^\[[^\]]+\]\s*/, '') || active.placeholder}`} />
-                  </div>
+                  <div className="w-full max-w-[92%]"><AiThinking moduleLabel={aiModuleLabel(sectionKey)} live={showStreaming ? streaming.text : undefined} detail={showStreaming ? undefined : `Working on: ${currentSession?.title.replace(/^\[[^\]]+\]\s*/, '') || active.placeholder}`} /></div>
                 </div>
               )}
               <div ref={bottomRef} />
@@ -624,7 +743,6 @@ export function AiChat() {
             </div>
           )}
 
-          {/* Ward Round attachment chip — visible above composer during a ward-round chat. */}
           {mode === 'wardround' && (
             <div className="flex flex-wrap items-center gap-2 border-t border-slate-200 px-3 pt-2 dark:border-slate-700">
               {wardAttachment ? (
@@ -633,50 +751,80 @@ export function AiChat() {
                     🏥 {wardAttachment.round?.ward || 'Round'}{wardAttachment.round?.date ? ` · ${wardAttachment.round.date}` : ''}
                     {wardAttachment.patientLabel ? <> · 🛏️ {wardAttachment.patientLabel}</> : null}
                   </span>
-                  <button className="text-[11px] text-slate-500 underline-offset-2 hover:underline" onClick={() => setWardPickerOpen(true)}>
-                    Change round / patient
-                  </button>
-                  <button className="text-[11px] text-slate-400 hover:text-red-500" onClick={newChat} title="Start a fresh ward-round chat (no round loaded)">
-                    New (no round)
-                  </button>
+                  <button className="text-[11px] text-slate-500 underline-offset-2 hover:underline" onClick={() => setWardPickerOpen(true)}>Change</button>
+                  <button className="text-[11px] text-slate-400 hover:text-red-500" onClick={newChat} title="Start fresh">New (no round)</button>
                 </>
               ) : (
-                <button
-                  className="inline-flex items-center gap-1 rounded-full bg-brand-600 px-3 py-1 text-xs font-semibold text-white hover:bg-brand-700"
-                  onClick={() => setWardPickerOpen(true)}
-                  title="Load a ward round (and optionally a patient) so the AI has the full case">
-                  🏥 Load ward round / patient
-                </button>
+                <button className="inline-flex items-center gap-1 rounded-full bg-brand-600 px-3 py-1 text-xs font-semibold text-white hover:bg-brand-700"
+                  onClick={() => setWardPickerOpen(true)} title="Load a ward round / patient">🏥 Load ward round / patient</button>
               )}
             </div>
           )}
 
           {/* Composer */}
-          <div className="flex gap-2 border-t border-slate-200 p-3 dark:border-slate-700">
-            <input ref={fileRef} type="file" accept="image/*" multiple className="hidden" onChange={(e) => onPickImages(e.target.files)} />
-            <button className="btn-ghost !px-2 !py-1 text-lg" onClick={() => fileRef.current?.click()} title="Attach image(s)" disabled={thisBusy || pendingImages.length >= 4}>🖼</button>
-            {mode === 'wardround' && (
-              <button className="btn-ghost !px-2 !py-1 text-sm" onClick={() => setWardPickerOpen(true)} title="Pick / change ward round or patient">🏥</button>
-            )}
-            <input
-              ref={inputRef} className="input flex-1" placeholder={active.placeholder}
-              value={input} onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && !thisBusy && void send()}
-              disabled={thisBusy} />
-            {active.auto ? (
-              <button className="btn-primary" onClick={() => void send()} disabled={thisBusy} title="Run now">
-                {thisBusy ? '…' : '▶ Run'}
-              </button>
-            ) : (
-              <button className="btn-primary" onClick={() => void send()} disabled={thisBusy} title="Send">
-                {thisBusy ? '…' : '➤'}
-              </button>
-            )}
+          <div className="border-t border-slate-200 p-3 dark:border-slate-700">
+            <div className="flex gap-2">
+              <input ref={fileRef} type="file" accept="image/*" multiple className="hidden" onChange={(e) => onPickImages(e.target.files)} />
+              <button className="btn-ghost !px-2 !py-1 text-lg" onClick={() => fileRef.current?.click()} title="Attach image(s)" disabled={thisBusy || pendingImages.length >= 4}>🖼</button>
+              {mode === 'wardround' && (<button className="btn-ghost !px-2 !py-1 text-sm" onClick={() => setWardPickerOpen(true)} title="Pick / change ward round or patient">🏥</button>)}
+              <div className="relative flex-1">
+                <input
+                  ref={inputRef}
+                  className="input w-full pr-16"
+                  placeholder={active.placeholder}
+                  value={input}
+                  onChange={onChangeInput}
+                  onKeyDown={onKeyDownInput}
+                  disabled={thisBusy} />
+                <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-[10px] font-semibold text-slate-300 dark:text-slate-600">/ for menu</span>
+                {/* Slash menu */}
+                {slashOpen && activeSlashCommands.length > 0 && (
+                  <div ref={slashRef} className="absolute bottom-full left-0 right-0 z-40 mb-2 max-h-80 overflow-y-auto rounded-xl border border-slate-200 bg-white p-1 shadow-2xl dark:border-slate-700 dark:bg-slate-800">
+                    {(() => {
+                      // group by category for readability
+                      const grouped: Record<string, SlashCommand[]> = {};
+                      for (const c of activeSlashCommands) { (grouped[c.group] ||= []).push(c); }
+                      let idx = -1;
+                      return (
+                        <>
+                          {SLASH_CMD_GROUPS.filter((g) => grouped[g.key]).map((g) => (
+                            <div key={g.key} className="mb-1">
+                              <div className="px-2 pb-0.5 pt-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">{g.icon} {g.label}</div>
+                              {grouped[g.key].map((c) => {
+                                idx++;
+                                const selected = idx === slashSel;
+                                return (
+                                  <button key={c.id}
+                                    onMouseEnter={() => setSlashSel(idx)}
+                                    onClick={() => runSlashCmd(c)}
+                                    className={`flex w-full items-start gap-2 rounded-md px-2 py-1.5 text-left text-xs ${selected ? 'bg-brand-50 text-brand-900 dark:bg-brand-900/40 dark:text-brand-100' : 'hover:bg-slate-50 dark:hover:bg-slate-700'}`}>
+                                    <span className="text-base leading-none">{c.icon}</span>
+                                    <span className="min-w-0 flex-1">
+                                      <span className="font-semibold"><code className="rounded bg-slate-100 px-1 text-[11px] dark:bg-slate-700">{c.cmd}</code> {c.label}</span>
+                                      <span className="block text-[11px] text-slate-500 dark:text-slate-400">{c.hint}</span>
+                                    </span>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          ))}
+                        </>
+                      );
+                    })()}
+                  </div>
+                )}
+              </div>
+              {active.auto ? (
+                <button className="btn-primary" onClick={() => void send()} disabled={thisBusy} title="Run now">{thisBusy ? '…' : '▶ Run'}</button>
+              ) : (
+                <button className="btn-primary" onClick={() => void send()} disabled={thisBusy} title="Send">{thisBusy ? '…' : '➤'}</button>
+              )}
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Ward Round picker modal — reachable from empty state AND the typing-bar button, mid-chat. */}
+      {/* Ward Round picker */}
       {wardPickerOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-3" onClick={() => setWardPickerOpen(false)}>
           <div className="w-full max-w-md rounded-2xl bg-white p-4 shadow-2xl dark:bg-slate-800" onClick={(e) => e.stopPropagation()}>
@@ -684,10 +832,37 @@ export function AiChat() {
               <div className="text-sm font-bold">🏥 Pick ward round &amp; patient</div>
               <button className="btn-ghost !p-1 text-sm" onClick={() => setWardPickerOpen(false)}>✕</button>
             </div>
-            <p className="mb-2 text-xs text-slate-500">
-              Choose a round to discuss the whole list, or tap a specific patient for a deep case walkthrough. The AI will load every capture — meds, conditions, investigations, notes, reasoning, reflections — so it can teach, quiz and flag gaps.
-            </p>
+            <p className="mb-2 text-xs text-slate-500">Choose a round to discuss the whole list, or tap a patient for a deep case walkthrough.</p>
             <WardRoundLauncher rounds={wardRounds} entries={wardEntries} onPick={pickWardRound} />
+          </div>
+        </div>
+      )}
+
+      {/* Slash settings */}
+      {slashSettingsOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-3" onClick={() => setSlashSettingsOpen(false)}>
+          <div className="w-full max-w-sm rounded-2xl bg-white p-4 shadow-2xl dark:bg-slate-800" onClick={(e) => e.stopPropagation()}>
+            <div className="mb-2 flex items-center justify-between">
+              <div className="text-sm font-bold">⚙️ Slash commands</div>
+              <button className="btn-ghost !p-1 text-sm" onClick={() => setSlashSettingsOpen(false)}>✕</button>
+            </div>
+            <p className="mb-3 text-xs text-slate-500">Choose which groups of <code>/</code> commands appear while typing. Turn off what you don't use.</p>
+            <div className="space-y-2">
+              {SLASH_CMD_GROUPS.map((g) => (
+                <label key={g.key} className="flex cursor-pointer items-center justify-between gap-2 rounded-lg border border-slate-200 p-2 text-sm dark:border-slate-700">
+                  <span className="flex items-center gap-2"><span className="text-lg">{g.icon}</span><span className="font-semibold">{g.label}</span></span>
+                  <input type="checkbox" className="h-4 w-4 accent-brand-600"
+                    checked={slashGroups[g.key]}
+                    onChange={(e) => { const next = { ...slashGroups, [g.key]: e.target.checked }; setSlashGroups(next); saveSlashGroups(next); }} />
+                </label>
+              ))}
+            </div>
+            <div className="mt-3 flex justify-between">
+              <button className="btn-ghost text-xs" onClick={() => { const all: Record<SlashCmdGroup, boolean> = { universal: true, prompt: true, teach: true, ward: true, study: true, career: true }; setSlashGroups(all); saveSlashGroups(all); }}>
+                Reset to default
+              </button>
+              <button className="btn-primary !py-1.5 text-xs" onClick={() => setSlashSettingsOpen(false)}>Done</button>
+            </div>
           </div>
         </div>
       )}
@@ -697,7 +872,55 @@ export function AiChat() {
 
 export { EmptyState };
 
-/** Round → patient picker, reused by both empty-state and in-chat 🏥 button. */
+/* ---- Small helper component for a collapsible mode-group chip ---- */
+function ModeGroupChip({
+  group, modes, activeMode, onPick, label, activeInGroup,
+}: {
+  group: ModeGroup;
+  modes: ModeDef[];
+  activeMode: Mode;
+  onPick: (m: Mode) => void;
+  label: string;
+  activeInGroup?: ModeDef;
+}) {
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    function onDoc(e: MouseEvent) {
+      const t = e.target as HTMLElement;
+      if (!t.closest('[data-ai-group="' + group + '"]')) setOpen(false);
+    }
+    if (open) document.addEventListener('mousedown', onDoc);
+    return () => document.removeEventListener('mousedown', onDoc);
+  }, [open, group]);
+  return (
+    <div className="relative" data-ai-group={group}>
+      <button onClick={() => setOpen((v) => !v)}
+        className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
+          activeInGroup ? 'border-brand-300 bg-brand-50 text-brand-800 dark:border-brand-700 dark:bg-brand-900/40 dark:text-brand-200' : 'border-slate-200 bg-white text-slate-600 hover:border-brand-300 hover:text-brand-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:border-brand-600'
+        }`} aria-expanded={open}>
+        {activeInGroup ? <>{activeInGroup.icon} {activeInGroup.label}</> : <>▸ {label}</>}
+        <span className={`text-[9px] transition-transform ${open ? 'rotate-180' : ''}`}>▾</span>
+      </button>
+      {open && (
+        <div className="absolute left-0 top-full z-30 mt-1.5 flex max-w-[calc(100vw-2rem)] flex-wrap gap-1.5 rounded-xl border border-slate-200 bg-white p-2 shadow-xl dark:border-slate-700 dark:bg-slate-800" style={{ minWidth: 200 }}>
+          <div className="w-full pb-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">{label}</div>
+          {modes.map((m) => (
+            <button key={m.key}
+              onClick={() => { onPick(m.key); setOpen(false); }}
+              className={`whitespace-nowrap rounded-full px-2.5 py-1 text-[11px] font-semibold transition ${
+                activeMode === m.key ? 'bg-brand-600 text-white shadow-sm' : 'bg-slate-100 text-slate-700 hover:bg-brand-50 hover:text-brand-700 dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-brand-900/40'
+              }`}
+              title={m.hint || aiModuleLabel(m.module)}>
+              {m.icon} {m.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ---- Round → patient picker (reused empty state + in-chat 🏥 button) ---- */
 function WardRoundLauncher({
   rounds, entries, onPick,
 }: {
@@ -711,42 +934,30 @@ function WardRoundLauncher({
   const patients = chosen
     ? Array.from(new Set((entries || []).filter((e) => e.roundId === chosen.id && (e.patientLabel || '').trim()).map((e) => e.patientLabel!.trim()))).sort()
     : [];
-
-  const filtered = rounds.slice()
-    .sort((a, b) => (b.date + b.updatedAt).localeCompare(a.date + a.updatedAt))
+  const filtered = rounds.slice().sort((a, b) => (b.date + b.updatedAt).localeCompare(a.date + a.updatedAt))
     .filter((r) => !query.trim() || (r.ward + ' ' + r.date + ' ' + (r.focus || '')).toLowerCase().includes(query.toLowerCase()));
 
   if (!rounds.length) {
-    return (
-      <div className="max-w-md rounded-xl border border-dashed border-slate-300 p-4 text-xs text-slate-500 dark:border-slate-700">
-        No ward rounds yet. Start one from 🏥 Ward Rounds, then come back to discuss it with Ward Round AI.
-      </div>
-    );
+    return <div className="max-w-md rounded-xl border border-dashed border-slate-300 p-4 text-xs text-slate-500 dark:border-slate-700">No ward rounds yet — start one from 🏥 Ward Rounds first.</div>;
   }
-
   if (!chosen) {
     return (
       <div className="w-full space-y-2">
         <input className="input !py-1.5 text-xs" placeholder="Search rounds by ward / date / focus…" value={query} onChange={(e) => setQuery(e.target.value)} />
         <div className="max-h-64 space-y-1 overflow-y-auto pr-1">
-          {filtered.length === 0 && <p className="p-2 text-xs text-slate-400">No rounds match your search.</p>}
+          {filtered.length === 0 && <p className="p-2 text-xs text-slate-400">No rounds match.</p>}
           {filtered.map((r) => {
-            const n = (entries || []).filter((e) => e.roundId === r.id).length;
-            const pats = new Set((entries || []).filter((e) => e.roundId === r.id).map((e) => (e.patientLabel || '').trim()).filter(Boolean)).size;
+            const n = entries.filter((e) => e.roundId === r.id).length;
+            const pats = new Set(entries.filter((e) => e.roundId === r.id).map((e) => (e.patientLabel || '').trim()).filter(Boolean)).size;
             return (
               <button key={r.id}
                 className="flex w-full items-center justify-between gap-2 rounded-lg border border-slate-200 px-3 py-2 text-left text-sm transition hover:border-brand-400 hover:bg-brand-50 dark:border-slate-700 dark:hover:bg-brand-950/30"
                 onClick={() => setRoundId(r.id)}>
                 <span className="min-w-0">
-                  <span className="flex items-center gap-1.5 font-semibold">
-                    🏥 <span className="truncate">{r.ward}</span>
-                    {r.status === 'active' && <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-[9px] font-bold text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">Active</span>}
-                  </span>
+                  <span className="flex items-center gap-1.5 font-semibold">🏥 <span className="truncate">{r.ward}</span>{r.status === 'active' && <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-[9px] font-bold text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">Active</span>}</span>
                   <span className="ml-5 text-xs text-slate-500">{r.date}{r.focus ? ` · ${r.focus}` : ''}</span>
                 </span>
-                <span className="shrink-0 text-right text-[11px] text-slate-400">
-                  {n} capture{n === 1 ? '' : 's'} · {pats} patient{pats === 1 ? '' : 's'}
-                </span>
+                <span className="shrink-0 text-right text-[11px] text-slate-400">{n} · {pats} pt{pats === 1 ? '' : 's'}</span>
               </button>
             );
           })}
@@ -754,46 +965,26 @@ function WardRoundLauncher({
       </div>
     );
   }
-
   const nAll = entries.filter((e) => e.roundId === chosen.id).length;
   return (
     <div className="w-full space-y-3">
       <div className="flex items-center justify-between text-xs">
         <button className="text-brand-600 hover:underline" onClick={() => setRoundId(null)}>← Change round</button>
-        <span className="font-semibold text-slate-600 dark:text-slate-300">
-          🏥 {chosen.ward} · {chosen.date}
-          {chosen.focus ? <span className="ml-1 text-slate-400">· {chosen.focus}</span> : null}
-        </span>
+        <span className="font-semibold text-slate-600 dark:text-slate-300">🏥 {chosen.ward} · {chosen.date}{chosen.focus ? <span className="ml-1 text-slate-400">· {chosen.focus}</span> : null}</span>
       </div>
       <div className="space-y-2">
-        <button
-          className="w-full rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700"
-          onClick={() => onPick(chosen.id, null)}>
-          ▶ Discuss the whole round ({nAll} capture{nAll === 1 ? '' : 's'}{patients.length ? ` · ${patients.length} patient${patients.length === 1 ? '' : 's'}` : ''})
-        </button>
+        <button className="w-full rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700" onClick={() => onPick(chosen.id, null)}>▶ Discuss the whole round ({nAll} capture{nAll === 1 ? '' : 's'}{patients.length ? ` · ${patients.length} patient${patients.length === 1 ? '' : 's'}` : ''})</button>
         {patients.length > 0 && (
           <div className="space-y-1">
             <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Or pick a patient</div>
             <div className="flex flex-wrap gap-1.5">
               {patients.map((p) => {
                 const n = entries.filter((e) => e.roundId === chosen.id && (e.patientLabel || '').trim() === p).length;
-                const meds = entries.filter((e) => e.roundId === chosen.id && (e.patientLabel || '').trim() === p && e.type === 'medicine').length;
-                const conds = entries.filter((e) => e.roundId === chosen.id && (e.patientLabel || '').trim() === p && e.type === 'condition').length;
-                return (
-                  <button key={p}
-                    className="rounded-full border border-slate-200 px-3 py-1 text-xs transition hover:border-brand-400 hover:bg-brand-50 dark:border-slate-700 dark:hover:bg-brand-950/30"
-                    onClick={() => onPick(chosen.id, p)}
-                    title={`${n} capture${n === 1 ? '' : 's'}${meds ? ` · ${meds} med${meds === 1 ? '' : 's'}` : ''}${conds ? ` · ${conds} condition${conds === 1 ? '' : 's'}` : ''}`}>
-                    🛏️ {p} <span className="text-slate-400">({n})</span>
-                  </button>
-                );
+                return (<button key={p} className="rounded-full border border-slate-200 px-3 py-1 text-xs transition hover:border-brand-400 hover:bg-brand-50 dark:border-slate-700 dark:hover:bg-brand-950/30" onClick={() => onPick(chosen.id, p)}>🛏️ {p} <span className="text-slate-400">({n})</span></button>);
               })}
             </div>
           </div>
         )}
-        <p className="text-[11px] text-slate-400">
-          💡 The AI will walk through medications (class/mechanism/counselling/monitoring/ADRs), conditions (pathophys / typical first-line class), investigation interpretation, clinical reasoning, knowledge gaps, quiz you on the case, and end with a "Next to study" list.
-        </p>
       </div>
     </div>
   );
