@@ -1,22 +1,35 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { Route, Routes, useLocation } from 'react-router-dom';
+import { useLocation } from 'react-router-dom';
 
 /* ==========================================================================
-   KeepAlive — wraps a set of <Route>s such that each matched page stays
-   mounted (with display:none) after you navigate away, instead of being
-   unmounted. This preserves local state, scroll positions, half-filled
-   inputs, in-flight AI streams, quiz timers etc. across tab switches.
+   KeepAlive — page-instance cache for React Router v6.
+
+   Architecture:
+   • <KeepAlive routes={...} />  → returns <Route>s (one per cached path) whose
+     elements are <KaSlot/> placeholders. Drop these INSIDE <Routes> so React
+     Router picks the right match for every URL and the catch-all `*` never
+     hijacks tab navigation.
+   • <KeepAliveCache routes={...} />  → mounts OUTSIDE <Routes>. It owns the
+     actual page instances (one per visited path), all mounted simultaneously;
+     inactive ones are hidden with display:none. A tiny subscription bridge
+     forwards the active-path from <KaSlot> to the cache so the right page
+     shows.
+
+   The split is required because <Routes> only discovers <Route> children that
+   appear as JSX in its own children tree — it will NOT unwrap the render
+   output of a component to find <Route>s, so we CANNOT just emit <Route>s
+   from a component and expect them to match. But we also CAN'T mount page
+   instances inside those <Route>s because React Router unmounts the previous
+   route's element on every navigation, killing state. Hence the two-piece
+   design: Routes do matching, Cache owns instances.
 
    Usage:
      <Routes>
-       <KeepAlive routes={[
-         { path: '/', element: <Dashboard /> },
-         { path: '/quiz', element: <Quiz /> },
-         ...
-       ]} />
+       <KeepAlive routes={keepAliveRoutes} />
        <Route path="/auth" element={<AuthPage />} />
        <Route path="*" element={<Navigate to="/" replace />} />
      </Routes>
+     <KeepAliveCache routes={keepAliveRoutes} />
    ========================================================================== */
 
 /** Fire cb every time the page is navigated BACK to (i.e. becomes visible). */
@@ -81,39 +94,78 @@ function restoreScrolls(root: HTMLElement) {
   });
 }
 
-/** Caches one instance per path and shows/hides it based on current location. */
-export function KeepAlive({ routes, transient = [] }: {
+/* ---- Tiny pub/sub between <KaSlot> (inside Routes) and the cache -------- */
+type Listener = (path: string) => void;
+const listeners = new Set<Listener>();
+let currentPath = normalize(window.location.pathname);
+function emit(p: string) {
+  currentPath = p;
+  listeners.forEach((l) => l(p));
+}
+function subscribe(l: Listener): () => void {
+  listeners.add(l);
+  l(currentPath);
+  return () => listeners.delete(l);
+}
+
+/* ---- <KaSlot>  → element used by keep-alive <Route>s inside <Routes> ---- */
+/**
+ * Element rendered by each keep-alive <Route> inside <Routes>. It doesn't
+ * render any UI (the real page lives in <KeepAliveCache> outside Routes).
+ * Its only job is to tell the cache "this path just became the active match".
+ */
+export function KaSlot({ path }: { path: string }) {
+  useEffect(() => {
+    emit(normalize(path));
+  }, [path]);
+  return null;
+}
+
+/* ---- <KeepAliveCache>  → mounts page instances outside <Routes> --------- */
+
+/** Drop OUTSIDE <Routes> (sibling is fine) — owns the cached page instances. */
+export function KeepAliveCache({ routes }: {
   routes: { path: string; element: ReactNode }[];
-  transient?: { path: string; element: ReactNode }[];
 }) {
   const loc = useLocation();
-  const activePath = normalize(loc.pathname);
-  const [visited, setVisited] = useState<Record<string, boolean>>(() => ({}));
+  const activeFromUrl = normalize(loc.pathname);
+  const [activePath, setActivePath] = useState<string>(() => activeFromUrl);
+  const [visited, setVisited] = useState<Record<string, boolean>>(() => {
+    const init: Record<string, boolean> = {};
+    init[activeFromUrl] = true;
+    return init;
+  });
   const rootsRef = useRef<Record<string, HTMLDivElement | null>>({});
-  const prev = useRef<string>('');
+  const prev = useRef<string>(activeFromUrl);
 
-  // Seed current path.
-  useEffect(() => {
-    setVisited((v) => v[activePath] ? v : { ...v, [activePath]: true });
-    prev.current = activePath;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
+  const isOnCachedRoute = routes.some((r) => normalize(r.path) === activeFromUrl);
+
+  // Track active path both from URL changes and from KaSlot announcements.
   useEffect(() => {
-    if (!visited[activePath]) setVisited((v) => ({ ...v, [activePath]: true }));
-  }, [activePath, visited]);
+    // Only switch the visible cached page when the URL actually matches one of
+    // our keep-alive routes. On transient routes (/auth, /reset, unknown/*)
+    // we leave activePath as-is so instances stay mounted — but we hide the
+    // entire cache below via the isOnCachedRoute flag.
+    if (isOnCachedRoute) setActivePath(activeFromUrl);
+  }, [activeFromUrl, isOnCachedRoute]);
+
+  useEffect(() => subscribe((p) => {
+    setActivePath(p);
+    setVisited((v) => (v[p] ? v : { ...v, [p]: true }));
+  }), []);
 
   useEffect(() => {
     if (prev.current === activePath) return;
     const prevRoot = rootsRef.current[prev.current];
     if (prevRoot) saveScrolls(prevRoot);
     const nextRoot = rootsRef.current[activePath];
-    if (nextRoot && visited[activePath]) {
+    if (nextRoot) {
       restoreScrolls(nextRoot);
       fireShow(activePath);
     }
     prev.current = activePath;
-  }, [activePath, visited]);
+  }, [activePath]);
 
   useEffect(() => {
     const tick = () => {
@@ -126,59 +178,24 @@ export function KeepAlive({ routes, transient = [] }: {
   }, [activePath]);
 
   return (
-    <>
-      {/* Keep-alive routes — mount each once, then show/hide via display. We
-          render them as <Route>s so React Router still handles URL matching
-          (links, navigate, relative routes all keep working); the element is
-          wrapped in a persistent host div that survives remounts of the Route
-          because we keep every visited path's host mounted and only one Route
-          matches at a time. */}
-      {routes.map(({ path, element }) => (
-        <Route
-          key={path}
-          path={path}
-          element={
-            <Keeper
-              path={path}
-              visited={visited[normalize(path)]}
-              active={activePath === normalize(path)}
-              registerRef={(el) => { rootsRef.current[normalize(path)] = el; }}
-            >
-              {element}
-            </Keeper>
-          }
-        />
-      ))}
-      {transient.map(({ path, element }) => (
-        <Route key={path} path={path} element={element} />
-      ))}
-    </>
-  );
-}
-
-function Keeper({ path, active, visited, registerRef, children }: {
-  path: string;
-  active: boolean;
-  visited: boolean;
-  registerRef: (el: HTMLDivElement | null) => void;
-  children: ReactNode;
-}) {
-  // Once visited, the children host stays in the DOM permanently; before
-  // that we render nothing so the component doesn't mount on first load of
-  // other tabs.
-  const [mounted, setMounted] = useState(active);
-  useEffect(() => {
-    if (active && !mounted) setMounted(true);
-  }, [active, mounted]);
-  if (!mounted && !visited) return null;
-  return (
-    <div
-      ref={registerRef}
-      data-ka-path={normalize(path)}
-      style={{ display: active ? 'contents' : 'none' }}
-      aria-hidden={!active}
-    >
-      {mounted && children}
+    <div style={{ display: isOnCachedRoute ? 'contents' : 'none' }} aria-hidden={!isOnCachedRoute}>
+      {routes.map(({ path, element }) => {
+        const np = normalize(path);
+        const isActive = activePath === np;
+        const wasVisited = !!visited[np];
+        if (!wasVisited && !isActive) return null;
+        return (
+          <div
+            key={path}
+            ref={(el) => { rootsRef.current[np] = el; }}
+            data-ka-path={np}
+            style={{ display: isActive ? 'contents' : 'none' }}
+            aria-hidden={!isActive}
+          >
+            {element}
+          </div>
+        );
+      })}
     </div>
   );
 }

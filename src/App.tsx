@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
-import { KeepAlive } from './components/KeepAlive';
+import { KaSlot, KeepAliveCache } from './components/KeepAlive';
 import { useData } from './stores/data';
 import { newSettings } from './services/defaults';
 import { setupAutoAndReconnect } from './services/autoBundle';
@@ -248,11 +248,18 @@ export default function App() {
     <Layout>
       <KeyboardShortcuts />
       <Routes>
-        <KeepAlive routes={keepAliveRoutes} />
+        {/* Keep-alive routes: a <Route> per cached path whose element is an
+            empty KaSlot (just announces the active path to the cache). The
+            real page instances live in <KeepAliveCache> below, OUTSIDE this
+            <Routes>, so they aren't unmounted by React Router between navs. */}
+        {keepAliveRoutes.map((r) => (
+          <Route key={r.path} path={r.path} element={<KaSlot path={r.path} />} />
+        ))}
         <Route path="/ai-capture" element={<Navigate to="/ai" replace />} />
         {transientRoutes.map((r) => (<Route key={r.path} path={r.path} element={r.element} />))}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
+      <KeepAliveCache routes={keepAliveRoutes} />
     </Layout>
   );
 }
