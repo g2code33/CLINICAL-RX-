@@ -1,17 +1,25 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { useLocation } from 'react-router-dom';
+import { Route, Routes, useLocation } from 'react-router-dom';
 
 /* ==========================================================================
-   KeepAlive — mounts each listed route ONCE on first visit, hides it with
-   display:none on navigate-away, shows it on return. This preserves:
-     - local React state (drafts, selected items, open panels, filters, answers)
-     - DOM state (scroll positions of every scrollable container, focus, input values)
-     - in-flight async work (AI streams, quiz timers, uploads)
-   Hidden pages: display:none → no paint/layout cost, aria-hidden, not focusable.
-   Non-listed routes mount fresh each time (used for /auth, /reset etc.).
+   KeepAlive — wraps a set of <Route>s such that each matched page stays
+   mounted (with display:none) after you navigate away, instead of being
+   unmounted. This preserves local state, scroll positions, half-filled
+   inputs, in-flight AI streams, quiz timers etc. across tab switches.
+
+   Usage:
+     <Routes>
+       <KeepAlive routes={[
+         { path: '/', element: <Dashboard /> },
+         { path: '/quiz', element: <Quiz /> },
+         ...
+       ]} />
+       <Route path="/auth" element={<AuthPage />} />
+       <Route path="*" element={<Navigate to="/" replace />} />
+     </Routes>
    ========================================================================== */
 
-/** Fire `cb` every time the page is navigated back to (i.e. shown again). */
+/** Fire cb every time the page is navigated BACK to (i.e. becomes visible). */
 export function useOnPageShow(cb: () => void) {
   useEffect(() => {
     const p = normalize(location.pathname);
@@ -50,9 +58,7 @@ function saveScrolls(root: HTMLElement) {
     const map: Record<string, number> = {};
     const all = root.querySelectorAll<HTMLElement>('*');
     all.forEach((el) => {
-      if (el.scrollHeight - el.clientHeight > 8) {
-        map[nthPath(el, root)] = el.scrollTop;
-      }
+      if (el.scrollHeight - el.clientHeight > 8) map[nthPath(el, root)] = el.scrollTop;
     });
     map['__window__'] = window.scrollY;
     sessionStorage.setItem(SCROLL_KEY(root.getAttribute('data-ka-path') || '/'), JSON.stringify(map));
@@ -75,14 +81,18 @@ function restoreScrolls(root: HTMLElement) {
   });
 }
 
-export function KeepAlive({ routes }: { routes: { path: string; element: ReactNode }[] }) {
+/** Caches one instance per path and shows/hides it based on current location. */
+export function KeepAlive({ routes, transient = [] }: {
+  routes: { path: string; element: ReactNode }[];
+  transient?: { path: string; element: ReactNode }[];
+}) {
   const loc = useLocation();
   const activePath = normalize(loc.pathname);
   const [visited, setVisited] = useState<Record<string, boolean>>(() => ({}));
-  const rootRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const rootsRef = useRef<Record<string, HTMLDivElement | null>>({});
   const prev = useRef<string>('');
 
-  // Seed: mark current path as visited on first render.
+  // Seed current path.
   useEffect(() => {
     setVisited((v) => v[activePath] ? v : { ...v, [activePath]: true });
     prev.current = activePath;
@@ -95,9 +105,9 @@ export function KeepAlive({ routes }: { routes: { path: string; element: ReactNo
 
   useEffect(() => {
     if (prev.current === activePath) return;
-    const prevRoot = rootRefs.current[prev.current];
+    const prevRoot = rootsRef.current[prev.current];
     if (prevRoot) saveScrolls(prevRoot);
-    const nextRoot = rootRefs.current[activePath];
+    const nextRoot = rootsRef.current[activePath];
     if (nextRoot && visited[activePath]) {
       restoreScrolls(nextRoot);
       fireShow(activePath);
@@ -105,10 +115,9 @@ export function KeepAlive({ routes }: { routes: { path: string; element: ReactNo
     prev.current = activePath;
   }, [activePath, visited]);
 
-  // Periodic scroll save while a page is visible, plus on beforeunload.
   useEffect(() => {
     const tick = () => {
-      const root = rootRefs.current[activePath];
+      const root = rootsRef.current[activePath];
       if (root) saveScrolls(root);
     };
     const id = setInterval(tick, 1500);
@@ -118,22 +127,58 @@ export function KeepAlive({ routes }: { routes: { path: string; element: ReactNo
 
   return (
     <>
-      {routes.map(({ path, element }) => {
-        const key = normalize(path);
-        if (!visited[key]) return null;
-        const isActive = activePath === key;
-        return (
-          <div
-            key={key}
-            ref={(el) => { rootRefs.current[key] = el; }}
-            data-ka-path={key}
-            style={{ display: isActive ? 'contents' : 'none' }}
-            aria-hidden={!isActive}
-          >
-            {element}
-          </div>
-        );
-      })}
+      {/* Keep-alive routes — mount each once, then show/hide via display. We
+          render them as <Route>s so React Router still handles URL matching
+          (links, navigate, relative routes all keep working); the element is
+          wrapped in a persistent host div that survives remounts of the Route
+          because we keep every visited path's host mounted and only one Route
+          matches at a time. */}
+      {routes.map(({ path, element }) => (
+        <Route
+          key={path}
+          path={path}
+          element={
+            <Keeper
+              path={path}
+              visited={visited[normalize(path)]}
+              active={activePath === normalize(path)}
+              registerRef={(el) => { rootsRef.current[normalize(path)] = el; }}
+            >
+              {element}
+            </Keeper>
+          }
+        />
+      ))}
+      {transient.map(({ path, element }) => (
+        <Route key={path} path={path} element={element} />
+      ))}
     </>
+  );
+}
+
+function Keeper({ path, active, visited, registerRef, children }: {
+  path: string;
+  active: boolean;
+  visited: boolean;
+  registerRef: (el: HTMLDivElement | null) => void;
+  children: ReactNode;
+}) {
+  // Once visited, the children host stays in the DOM permanently; before
+  // that we render nothing so the component doesn't mount on first load of
+  // other tabs.
+  const [mounted, setMounted] = useState(active);
+  useEffect(() => {
+    if (active && !mounted) setMounted(true);
+  }, [active, mounted]);
+  if (!mounted && !visited) return null;
+  return (
+    <div
+      ref={registerRef}
+      data-ka-path={normalize(path)}
+      style={{ display: active ? 'contents' : 'none' }}
+      aria-hidden={!active}
+    >
+      {mounted && children}
+    </div>
   );
 }

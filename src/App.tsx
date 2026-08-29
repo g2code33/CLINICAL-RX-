@@ -247,8 +247,8 @@ export default function App() {
   return (
     <Layout>
       <KeyboardShortcuts />
-      <KeepAlive routes={keepAliveRoutes} />
       <Routes>
+        <KeepAlive routes={keepAliveRoutes} />
         <Route path="/ai-capture" element={<Navigate to="/ai" replace />} />
         {transientRoutes.map((r) => (<Route key={r.path} path={r.path} element={r.element} />))}
         <Route path="*" element={<Navigate to="/" replace />} />
