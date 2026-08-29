@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { KeepAlive } from './components/KeepAlive';
 import { useData } from './stores/data';
 import { newSettings } from './services/defaults';
 import { setupAutoAndReconnect } from './services/autoBundle';
@@ -194,52 +195,62 @@ export default function App() {
   }
   if (!profile) { return <Onboarding />; }
 
+  // Transient/reset routes always mount fresh; keep-alive routes remember where
+  // you left them (drafts, scroll, open panels, in-flight AI / quiz state).
+  // Alias routes (/ai-capture → /ai) share the same component instance so the
+  // same draft appears regardless of which entry point opened the AI.
+  const keepAliveRoutes = [
+    { path: '/', element: <Dashboard /> },
+    { path: '/journey', element: <JourneyHome /> },
+    { path: '/journey/setup', element: <Journey /> },
+    { path: '/journey/timeline', element: <JourneyTimeline /> },
+    { path: '/journey/archive', element: <AcademicArchive /> },
+    { path: '/journey/portfolio', element: <PortfolioPage /> },
+    { path: '/journey/clinical-experience', element: <ClinicalExperiencePage /> },
+    { path: '/journey/skills', element: <SkillsPage /> },
+    { path: '/journey/projects', element: <ProjectsPage /> },
+    { path: '/journey/research', element: <ResearchPage /> },
+    { path: '/journey/leadership', element: <LeadershipPage /> },
+    { path: '/journey/achievements', element: <AchievementsPage /> },
+    { path: '/journey/certifications', element: <CertificationsPage /> },
+    { path: '/journey/goals', element: <GoalsPage /> },
+    { path: '/archive', element: <Archive /> },
+    { path: '/courses', element: <Courses /> },
+    { path: '/learning', element: <LearningOverview /> },
+    { path: '/notes', element: <LearningNotes /> },
+    { path: '/favorites', element: <Favorites /> },
+    { path: '/clinical', element: <ClinicalDays /> },
+    { path: '/ward-rounds', element: <WardRounds /> },
+    { path: '/calendar', element: <CalendarPage /> },
+    { path: '/diseases', element: <Diseases /> },
+    { path: '/medicines', element: <Medicines /> },
+    { path: '/investigations', element: <Investigations /> },
+    { path: '/questions', element: <Questions /> },
+    { path: '/revision', element: <Revision /> },
+    { path: '/quiz', element: <Quiz /> },
+    { path: '/question-bank', element: <QuestionBank /> },
+    { path: '/progress', element: <Progress /> },
+    { path: '/bundles', element: <Bundles /> },
+    { path: '/ai', element: <AiChat /> },
+    { path: '/ai-workspace', element: <AiWorkspace /> },
+    { path: '/recycle-bin', element: <RecycleBin /> },
+    { path: '/settings', element: <SettingsPage /> },
+    { path: '/settings/ai', element: <AiSettings /> },
+    { path: '/sync', element: <SyncCenter /> },
+    { path: '/settings/security', element: <SecuritySettings /> },
+    { path: '/admin', element: <AdminPage /> },
+  ];
+  const transientRoutes = [
+    { path: '/auth', element: <AuthPage /> },
+    { path: '/reset', element: <ResetPassword /> },
+  ];
   return (
     <Layout>
       <KeyboardShortcuts />
+      <KeepAlive routes={keepAliveRoutes} />
       <Routes>
-        <Route path="/" element={<Dashboard />} />
-        <Route path="/journey" element={<JourneyHome />} />
-        <Route path="/journey/setup" element={<Journey />} />
-        <Route path="/journey/timeline" element={<JourneyTimeline />} />
-        <Route path="/journey/archive" element={<AcademicArchive />} />
-        <Route path="/journey/portfolio" element={<PortfolioPage />} />
-        <Route path="/journey/clinical-experience" element={<ClinicalExperiencePage />} />
-        <Route path="/journey/skills" element={<SkillsPage />} />
-        <Route path="/journey/projects" element={<ProjectsPage />} />
-        <Route path="/journey/research" element={<ResearchPage />} />
-        <Route path="/journey/leadership" element={<LeadershipPage />} />
-        <Route path="/journey/achievements" element={<AchievementsPage />} />
-        <Route path="/journey/certifications" element={<CertificationsPage />} />
-        <Route path="/journey/goals" element={<GoalsPage />} />
-        <Route path="/archive" element={<Archive />} />
-        <Route path="/courses" element={<Courses />} />
-        <Route path="/learning" element={<LearningOverview />} />
-        <Route path="/notes" element={<LearningNotes />} />
-        <Route path="/favorites" element={<Favorites />} />
-        <Route path="/clinical" element={<ClinicalDays />} />
-        <Route path="/ward-rounds" element={<WardRounds />} />
-        <Route path="/calendar" element={<CalendarPage />} />
-        <Route path="/diseases" element={<Diseases />} />
-        <Route path="/medicines" element={<Medicines />} />
-        <Route path="/investigations" element={<Investigations />} />
-        <Route path="/questions" element={<Questions />} />
-        <Route path="/revision" element={<Revision />} />
-        <Route path="/quiz" element={<Quiz />} />
-        <Route path="/question-bank" element={<QuestionBank />} />
-        <Route path="/progress" element={<Progress />} />
-        <Route path="/bundles" element={<Bundles />} />
-        <Route path="/ai" element={<AiChat />} />
-        <Route path="/ai-capture" element={<AiChat />} />
-        <Route path="/ai-workspace" element={<AiWorkspace />} />
-        <Route path="/recycle-bin" element={<RecycleBin />} />
-        <Route path="/settings" element={<SettingsPage />} />
-        <Route path="/settings/ai" element={<AiSettings />} />
-        <Route path="/sync" element={<SyncCenter />} />
-        <Route path="/settings/security" element={<SecuritySettings />} />
-        <Route path="/admin" element={<AdminPage />} />
-        <Route path="/auth" element={<AuthPage />} />
-        <Route path="/reset" element={<ResetPassword />} />
+        <Route path="/ai-capture" element={<Navigate to="/ai" replace />} />
+        {transientRoutes.map((r) => (<Route key={r.path} path={r.path} element={r.element} />))}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Layout>

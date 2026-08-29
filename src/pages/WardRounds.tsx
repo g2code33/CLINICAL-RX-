@@ -240,23 +240,34 @@ function Home({
     return prettyDate(iso);
   }
 
-  // Which days are expanded. Today is open by default; clicking a day toggles it.
-  const [expandedDays, setExpandedDays] = useState<Set<string>>(() => new Set([today]));
-  // Reset expanded set when filters change in a way that changes day list keys,
-  // but always keep today open when present.
+  // Which days are expanded. The single latest round's day is open by default;
+  // when the student taps "Show older rounds" we reveal the rest, then day
+  // accordions behave normally (tap to open/close).
+  const [showOlder, setShowOlder] = useState(false);
+  const latestDay = dayGroups[0]?.[0] ?? today;
+  const visibleDayGroups = useMemo(() => {
+    if (showOlder || anyFilter) return dayGroups;
+    // Only show the single latest day by default.
+    return dayGroups.slice(0, 1);
+  }, [dayGroups, showOlder, anyFilter]);
+  const olderCount = Math.max(0, dayGroups.length - visibleDayGroups.length);
+  const hiddenRoundsCount = useMemo(() => {
+    if (!olderCount) return 0;
+    return dayGroups.slice(1).reduce((acc, [, items]) => acc + items.length, 0);
+  }, [dayGroups, olderCount]);
+
+  const [expandedDays, setExpandedDays] = useState<Set<string>>(() => new Set());
+  // Auto-expand the latest day; when showing older rounds, keep their prior state.
   useEffect(() => {
     setExpandedDays((prev) => {
       const next = new Set(prev);
-      // Keep any day still visible open; collapse days that disappeared.
-      const visibleDates = new Set(dayGroups.map(([d]) => d));
+      const visibleDates = new Set(visibleDayGroups.map(([d]) => d));
       for (const d of next) if (!visibleDates.has(d)) next.delete(d);
-      // Default: today open.
-      if (visibleDates.has(today)) next.add(today);
-      // If a day-range filter is selected and results are few, open them all for convenience.
-      if (range !== 'all') for (const [d] of dayGroups) next.add(d);
+      if (visibleDates.has(latestDay)) next.add(latestDay);
+      if (range !== 'all' || anyFilter) for (const [d] of visibleDayGroups) next.add(d);
       return next;
     });
-  }, [dayGroups, today, range]);
+  }, [visibleDayGroups, latestDay, range, anyFilter]);
 
   function toggleDay(date: string) {
     setExpandedDays((prev) => {
@@ -265,8 +276,7 @@ function Home({
       return next;
     });
   }
-
-  function expandAll() { setExpandedDays(new Set(dayGroups.map(([d]) => d))); }
+  function expandAll() { setExpandedDays(new Set(visibleDayGroups.map(([d]) => d))); setShowOlder(true); }
   function collapseAll() { setExpandedDays(new Set()); }
 
   return (
@@ -414,15 +424,26 @@ function Home({
           </div>
         ) : (
           <div className="space-y-3">
-            <div className="flex items-center justify-end gap-2">
-              <button className="btn-ghost !py-0.5 text-xs" onClick={expandAll}>
-                Expand all
-              </button>
-              <button className="btn-ghost !py-0.5 text-xs" onClick={collapseAll}>
-                Collapse all
-              </button>
+            <div className="flex items-center justify-between gap-2">
+              <div className="text-[11px] text-slate-400">
+                {showOlder || anyFilter ? `Showing ${visibleDayGroups.length} day group${visibleDayGroups.length === 1 ? '' : 's'}` : 'Showing the latest round only'}
+              </div>
+              <div className="flex items-center gap-2">
+                {!showOlder && olderCount > 0 && !anyFilter && (
+                  <button className="btn-secondary !py-1 text-xs" onClick={() => setShowOlder(true)}>
+                    ▾ Show {hiddenRoundsCount} older round{hiddenRoundsCount === 1 ? '' : 's'} ({olderCount} day{olderCount === 1 ? '' : 's'})
+                  </button>
+                )}
+                {showOlder && !anyFilter && (
+                  <button className="btn-ghost !py-1 text-xs" onClick={() => { setShowOlder(false); }}>
+                    ▴ Hide older rounds
+                  </button>
+                )}
+                <button className="btn-ghost !py-0.5 text-xs" onClick={expandAll}>Expand all</button>
+                <button className="btn-ghost !py-0.5 text-xs" onClick={collapseAll}>Collapse all</button>
+              </div>
             </div>
-            {dayGroups.map(([date, items]) => {
+            {visibleDayGroups.map(([date, items]) => {
               const isOpen = expandedDays.has(date);
               return (
                 <div
