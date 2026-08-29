@@ -226,3 +226,46 @@ html, body { overflow-x: hidden; }
 .no-scrollbar::-webkit-scrollbar { display: none; }
 .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 
+
+/* ---------- Dark mode: active/selected states must be green on white ----------
+   Any element that is the "selected" one (active tab, chosen pill, active nav,
+   checked option, aria-selected) in dark mode must render as solid brand-green
+   with white text — never a tinted semi-transparent surface with coloured text
+   that can wash out. The light-mode variants (brand-50 / brand-100) keep their
+   muted-green look with dark text. */
+.dark .bg-brand-900\/40,
+.dark .bg-brand-950\/30,
+.dark .bg-brand-950\/40,
+.dark .bg-brand-950 {
+  color: rgb(241 245 249);
+}
+/* Force brand-50/100 pills used as "active" chips in dark mode up to full brand-600
+   when they carry the active/selected class OR contain the white-text signal. */
+.dark [aria-selected='true'],
+.dark [aria-current='page'],
+.dark [aria-current='true'],
+.dark [data-active='true'],
+.dark .active {
+  background-color: rgb(22 163 74) !important; /* brand-600 */
+  color: rgb(255 255 255) !important;
+  border-color: rgb(22 163 74) !important;
+}
+/* When an element uses a brand-tinted dark surface AND carries a "selected"
+   signal (data-selected, .active, aria-current/selected, or it's the button
+   inside a parent marked active) — promote it to solid brand-green on white. */
+.dark [data-selected='true'].bg-brand-900\/40,
+.dark [data-selected='true'].bg-brand-950\/30,
+.dark [data-selected='true'].bg-brand-950\/40,
+.dark button[aria-pressed='true'].bg-brand-900\/40,
+.dark button[aria-pressed='true'].bg-brand-950\/30,
+.dark button[aria-pressed='true'].bg-brand-950\/40 {
+  background-color: rgb(22 163 74) !important;
+  color: #fff !important;
+  border-color: rgb(22 163 74) !important;
+}
+/* Anything set to bg-brand-600/700 MUST have white text — guards against a
+   stray text-slate-* class overriding the contrast. */
+.bg-brand-600, .bg-brand-700 { color: #fff !important; }
+.bg-brand-600\/90, .bg-brand-700\/90 { color: #fff !important; }
+.bg-brand-600 *, .bg-brand-700 * { color: inherit; }
+.bg-brand-600\/90 *, .bg-brand-700\/90 * { color: inherit; }

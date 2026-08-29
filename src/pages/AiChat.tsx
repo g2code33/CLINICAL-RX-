@@ -747,7 +747,7 @@ export function AiChat() {
             <div className="flex flex-wrap items-center gap-2 border-t border-slate-200 px-3 pt-2 dark:border-slate-700">
               {wardAttachment ? (
                 <>
-                  <span className="inline-flex items-center gap-1 rounded-full bg-brand-50 px-2 py-0.5 text-[11px] font-semibold text-brand-800 dark:bg-brand-900/40 dark:text-brand-200">
+                  <span className="inline-flex items-center gap-1 rounded-full bg-brand-50 px-2 py-0.5 text-[11px] font-semibold text-brand-800 dark:bg-brand-600 dark:text-white">
                     🏥 {wardAttachment.round?.ward || 'Round'}{wardAttachment.round?.date ? ` · ${wardAttachment.round.date}` : ''}
                     {wardAttachment.patientLabel ? <> · 🛏️ {wardAttachment.patientLabel}</> : null}
                   </span>
@@ -797,7 +797,7 @@ export function AiChat() {
                                   <button key={c.id}
                                     onMouseEnter={() => setSlashSel(idx)}
                                     onClick={() => runSlashCmd(c)}
-                                    className={`flex w-full items-start gap-2 rounded-md px-2 py-1.5 text-left text-xs ${selected ? 'bg-brand-50 text-brand-900 dark:bg-brand-900/40 dark:text-brand-100' : 'hover:bg-slate-50 dark:hover:bg-slate-700'}`}>
+                                    className={`flex w-full items-start gap-2 rounded-md px-2 py-1.5 text-left text-xs ${selected ? 'bg-brand-600 text-white dark:bg-brand-600 dark:text-white' : 'hover:bg-slate-50 dark:hover:bg-slate-700'}`}>
                                     <span className="text-base leading-none">{c.icon}</span>
                                     <span className="min-w-0 flex-1">
                                       <span className="font-semibold"><code className="rounded bg-slate-100 px-1 text-[11px] dark:bg-slate-700">{c.cmd}</code> {c.label}</span>
@@ -896,7 +896,7 @@ function ModeGroupChip({
     <div className="relative" data-ai-group={group}>
       <button onClick={() => setOpen((v) => !v)}
         className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
-          activeInGroup ? 'border-brand-300 bg-brand-50 text-brand-800 dark:border-brand-700 dark:bg-brand-900/40 dark:text-brand-200' : 'border-slate-200 bg-white text-slate-600 hover:border-brand-300 hover:text-brand-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:border-brand-600'
+          activeInGroup ? 'border-brand-500 bg-brand-600 text-white shadow-sm dark:border-brand-500 dark:bg-brand-600 dark:text-white' : 'border-slate-200 bg-white text-slate-600 hover:border-brand-300 hover:text-brand-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:border-brand-600'
         }`} aria-expanded={open}>
         {activeInGroup ? <>{activeInGroup.icon} {activeInGroup.label}</> : <>▸ {label}</>}
         <span className={`text-[9px] transition-transform ${open ? 'rotate-180' : ''}`}>▾</span>
@@ -908,7 +908,7 @@ function ModeGroupChip({
             <button key={m.key}
               onClick={() => { onPick(m.key); setOpen(false); }}
               className={`whitespace-nowrap rounded-full px-2.5 py-1 text-[11px] font-semibold transition ${
-                activeMode === m.key ? 'bg-brand-600 text-white shadow-sm' : 'bg-slate-100 text-slate-700 hover:bg-brand-50 hover:text-brand-700 dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-brand-900/40'
+                activeMode === m.key ? 'bg-brand-600 text-white shadow-sm dark:bg-brand-600 dark:text-white' : 'bg-slate-100 text-slate-800 hover:bg-brand-50 hover:text-brand-700 dark:bg-slate-700 dark:text-slate-100 dark:hover:bg-brand-600 dark:hover:text-white'
               }`}
               title={m.hint || aiModuleLabel(m.module)}>
               {m.icon} {m.label}
