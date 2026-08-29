@@ -173,10 +173,13 @@ export function newChatSession(section: string, title: string): ChatSession {
 
 /** Ward presets offered in the "Start Ward Round" form (custom names allowed). */
 export const WARD_PRESETS = [
+  'Males Ward',
+  'Females Ward',
+  'Pediatric Ward',
+  'Pregnancy Ward',
+  'Emergency Ward',
   'Medical Ward',
   'Surgical Ward',
-  'Paediatric Ward',
-  'Emergency Department',
   'Outpatient Department',
   'Pharmacy',
 ] as const;

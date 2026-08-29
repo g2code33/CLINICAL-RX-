@@ -180,7 +180,94 @@ function Home({
   onSearch: () => void;
   onBundle: () => void;
 }) {
-  const recent = rounds.slice(0, 6);
+  // ---- Filters ----
+  // Ward filter: '' means All, else a specific ward name.
+  const [wardFilter, setWardFilter] = useState<string>('');
+  // Date-range preset.
+  const [range, setRange] = useState<'all' | 'today' | '7d' | '30d'>('all');
+
+  const today = todayIso();
+  const weekAgo = useMemo(() => {
+    const d = new Date(); d.setDate(d.getDate() - 7);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  }, []);
+  const monthAgo = useMemo(() => {
+    const d = new Date(); d.setDate(d.getDate() - 30);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  }, []);
+
+  // Build the set of ward names actually present (for filter chips), stable-ordered by recent use.
+  const wardOptions = useMemo(() => {
+    const seen: string[] = [];
+    for (const r of rounds) {
+      if (!seen.includes(r.ward)) seen.push(r.ward);
+    }
+    // Always surface the common presets first so users can filter even before any round for that ward exists.
+    const presets = [...WARD_PRESETS] as string[];
+    const merged: string[] = [];
+    for (const p of presets) if (!merged.includes(p)) merged.push(p);
+    for (const s of seen) if (!merged.includes(s)) merged.push(s);
+    return merged;
+  }, [rounds]);
+
+  const filtered = useMemo(() => {
+    let items = [...rounds];
+    if (wardFilter) items = items.filter((r) => r.ward === wardFilter);
+    if (range === 'today') items = items.filter((r) => r.date === today);
+    else if (range === '7d') items = items.filter((r) => r.date >= weekAgo);
+    else if (range === '30d') items = items.filter((r) => r.date >= monthAgo);
+    // Already sorted newest-first by the parent.
+    return items;
+  }, [rounds, wardFilter, range, today, weekAgo, monthAgo]);
+
+  // Group filtered rounds by date for a "by day" view.
+  const dayGroups = useMemo(() => {
+    const map = new Map<string, WardRound[]>();
+    for (const r of filtered) {
+      map.set(r.date, [...(map.get(r.date) ?? []), r]);
+    }
+    return Array.from(map.entries()).sort((a, b) => (a[0] < b[0] ? 1 : -1));
+  }, [filtered]);
+
+  const totalFiltered = filtered.length;
+  const anyFilter = wardFilter !== '' || range !== 'all';
+
+  function dayHeading(iso: string): string {
+    if (iso === today) return `Today — ${prettyDate(iso)}`;
+    const y = new Date(); y.setDate(y.getDate() - 1);
+    const yesterday = `${y.getFullYear()}-${String(y.getMonth() + 1).padStart(2, '0')}-${String(y.getDate()).padStart(2, '0')}`;
+    if (iso === yesterday) return `Yesterday — ${prettyDate(iso)}`;
+    return prettyDate(iso);
+  }
+
+  // Which days are expanded. Today is open by default; clicking a day toggles it.
+  const [expandedDays, setExpandedDays] = useState<Set<string>>(() => new Set([today]));
+  // Reset expanded set when filters change in a way that changes day list keys,
+  // but always keep today open when present.
+  useEffect(() => {
+    setExpandedDays((prev) => {
+      const next = new Set(prev);
+      // Keep any day still visible open; collapse days that disappeared.
+      const visibleDates = new Set(dayGroups.map(([d]) => d));
+      for (const d of next) if (!visibleDates.has(d)) next.delete(d);
+      // Default: today open.
+      if (visibleDates.has(today)) next.add(today);
+      // If a day-range filter is selected and results are few, open them all for convenience.
+      if (range !== 'all') for (const [d] of dayGroups) next.add(d);
+      return next;
+    });
+  }, [dayGroups, today, range]);
+
+  function toggleDay(date: string) {
+    setExpandedDays((prev) => {
+      const next = new Set(prev);
+      if (next.has(date)) next.delete(date); else next.add(date);
+      return next;
+    });
+  }
+
+  function expandAll() { setExpandedDays(new Set(dayGroups.map(([d]) => d))); }
+  function collapseAll() { setExpandedDays(new Set()); }
 
   return (
     <div className="space-y-5">
@@ -231,10 +318,80 @@ function Home({
         </button>
       </div>
 
+      {/* ---- Filter bar: date range + ward filter chips ---- */}
+      <div className="card !p-3">
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+          <div className="text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+            📅 Filter rounds
+          </div>
+          {anyFilter && (
+            <button
+              className="btn-ghost !py-0.5 text-xs"
+              onClick={() => { setWardFilter(''); setRange('all'); }}
+            >
+              ✕ Clear filters
+            </button>
+          )}
+        </div>
+
+        <div className="-mx-1 mb-2 flex gap-1.5 overflow-x-auto px-1 pb-1">
+          {([
+            ['all', 'All time'],
+            ['today', 'Today'],
+            ['7d', 'Last 7 days'],
+            ['30d', 'Last 30 days'],
+          ] as const).map(([k, label]) => (
+            <button
+              key={k}
+              className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
+                range === k
+                  ? 'bg-brand-600 text-white'
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-700 dark:text-slate-300'
+              }`}
+              onClick={() => setRange(k)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1">
+          <button
+            className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
+              wardFilter === ''
+                ? 'bg-brand-600 text-white'
+                : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-700 dark:text-slate-300'
+            }`}
+            onClick={() => setWardFilter('')}
+          >
+            All wards
+          </button>
+          {wardOptions.map((w) => (
+            <button
+              key={w}
+              className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
+                wardFilter === w
+                  ? 'bg-brand-600 text-white'
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-700 dark:text-slate-300'
+              }`}
+              onClick={() => setWardFilter(w)}
+            >
+              {w}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* ---- Day-grouped rounds ---- */}
       <div>
         <div className="mb-2 flex items-center justify-between">
-          <h2 className="text-sm font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Recent Ward Rounds</h2>
-          {rounds.length > recent.length && (
+          <h2 className="text-sm font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+            {anyFilter ? 'Filtered Ward Rounds' : 'Recent Ward Rounds'}
+            <span className="ml-2 font-normal normal-case text-slate-400">
+              ({totalFiltered} round{totalFiltered === 1 ? '' : 's'})
+            </span>
+          </h2>
+          {rounds.length > totalFiltered && !anyFilter && rounds.length > 9 && (
             <button className="btn-ghost !py-0.5 text-xs" onClick={onHistory}>
               View all →
             </button>
@@ -251,11 +408,62 @@ function Home({
               </button>
             }
           />
+        ) : !totalFiltered ? (
+          <div className="rounded-xl border border-dashed border-slate-300 py-8 text-center text-sm text-slate-400 dark:border-slate-700">
+            No rounds match the current filters.
+          </div>
         ) : (
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {recent.map((r) => (
-              <RoundCard key={r.id} round={r} onOpen={() => onOpen(r.id)} />
-            ))}
+          <div className="space-y-3">
+            <div className="flex items-center justify-end gap-2">
+              <button className="btn-ghost !py-0.5 text-xs" onClick={expandAll}>
+                Expand all
+              </button>
+              <button className="btn-ghost !py-0.5 text-xs" onClick={collapseAll}>
+                Collapse all
+              </button>
+            </div>
+            {dayGroups.map(([date, items]) => {
+              const isOpen = expandedDays.has(date);
+              return (
+                <div
+                  key={date}
+                  className={`rounded-2xl border transition-colors ${
+                    isOpen ? 'border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-800/30' : 'border-slate-200 bg-white/60 dark:border-slate-700 dark:bg-slate-800/10'
+                  }`}
+                >
+                  <button
+                    className="flex w-full items-center gap-2 px-4 py-3 text-left transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/50"
+                    onClick={() => toggleDay(date)}
+                    aria-expanded={isOpen}
+                  >
+                    <span className="text-base">{isOpen ? '📂' : '📁'}</span>
+                    <span className="text-sm font-bold text-slate-800 dark:text-slate-100">
+                      📆 {dayHeading(date)}
+                    </span>
+                    <span className="rounded-full bg-brand-100 px-2 py-0.5 text-[11px] font-semibold text-brand-700 dark:bg-brand-900 dark:text-brand-300">
+                      {items.length} round{items.length === 1 ? '' : 's'}
+                    </span>
+                    {date === today && (
+                      <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
+                        Today
+                      </span>
+                    )}
+                    <span className="ml-auto text-lg font-bold text-slate-400 transition-transform" style={{ transform: isOpen ? 'rotate(90deg)' : 'rotate(0deg)' }}>
+                      ›
+                    </span>
+                  </button>
+                  {isOpen && (
+                    <div className="border-t border-slate-100 px-4 py-3 dark:border-slate-700">
+                      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                        {items.map((r) => (
+                          <RoundCard key={r.id} round={r} onOpen={() => onOpen(r.id)} />
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         )}
       </div>
@@ -449,6 +657,9 @@ function ActiveRound({ round, onClose, onDeleted }: { round: WardRound; onClose:
   const [selectMode, setSelectMode] = useState(false);
   const [selected, setSelected] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
+  // Patient selection: which patient (by label) the user is currently capturing for.
+  const [activePatient, setActivePatient] = useState<string | null>(null);
+  const [renamePatient, setRenamePatient] = useState<{ from: string; value: string } | null>(null);
 
   const entries = useMemo(
     () => allEntries.filter((e) => e.roundId === round.id).sort((a, b) => b.createdAt - a.createdAt),
@@ -456,10 +667,75 @@ function ActiveRound({ round, onClose, onDeleted }: { round: WardRound; onClose:
   );
   const counts = countsFor(round.id);
   const analysis = analyses.find((a) => a.roundId === round.id) ?? null;
-  const shown = filter === 'all' ? entries : entries.filter((e) => e.type === filter);
 
-  function quick(type: WardEntryType) {
+  // Build the list of patient labels present in this round, stably ordered by first encounter.
+  const patientLabels = useMemo(() => {
+    const seen: string[] = [];
+    const order: string[] = [];
+    for (const e of [...entries].sort((a, b) => a.createdAt - b.createdAt)) {
+      const p = (e.patientLabel || '').trim();
+      if (!p) continue;
+      if (!seen.includes(p)) {
+        seen.push(p);
+        order.push(p);
+      }
+    }
+    return order;
+  }, [entries]);
+
+  const unassignedEntries = entries.filter((e) => !e.patientLabel?.trim());
+  const unassignedCount = unassignedEntries.length;
+
+  // Counts for a specific patient label.
+  function patientCount(label: string): number {
+    return entries.filter((e) => e.patientLabel === label).length;
+  }
+
+  // Find the next "Patient N" number that isn't already used.
+  function nextPatientNumber(): number {
+    const used = new Set<number>();
+    for (const label of patientLabels) {
+      const m = label.match(/^Patient\s+(\d+)$/i);
+      if (m) used.add(parseInt(m[1], 10));
+    }
+    let n = 1;
+    while (used.has(n)) n++;
+    return n;
+  }
+
+  // Create a new patient ("Patient N"), select it, and open quick capture.
+  function addPatient() {
+    const next = `Patient ${nextPatientNumber()}`;
+    setActivePatient(next);
+    setCaptureType(null);
+    setCaptureOpen(true);
+  }
+
+  function selectPatient(label: string) {
+    setActivePatient((prev) => (prev === label ? null : label));
+  }
+
+  function quickForPatient(type: WardEntryType) {
     setCaptureType(type);
+    setCaptureOpen(true);
+  }
+
+  // Entries shown in the main list (respecting filter).
+  const shown = useMemo(() => {
+    const base = filter === 'all' ? entries : entries.filter((e) => e.type === filter);
+    return base;
+  }, [entries, filter]);
+
+  const entriesForPatient = (label: string) =>
+    shown.filter((e) => e.patientLabel === label);
+
+  const shownUnassigned = filter === 'all'
+    ? unassignedEntries
+    : unassignedEntries.filter((e) => e.type === filter);
+
+  function openCapture(noPatient = false) {
+    setCaptureType(null);
+    if (noPatient) setActivePatient(null);
     setCaptureOpen(true);
   }
 
@@ -476,6 +752,35 @@ function ActiveRound({ round, onClose, onDeleted }: { round: WardRound; onClose:
     } finally {
       setBusy(false);
     }
+  }
+
+  async function renamePatientLabel(oldLabel: string, newLabel: string) {
+    const trimmed = newLabel.trim();
+    if (!trimmed || trimmed === oldLabel) return;
+    // Update every entry carrying the old label.
+    const targets = entries.filter((e) => e.patientLabel === oldLabel);
+    for (const e of targets) {
+      // Lazy import to avoid circular concerns at module init.
+      const { updateEntry } = await import('../services/wardRounds');
+      await updateEntry(e, { patientLabel: trimmed });
+    }
+    if (activePatient === oldLabel) setActivePatient(trimmed);
+    useData.getState().setStatus(`✓ Renamed to ${trimmed}`);
+  }
+
+  async function removePatientLabel(label: string) {
+    if (!(await confirmAction({
+      title: `Remove ${label}?`,
+      message: `Captures for this patient will be kept (moved to Unassigned) — nothing is deleted.`,
+      confirmLabel: 'Remove label',
+      destructive: false,
+    }))) return;
+    const targets = entries.filter((e) => e.patientLabel === label);
+    for (const e of targets) {
+      const { updateEntry } = await import('../services/wardRounds');
+      await updateEntry(e, { patientLabel: undefined });
+    }
+    if (activePatient === label) setActivePatient(null);
   }
 
   async function exportRound() {
@@ -515,24 +820,99 @@ function ActiveRound({ round, onClose, onDeleted }: { round: WardRound; onClose:
             </button>
           </div>
         </div>
-
-        {round.status === 'active' && (
-          <button className="btn-primary mt-4 w-full py-3.5 text-base" onClick={() => { setCaptureType(null); setCaptureOpen(true); }}>
-            ＋ Quick Capture
-          </button>
-        )}
       </div>
 
-      {/* --- One-tap capture buttons --- */}
+      {/* --- Patient selector (Step 1: select patient; then Quick Capture opens) --- */}
       {round.status === 'active' && (
         <div>
-          <div className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-400">Quick Capture</div>
+          <div className="mb-2 flex items-center justify-between">
+            <div className="text-xs font-bold uppercase tracking-wide text-slate-400">
+              🧑‍⚕️ Patients
+            </div>
+            <button className="btn-ghost !py-0.5 text-xs" onClick={addPatient}>
+              ＋ Add Patient
+            </button>
+          </div>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+            {patientLabels.map((label) => {
+              const n = patientCount(label);
+              const isActive = activePatient === label;
+              return (
+                <button
+                  key={label}
+                  className={`group relative flex flex-col items-start gap-1 rounded-xl border px-3 py-2.5 text-left transition-colors ${
+                    isActive
+                      ? 'border-brand-500 bg-brand-50 dark:bg-brand-950'
+                      : 'border-slate-200 bg-white hover:border-brand-400 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700'
+                  }`}
+                  onClick={() => selectPatient(label)}
+                >
+                  <div className="flex w-full items-center gap-1.5">
+                    <span className="text-base">🛏️</span>
+                    <span className={`flex-1 truncate text-sm font-bold ${isActive ? 'text-brand-800 dark:text-brand-200' : 'text-slate-800 dark:text-slate-100'}`}>
+                      {label}
+                    </span>
+                    {isActive && <span className="text-[10px] font-bold text-brand-600 dark:text-brand-300">● Active</span>}
+                  </div>
+                  <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                    {n} capture{n === 1 ? '' : 's'}
+                  </span>
+                  {/* Tiny actions on hover/focus */}
+                  <span className="absolute right-1 top-1 flex gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
+                    <button
+                      className="rounded px-1 text-[10px] text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700"
+                      onClick={(e) => { e.stopPropagation(); setRenamePatient({ from: label, value: label }); }}
+                      title="Rename"
+                    >
+                      ✎
+                    </button>
+                    <button
+                      className="rounded px-1 text-[10px] text-slate-500 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950"
+                      onClick={(e) => { e.stopPropagation(); removePatientLabel(label); }}
+                      title="Remove label"
+                    >
+                      ✕
+                    </button>
+                  </span>
+                </button>
+              );
+            })}
+            <button
+              className="flex flex-col items-center justify-center gap-1 rounded-xl border-2 border-dashed border-slate-300 px-3 py-3 text-sm font-semibold text-slate-500 transition-colors hover:border-brand-400 hover:text-brand-600 dark:border-slate-700 dark:text-slate-400 dark:hover:text-brand-300"
+              onClick={addPatient}
+            >
+              <span className="text-xl leading-none">＋</span>
+              <span className="text-[11px]">Add Patient</span>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* --- Active patient workspace: one-tap Quick Capture under the selected patient --- */}
+      {round.status === 'active' && activePatient && (
+        <div className="card border-brand-300 bg-brand-50/50 dark:border-brand-800 dark:bg-brand-950/30">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <div className="text-[10px] font-bold uppercase tracking-widest text-brand-700 dark:text-brand-300">
+                Now capturing for
+              </div>
+              <div className="text-lg font-extrabold text-brand-900 dark:text-brand-100">🛏️ {activePatient}</div>
+            </div>
+            <div className="flex gap-2">
+              <button className="btn-ghost !py-1 text-xs" onClick={() => setActivePatient(null)}>
+                ✕ Done with this patient
+              </button>
+            </div>
+          </div>
+          <div className="mb-2 text-xs font-bold uppercase tracking-wide text-brand-700/80 dark:text-brand-300/80">
+            Quick Capture for {activePatient}
+          </div>
           <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
             {ENTRY_TYPES.map((t) => (
               <button
                 key={t}
-                className="flex flex-col items-center gap-1 rounded-xl border border-slate-200 bg-white px-2 py-3 transition-colors hover:border-brand-500 hover:bg-brand-50 active:scale-95 dark:border-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700"
-                onClick={() => quick(t)}
+                className="flex flex-col items-center gap-1 rounded-xl border border-brand-200 bg-white px-2 py-3 transition-colors hover:border-brand-500 hover:bg-brand-50 active:scale-95 dark:border-brand-800 dark:bg-slate-800 dark:hover:bg-slate-700"
+                onClick={() => quickForPatient(t)}
               >
                 <span className="text-xl leading-none">{WARD_ENTRY_META[t].icon}</span>
                 <span className="text-[10px] font-semibold leading-tight text-slate-600 dark:text-slate-300">
@@ -541,6 +921,43 @@ function ActiveRound({ round, onClose, onDeleted }: { round: WardRound; onClose:
               </button>
             ))}
           </div>
+          <button className="btn-primary mt-3 w-full py-2.5 text-sm" onClick={() => openCapture(false)}>
+            ＋ Quick Capture ({activePatient})
+          </button>
+        </div>
+      )}
+
+      {/* --- Fallback "general" Quick Capture (no patient selected) --- */}
+      {round.status === 'active' && !activePatient && (
+        <div>
+          <div className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-400">Quick Capture (no patient)</div>
+          <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
+            {ENTRY_TYPES.map((t) => (
+              <button
+                key={t}
+                className="flex flex-col items-center gap-1 rounded-xl border border-slate-200 bg-white px-2 py-3 transition-colors hover:border-brand-500 hover:bg-brand-50 active:scale-95 dark:border-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700"
+                onClick={() => { setCaptureType(t); setCaptureOpen(true); }}
+              >
+                <span className="text-xl leading-none">{WARD_ENTRY_META[t].icon}</span>
+                <span className="text-[10px] font-semibold leading-tight text-slate-600 dark:text-slate-300">
+                  {WARD_ENTRY_META[t].label}
+                </span>
+              </button>
+            ))}
+          </div>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <button className="btn-secondary flex-1" onClick={() => openCapture(true)}>
+              ＋ Capture without a patient
+            </button>
+            {patientLabels.length === 0 && (
+              <button className="btn-primary flex-1" onClick={addPatient}>
+                ＋ Start with Patient 1
+              </button>
+            )}
+          </div>
+          <p className="mt-2 text-[11px] text-slate-400">
+            💡 Tip: Select a patient above first — then Quick Capture opens under them so captures stay organised by patient.
+          </p>
         </div>
       )}
 
@@ -550,10 +967,12 @@ function ActiveRound({ round, onClose, onDeleted }: { round: WardRound; onClose:
           <div className="text-xs font-bold uppercase tracking-wide text-slate-400">
             {round.status === 'active' ? "Today's Captures" : 'Captured'}
           </div>
-          <div className="text-xs font-semibold text-slate-500">{counts.total} total</div>
+          <div className="text-xs font-semibold text-slate-500">
+            {counts.total} total{patientLabels.length > 0 && ` · ${patientLabels.length} patient${patientLabels.length === 1 ? '' : 's'}`}
+          </div>
         </div>
         {!counts.total ? (
-          <p className="text-sm text-slate-400">Nothing captured yet — use Quick Capture above.</p>
+          <p className="text-sm text-slate-400">Nothing captured yet — select a patient above and tap Quick Capture.</p>
         ) : (
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
             {ENTRY_TYPES.map((t) => (
@@ -643,8 +1062,8 @@ function ActiveRound({ round, onClose, onDeleted }: { round: WardRound; onClose:
       {/* --- AI analysis result --- */}
       {analysis && analysis.status === 'completed' && <AnalysisPanel roundId={round.id} />}
 
-      {/* --- Entries --- */}
-      <div className="space-y-2">
+      {/* --- Entries grouped by patient --- */}
+      <div className="space-y-4">
         <div className="flex items-center justify-between">
           <div className="text-xs font-bold uppercase tracking-wide text-slate-400">
             Captures {filter !== 'all' && `· ${WARD_ENTRY_META[filter].plural}`}
@@ -655,20 +1074,96 @@ function ActiveRound({ round, onClose, onDeleted }: { round: WardRound; onClose:
             </button>
           )}
         </div>
-        {!shown.length ? (
+
+        {patientLabels.length === 0 && unassignedCount === 0 ? (
           <div className="rounded-xl border border-dashed border-slate-300 py-8 text-center text-sm text-slate-400 dark:border-slate-700">
-            {counts.total ? 'Nothing of this type yet.' : 'Your captures will appear here instantly.'}
+            Your captures will appear here instantly — start with a patient above.
           </div>
         ) : (
-          shown.map((e) => (
-            <WardEntryCard
-              key={e.id}
-              entry={e}
-              selectable={selectMode}
-              selected={selected.includes(e.id)}
-              onToggleSelect={(v) => setSelected((prev) => (v ? [...prev, e.id] : prev.filter((x) => x !== e.id)))}
-            />
-          ))
+          <>
+            {patientLabels.map((label) => {
+              const es = entriesForPatient(label);
+              const isActive = activePatient === label;
+              return (
+                <div
+                  key={label}
+                  className={`rounded-2xl border p-3 transition-colors ${
+                    isActive
+                      ? 'border-brand-400 bg-brand-50/40 dark:border-brand-700 dark:bg-brand-950/30'
+                      : 'border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-800/40'
+                  }`}
+                >
+                  <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                    <button
+                      className="flex items-center gap-2 text-left"
+                      onClick={() => round.status === 'active' && selectPatient(label)}
+                    >
+                      <span className="text-lg">🛏️</span>
+                      <span className="text-sm font-extrabold text-slate-800 dark:text-slate-100">{label}</span>
+                      <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600 dark:bg-slate-700 dark:text-slate-300">
+                        {es.length} capture{es.length === 1 ? '' : 's'}
+                      </span>
+                      {isActive && (
+                        <span className="rounded-full bg-brand-600 px-2 py-0.5 text-[10px] font-bold text-white">
+                          ACTIVE
+                        </span>
+                      )}
+                    </button>
+                    {round.status === 'active' && (
+                      <button className="btn-ghost !py-1 text-xs" onClick={() => { setActivePatient(label); setCaptureType(null); setCaptureOpen(true); }}>
+                        ＋ Add to {label}
+                      </button>
+                    )}
+                  </div>
+                  {es.length === 0 ? (
+                    <p className="text-xs text-slate-400">No captures here yet.</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {es.map((e) => (
+                        <WardEntryCard
+                          key={e.id}
+                          entry={e}
+                          selectable={selectMode}
+                          selected={selected.includes(e.id)}
+                          onToggleSelect={(v) => setSelected((prev) => (v ? [...prev, e.id] : prev.filter((x) => x !== e.id)))}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+
+            {shownUnassigned.length > 0 && (
+              <div className="rounded-2xl border border-dashed border-slate-300 p-3 dark:border-slate-700">
+                <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-lg">📎</span>
+                    <span className="text-sm font-extrabold text-slate-500 dark:text-slate-400">Unassigned (no patient)</span>
+                    <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600 dark:bg-slate-700 dark:text-slate-300">
+                      {shownUnassigned.length}
+                    </span>
+                  </div>
+                  {round.status === 'active' && (
+                    <button className="btn-ghost !py-1 text-xs" onClick={() => openCapture(true)}>
+                      ＋ Add note
+                    </button>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  {shownUnassigned.map((e) => (
+                    <WardEntryCard
+                      key={e.id}
+                      entry={e}
+                      selectable={selectMode}
+                      selected={selected.includes(e.id)}
+                      onToggleSelect={(v) => setSelected((prev) => (v ? [...prev, e.id] : prev.filter((x) => x !== e.id)))}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+          </>
         )}
       </div>
 
@@ -676,8 +1171,40 @@ function ActiveRound({ round, onClose, onDeleted }: { round: WardRound; onClose:
         open={captureOpen}
         roundId={round.id}
         initialType={captureType}
+        patientLabel={activePatient ?? undefined}
         onClose={() => setCaptureOpen(false)}
       />
+
+      {/* Rename patient modal */}
+      <Modal open={renamePatient !== null} onClose={() => setRenamePatient(null)} title="Rename patient label">
+        {renamePatient && (
+          <form
+            className="space-y-3"
+            onSubmit={async (e) => {
+              e.preventDefault();
+              await renamePatientLabel(renamePatient.from, renamePatient.value);
+              setRenamePatient(null);
+            }}
+          >
+            <label className="label">Label</label>
+            <input
+              autoFocus
+              className="input"
+              value={renamePatient.value}
+              onChange={(e) => setRenamePatient({ ...renamePatient, value: e.target.value })}
+              placeholder="e.g. Patient 1, Bed 3, or a non-identifying note"
+            />
+            <p className="text-[11px] text-slate-400">
+              🔒 Use labels only (e.g. "Bed 4 — hypertension") — never real names or IDs.
+            </p>
+            <div className="flex justify-end gap-2">
+              <button type="button" className="btn-secondary" onClick={() => setRenamePatient(null)}>Cancel</button>
+              <button type="submit" className="btn-primary" disabled={!renamePatient.value.trim()}>Rename</button>
+            </div>
+          </form>
+        )}
+      </Modal>
+
       <FinishModal open={finishOpen} round={round} onClose={() => setFinishOpen(false)} onDone={onClose} />
       <AnalyzeModal open={analysisOpen} round={round} onClose={() => setAnalysisOpen(false)} />
     </div>
@@ -949,10 +1476,28 @@ function History({ rounds, onOpen, onBack }: { rounds: WardRound[]; onOpen: (id:
   const [q, setQ] = useState('');
   const [showArchived, setShowArchived] = useState(false);
   const [sort, setSort] = useState<'date' | 'ward' | 'captures'>('date');
+  const [wardFilter, setWardFilter] = useState<string>('');
+  const [fromDate, setFromDate] = useState('');
+  const [toDate, setToDate] = useState('');
+  const today = todayIso();
+  const [expandedDays, setExpandedDays] = useState<Set<string>>(() => new Set([today]));
+
+  const wardOptions = useMemo(() => {
+    const seen: string[] = [];
+    for (const r of rounds) if (!seen.includes(r.ward)) seen.push(r.ward);
+    const presets = [...WARD_PRESETS] as string[];
+    const merged: string[] = [];
+    for (const p of presets) if (!merged.includes(p)) merged.push(p);
+    for (const s of seen) if (!merged.includes(s)) merged.push(s);
+    return merged;
+  }, [rounds]);
 
   const list = useMemo(() => {
     const ql = q.trim().toLowerCase();
     let items = rounds.filter((r) => (showArchived ? true : !r.archived));
+    if (wardFilter) items = items.filter((r) => r.ward === wardFilter);
+    if (fromDate) items = items.filter((r) => r.date >= fromDate);
+    if (toDate) items = items.filter((r) => r.date <= toDate);
     if (ql) {
       const hits = new Set(searchWardRounds(ql).map((h) => h.round.id));
       items = items.filter((r) => hits.has(r.id));
@@ -962,53 +1507,183 @@ function History({ rounds, onOpen, onBack }: { rounds: WardRound[]; onOpen: (id:
       if (sort === 'captures') return countsFor(b.id).total - countsFor(a.id).total;
       return a.date === b.date ? b.startedAt - a.startedAt : a.date < b.date ? 1 : -1;
     });
-  }, [rounds, q, showArchived, sort]);
+  }, [rounds, q, showArchived, sort, wardFilter, fromDate, toDate]);
 
-  const groups = useMemo(() => {
+  // When sorting by date, group by day; otherwise render flat.
+  const byDate = sort === 'date';
+  const dayGroups = useMemo(() => {
+    if (!byDate) return null;
     const map = new Map<string, WardRound[]>();
-    for (const r of list) {
-      const k = monthLabel(r.date);
-      map.set(k, [...(map.get(k) ?? []), r]);
-    }
+    for (const r of list) map.set(r.date, [...(map.get(r.date) ?? []), r]);
     return Array.from(map.entries());
-  }, [list]);
+  }, [list, byDate]);
+
+  // Keep the expanded-day set valid as filters/sort change; default today open.
+  useEffect(() => {
+    setExpandedDays((prev) => {
+      if (!byDate || !dayGroups) return prev;
+      const next = new Set(prev);
+      const visibleDates = new Set(dayGroups.map(([d]) => d));
+      for (const d of next) if (!visibleDates.has(d)) next.delete(d);
+      if (visibleDates.has(today)) next.add(today);
+      // Open everything when filters are narrow (easier browsing).
+      if (wardFilter || fromDate || toDate || q.trim()) for (const [d] of dayGroups) next.add(d);
+      return next;
+    });
+  }, [dayGroups, byDate, today, wardFilter, fromDate, toDate, q]);
+
+  function toggleDay(date: string) {
+    setExpandedDays((prev) => {
+      const next = new Set(prev);
+      if (next.has(date)) next.delete(date); else next.add(date);
+      return next;
+    });
+  }
+
+  function expandAll() {
+    if (!dayGroups) return;
+    setExpandedDays(new Set(dayGroups.map(([d]) => d)));
+  }
+  function collapseAll() { setExpandedDays(new Set()); }
+
+  function dayHeadingHistory(iso: string): string {
+    if (iso === today) return `Today — ${prettyDate(iso)}`;
+    const y = new Date(); y.setDate(y.getDate() - 1);
+    const yesterday = `${y.getFullYear()}-${String(y.getMonth() + 1).padStart(2, '0')}-${String(y.getDate()).padStart(2, '0')}`;
+    if (iso === yesterday) return `Yesterday — ${prettyDate(iso)}`;
+    return prettyDate(iso);
+  }
+
+  const hasAnyFilter = wardFilter !== '' || fromDate !== '' || toDate !== '' || q.trim() !== '' || showArchived;
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-2">
-        <button className="btn-secondary" onClick={onBack}>
+      <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+        <button className="btn-secondary sm:w-auto" onClick={onBack}>
           ← Back
         </button>
         <input
-          className="input flex-1 min-w-[180px]"
+          className="input min-w-0 flex-1"
           placeholder="Search ward rounds, medicines, conditions…"
           value={q}
           onChange={(e) => setQ(e.target.value)}
         />
-        <select className="input !w-auto" value={sort} onChange={(e) => setSort(e.target.value as any)}>
-          <option value="date">Newest first</option>
-          <option value="ward">By ward</option>
-          <option value="captures">Most captures</option>
-        </select>
-        <label className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
-          <input type="checkbox" className="accent-brand-600" checked={showArchived} onChange={(e) => setShowArchived(e.target.checked)} />
-          Show archived
-        </label>
+        <div className="flex gap-2">
+          <select className="input !w-auto flex-1" value={sort} onChange={(e) => setSort(e.target.value as any)}>
+            <option value="date">Newest first</option>
+            <option value="ward">By ward</option>
+            <option value="captures">Most captures</option>
+          </select>
+          <label className="flex shrink-0 items-center gap-1.5 rounded-lg border border-slate-200 px-2.5 text-xs text-slate-600 dark:border-slate-700 dark:text-slate-300">
+            <input type="checkbox" className="accent-brand-600" checked={showArchived} onChange={(e) => setShowArchived(e.target.checked)} />
+            Archived
+          </label>
+        </div>
+      </div>
+
+      {/* Ward filter chips */}
+      <div className="card !p-3">
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+          <div className="text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">🏥 Filter by ward</div>
+          {hasAnyFilter && (
+            <button
+              className="btn-ghost !py-0.5 text-xs"
+              onClick={() => { setWardFilter(''); setFromDate(''); setToDate(''); setQ(''); setShowArchived(false); }}
+            >
+              ✕ Reset all
+            </button>
+          )}
+        </div>
+        <div className="-mx-1 mb-2 flex gap-1.5 overflow-x-auto px-1 pb-1">
+          <button
+            className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
+              wardFilter === ''
+                ? 'bg-brand-600 text-white'
+                : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-700 dark:text-slate-300'
+            }`}
+            onClick={() => setWardFilter('')}
+          >
+            All wards
+          </button>
+          {wardOptions.map((w) => (
+            <button
+              key={w}
+              className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
+                wardFilter === w
+                  ? 'bg-brand-600 text-white'
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-700 dark:text-slate-300'
+              }`}
+              onClick={() => setWardFilter(w)}
+            >
+              {w}
+            </button>
+          ))}
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <label className="label !text-[11px]">From</label>
+            <input type="date" className="input !py-1.5 text-sm" value={fromDate} onChange={(e) => setFromDate(e.target.value)} />
+          </div>
+          <div>
+            <label className="label !text-[11px]">To</label>
+            <input type="date" className="input !py-1.5 text-sm" value={toDate} onChange={(e) => setToDate(e.target.value)} />
+          </div>
+        </div>
+        <div className="mt-2 text-[11px] text-slate-400">
+          Showing {list.length} round{list.length === 1 ? '' : 's'}.
+        </div>
       </div>
 
       {!list.length ? (
         <EmptyState icon="🗂" title="No ward rounds found" hint={q ? `Nothing matches “${q}”.` : 'Start your first ward round to build a history.'} />
-      ) : (
-        groups.map(([month, items]) => (
-          <div key={month}>
-            <div className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-400">{month}</div>
-            <div className="space-y-2">
-              {items.map((r) => (
-                <HistoryRow key={r.id} round={r} onOpen={() => onOpen(r.id)} />
-              ))}
-            </div>
+      ) : byDate ? (
+        <div className="space-y-3">
+          <div className="flex items-center justify-end gap-2">
+            <button className="btn-ghost !py-0.5 text-xs" onClick={expandAll}>Expand all</button>
+            <button className="btn-ghost !py-0.5 text-xs" onClick={collapseAll}>Collapse all</button>
           </div>
-        ))
+          {dayGroups!.map(([date, items]) => {
+            const isOpen = expandedDays.has(date);
+            return (
+              <div
+                key={date}
+                className={`rounded-2xl border transition-colors ${
+                  isOpen ? 'border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-800/30' : 'border-slate-200 bg-white/60 dark:border-slate-700 dark:bg-slate-800/10'
+                }`}
+              >
+                <button
+                  className="flex w-full items-center gap-2 px-4 py-3 text-left transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/50"
+                  onClick={() => toggleDay(date)}
+                  aria-expanded={isOpen}
+                >
+                  <span className="text-base">{isOpen ? '📂' : '📁'}</span>
+                  <span className="text-sm font-bold text-slate-800 dark:text-slate-100">
+                    📆 {dayHeadingHistory(date)}
+                  </span>
+                  <span className="rounded-full bg-brand-100 px-2 py-0.5 text-[11px] font-semibold text-brand-700 dark:bg-brand-900 dark:text-brand-300">
+                    {items.length}
+                  </span>
+                  <span className="ml-auto text-lg font-bold text-slate-400 transition-transform" style={{ transform: isOpen ? 'rotate(90deg)' : 'rotate(0deg)' }}>
+                    ›
+                  </span>
+                </button>
+                {isOpen && (
+                  <div className="space-y-2 border-t border-slate-100 px-4 py-3 dark:border-slate-700">
+                    {items.map((r) => (
+                      <HistoryRow key={r.id} round={r} onOpen={() => onOpen(r.id)} />
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {list.map((r) => (
+            <HistoryRow key={r.id} round={r} onOpen={() => onOpen(r.id)} />
+          ))}
+        </div>
       )}
     </div>
   );
@@ -1021,7 +1696,7 @@ function HistoryRow({ round, onOpen }: { round: WardRound; onOpen: () => void })
   const [renameTo, setRenameTo] = useState<string | null>(null);
 
   return (
-    <div className="flex flex-wrap items-center gap-3 rounded-xl border border-slate-200 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800">
+    <div className="flex flex-col gap-2 rounded-xl border border-slate-200 bg-white p-3 text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3 sm:px-3 sm:py-2.5">
       <Modal open={renameTo !== null} onClose={() => setRenameTo(null)} title="Rename ward">
         <form
           className="space-y-3"

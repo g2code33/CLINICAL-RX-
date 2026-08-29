@@ -17,6 +17,7 @@ import { Toaster, OfflineIndicator } from './Toaster';
 import { GlobalConfirm } from './ui/globalConfirm';
 import { AppIcon } from './AppIcon';
 import { ModeSplash } from './ModeSplash';
+import { hardRefresh } from '../services/hardRefresh';
 
 const APP_VERSION = pkg.version;
 
@@ -40,6 +41,7 @@ const NAV = [
   { to: '/bundles', iconKey: 'nav.bundles', label: 'Bundles' },
   { to: '/progress', iconKey: 'nav.progress', label: 'Progress' },
   { to: '/ai', iconKey: 'nav.ai', label: 'AI' },
+  { to: '/recycle-bin', iconKey: 'nav.trash', label: 'Recycle Bin' },
   { to: '/sync', iconKey: 'nav.sync', label: 'Sync & Backup' },
   { to: '/settings', iconKey: 'nav.settings', label: 'Settings' },
   { to: '/admin', iconKey: 'nav.admin', label: 'Admin' },
@@ -61,13 +63,14 @@ const PHARMD_NAV = [
   { to: '/journey/archive', iconKey: 'nav.archive', label: 'Academic Archive' },
   { to: '/courses', iconKey: 'nav.courses', label: 'Courses' },
   { to: '/progress', iconKey: 'nav.progress', label: 'Progress' },
+  { to: '/recycle-bin', iconKey: 'nav.trash', label: 'Recycle Bin' },
   { to: '/sync', iconKey: 'nav.sync', label: 'Sync & Backup' },
   { to: '/settings', iconKey: 'nav.settings', label: 'Settings' },
   { to: '/admin', iconKey: 'nav.admin', label: 'Admin' },
 ];
 
 /** Routes that belong to BOTH workspaces, so they never force a mode change. */
-const SHARED_ROUTES = ['/progress', '/settings', '/admin', '/auth', '/reset', '/sync'];
+const SHARED_ROUTES = ['/progress', '/settings', '/admin', '/auth', '/reset', '/sync', '/recycle-bin'];
 
 const PHARMD_BOTTOM_NAV = [
   { to: '/journey', iconKey: 'nav.journey', label: 'Journey' },
@@ -124,7 +127,22 @@ export function Layout({ children }: { children: ReactNode }) {
   const setSidebarOpen = useUi((s) => s.setSidebarOpen);
   const connected = useData((s) => s.settings?.onlineAccount?.connected);
   const syncing = useData((s) => s.settings?.onlineAccount?.syncing);
-  const pending = useData((s) => s.removed.length); // lightweight re-render driver
+  // Cloud pending count: polled from the sync engine. Not a store subscription
+  // because the engine keeps its own queue.
+  const [pending, setPending] = useState(0);
+  useEffect(() => {
+    let stop = false;
+    function tick() {
+      if (stop) return;
+      import('../services/syncEngine')
+        .then((m) => { if (!stop) setPending(m.getPendingCount()); })
+        .catch(() => {});
+    }
+    tick();
+    const id = setInterval(tick, 4000);
+    return () => { stop = true; clearInterval(id); };
+  }, []);
+  const trashCount = useData((s) => s.removed.length);
 
   const [beepOn, setBeepOn] = useState(true);
 
@@ -168,7 +186,7 @@ export function Layout({ children }: { children: ReactNode }) {
       <div className="app-shell flex flex-col overflow-hidden bg-slate-50 text-slate-800 dark:bg-slate-900 dark:text-slate-100 lg:flex-row">
         {/* ================= DESKTOP SIDEBAR (lg+) ================= */}
         {sidebarOpen ? (
-          <aside aria-label="Primary navigation" className="hidden w-64 shrink-0 flex-col border-r border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900 lg:flex">
+          <aside aria-label="Primary navigation" className="hidden w-64 shrink-0 flex-col border-r border-slate-200 bg-white text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 lg:flex">
             <div className="flex items-center gap-3 border-b border-slate-200 px-5 py-5 dark:border-slate-700">
               <img src="./v2.PNG" alt="CLINICAL Rx logo" className="h-9 w-9 shrink-0 rounded-xl object-cover" />
               <div className="min-w-0">
@@ -194,6 +212,9 @@ export function Layout({ children }: { children: ReactNode }) {
                 >
                   <AppIcon name={n.iconKey} className="text-lg leading-none" />
                   <span className="truncate">{n.label}</span>
+                  {n.to === '/recycle-bin' && trashCount > 0 && (
+                    <span className="ml-auto shrink-0 rounded-full bg-red-500 px-1.5 py-0.5 text-[10px] font-bold text-white">{trashCount}</span>
+                  )}
                 </NavLink>
               ))}
             </nav>
@@ -215,7 +236,7 @@ export function Layout({ children }: { children: ReactNode }) {
             </div>
           </aside>
         ) : (
-          <aside className="hidden w-16 shrink-0 flex-col border-r border-slate-200 bg-white py-2 dark:border-slate-700 dark:bg-slate-900 lg:flex">
+          <aside className="hidden w-16 shrink-0 flex-col border-r border-slate-200 bg-white py-2 text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 lg:flex">
             <div className="mb-2 flex justify-center">
               <img src="./v2.PNG" alt="CLINICAL Rx" className="h-9 w-9 rounded-xl object-cover" />
             </div>
@@ -242,7 +263,7 @@ export function Layout({ children }: { children: ReactNode }) {
         {/* ================= MAIN COLUMN ================= */}
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
           {/* -------- Top header (mobile + desktop) -------- */}
-          <header className="relative z-30 flex h-14 shrink-0 items-center justify-between gap-2 border-b border-slate-200 bg-white/95 px-3 backdrop-blur dark:border-slate-700 dark:bg-slate-900/95 sm:px-4 lg:h-16 lg:px-6">
+          <header className="relative z-30 flex h-14 shrink-0 items-center justify-between gap-2 border-b border-slate-200 bg-white/95 px-3 text-slate-900 backdrop-blur dark:border-slate-700 dark:bg-slate-900/95 dark:text-slate-100 sm:px-4 lg:h-16 lg:px-6">
             <div className="flex min-w-0 items-center gap-2 sm:gap-3">
               {/* Hamburger — mobile opens the drawer, desktop toggles the sidebar */}
               <button
@@ -319,6 +340,14 @@ export function Layout({ children }: { children: ReactNode }) {
                 🔍
               </button>
               <button
+                className="btn-ghost h-9 w-9 shrink-0 items-center justify-center !px-0 !py-0 text-lg"
+                onClick={() => { void hardRefresh(true); }}
+                title="Hard refresh & clear cache"
+                aria-label="Hard refresh and clear cache"
+              >
+                🔄
+              </button>
+              <button
                 className="btn-ghost hidden h-9 w-9 items-center justify-center !px-0 !py-0 text-lg lg:flex"
                 onClick={() => setHelpOpen(true)}
                 title="Keyboard shortcuts (?)"
@@ -365,7 +394,7 @@ export function Layout({ children }: { children: ReactNode }) {
 
           {/* Panel — slides in from the left */}
           <aside
-            className={`absolute inset-y-0 left-0 flex w-80 max-w-[85%] transform flex-col bg-white shadow-2xl transition-transform duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] dark:bg-slate-900 ${
+            className={`absolute inset-y-0 left-0 flex w-80 max-w-[85%] transform flex-col bg-white text-slate-900 shadow-2xl transition-transform duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] dark:bg-slate-900 dark:text-slate-100 ${
               drawerOpen ? 'translate-x-0' : '-translate-x-full'
             }`}
             style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}
@@ -410,7 +439,10 @@ export function Layout({ children }: { children: ReactNode }) {
                 >
                   <span className="w-8 shrink-0 text-center text-xl leading-none"><AppIcon name={n.iconKey} /></span>
                   <span className="truncate text-[15px]">{n.label}</span>
-                  {location.pathname === n.to && (
+                  {n.to === '/recycle-bin' && trashCount > 0 && (
+                    <span className="ml-auto shrink-0 rounded-full bg-red-500 px-1.5 py-0.5 text-[10px] font-bold text-white">{trashCount}</span>
+                  )}
+                  {location.pathname === n.to && !(n.to === '/recycle-bin' && trashCount > 0) && (
                     <span className="ml-auto h-2 w-2 shrink-0 rounded-full bg-brand-600" />
                   )}
                 </NavLink>
@@ -427,7 +459,7 @@ export function Layout({ children }: { children: ReactNode }) {
 
         {/* ================= FIXED BOTTOM NAV (mobile only) ================= */}
         <nav
-          className="fixed bottom-0 left-0 right-0 z-40 border-t border-slate-200 bg-white/95 backdrop-blur-xl dark:border-slate-700 dark:bg-slate-900/95 lg:hidden"
+          className="fixed bottom-0 left-0 right-0 z-40 border-t border-slate-200 bg-white/95 text-slate-900 backdrop-blur-xl dark:border-slate-700 dark:bg-slate-900/95 dark:text-slate-100 lg:hidden"
           style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 6px)' }}
         >
           <div className="flex items-stretch justify-around gap-0.5 px-1 pt-1.5">

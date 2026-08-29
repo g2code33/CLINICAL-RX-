@@ -50,6 +50,7 @@ import { SettingsPage } from './pages/Settings';
 import { ResetPassword } from './pages/ResetPassword';
 import { AuthPage } from './pages/Auth';
 import { AdminPage } from './pages/Admin';
+import { RecycleBin } from './pages/RecycleBin';
 
 export default function App() {
   const ready = useData((s) => s.ready);
@@ -230,6 +231,7 @@ export default function App() {
         <Route path="/bundles" element={<Bundles />} />
         <Route path="/ai" element={<AiWorkspace />} />
         <Route path="/ai-capture" element={<AiChat />} />
+        <Route path="/recycle-bin" element={<RecycleBin />} />
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="/settings/ai" element={<AiSettings />} />
         <Route path="/sync" element={<SyncCenter />} />

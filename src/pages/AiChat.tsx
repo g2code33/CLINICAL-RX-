@@ -384,7 +384,7 @@ export function AiChat() {
         {listOpen && (
           <div className="absolute inset-0 z-20 bg-slate-900/30 md:hidden" onClick={() => setListOpen(false)} />
         )}
-        <div className="absolute inset-y-0 left-0 z-30 flex w-64 max-w-[80vw] flex-col bg-white p-1.5 shadow-xl dark:bg-slate-800 md:static md:z-auto md:w-60 md:shrink-0 md:p-0 md:shadow-none">
+        <div className="absolute inset-y-0 left-0 z-30 flex w-64 max-w-[80vw] flex-col bg-white p-1.5 text-slate-900 shadow-xl dark:bg-slate-800 dark:text-slate-100 md:static md:z-auto md:w-60 md:shrink-0 md:p-0 md:shadow-none">
           <div className="mb-1 flex items-center justify-between px-1 text-xs font-semibold text-slate-400">
             <div className="flex items-center gap-1">
               <button className="btn-ghost !p-0 text-sm" onClick={() => setListOpen(false)} title="Hide chat list">☰</button>

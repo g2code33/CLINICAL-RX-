@@ -54,10 +54,10 @@ export const toast = {
 
 const TONE: Record<ToastTone, { icon: string; cls: string; label: string }> = {
   // Icon + word, so status never depends on colour alone (§27).
-  success: { icon: '✓', label: 'Success', cls: 'border-emerald-400/50 bg-emerald-50 dark:bg-emerald-900/40' },
-  error: { icon: '⚠', label: 'Error', cls: 'border-red-400/50 bg-red-50 dark:bg-red-900/40' },
-  warning: { icon: '!', label: 'Warning', cls: 'border-amber-400/50 bg-amber-50 dark:bg-amber-900/40' },
-  info: { icon: 'i', label: 'Info', cls: 'border-sky-400/50 bg-sky-50 dark:bg-sky-900/40' },
+  success: { icon: '✓', label: 'Success', cls: 'border-emerald-400/50 bg-emerald-50 text-emerald-900 dark:bg-emerald-900/40 dark:text-emerald-100' },
+  error: { icon: '⚠', label: 'Error', cls: 'border-red-400/50 bg-red-50 text-red-900 dark:bg-red-900/40 dark:text-red-100' },
+  warning: { icon: '!', label: 'Warning', cls: 'border-amber-400/50 bg-amber-50 text-amber-900 dark:bg-amber-900/40 dark:text-amber-100' },
+  info: { icon: 'i', label: 'Info', cls: 'border-sky-400/50 bg-sky-50 text-sky-900 dark:bg-sky-900/40 dark:text-sky-100' },
 };
 
 function ToastRow({ t }: { t: Toast }) {
@@ -139,7 +139,7 @@ export function OfflineIndicator() {
 
   return (
     <div
-      className="fixed bottom-20 left-3 z-[55] flex items-center gap-2 rounded-full border border-slate-300 bg-white/95 px-3 py-1.5 text-xs shadow-lg backdrop-blur dark:border-slate-600 dark:bg-slate-800/95 sm:bottom-4"
+      className="fixed bottom-20 left-3 z-[55] flex items-center gap-2 rounded-full border border-slate-300 bg-white/95 px-3 py-1.5 text-xs text-slate-900 shadow-lg backdrop-blur dark:border-slate-600 dark:bg-slate-800/95 dark:text-slate-100 sm:bottom-4"
       role="status"
       aria-live="polite"
     >

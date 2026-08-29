@@ -527,6 +527,47 @@ export function SettingsPage() {
           </div>
           <p className="mt-3 text-[11px] text-slate-400">Data is stored locally (SQLite on desktop, browser storage on web). Backups are portable between the two.</p>
         </div>
+
+        {/* Web / PWA maintenance */}
+        {!hasElectronBridge() && (
+          <div className="card">
+            <h2 className="mb-3 font-semibold">🔄 App refresh (PWA / Web)</h2>
+            <p className="mb-3 text-xs text-slate-500 dark:text-slate-400">
+              When running as an installed app, the service worker can keep showing an older version. Use these if the UI looks stale or an update didn't apply.
+            </p>
+            <div className="space-y-2">
+              <button
+                className="btn-secondary w-full"
+                onClick={() => window.location.reload()}
+              >
+                🔃 Reload (soft)
+              </button>
+              <button
+                className="btn-primary w-full"
+                onClick={() => {
+                  import('../services/hardRefresh').then((m) => m.hardRefresh(true));
+                }}
+              >
+                ♻️ Hard refresh &amp; clear cache
+              </button>
+              <button
+                className="btn-secondary w-full"
+                onClick={() => navigate('/recycle-bin')}
+              >
+                🗑 Open Recycle Bin
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Recycle bin shortcut for desktop too */}
+        {hasElectronBridge() && (
+          <div className="card">
+            <h2 className="mb-3 font-semibold">🗑 Recycle Bin</h2>
+            <p className="mb-3 text-xs text-slate-500 dark:text-slate-400">Recover recently deleted items or permanently clear them.</p>
+            <button className="btn-secondary w-full" onClick={() => navigate('/recycle-bin')}>Open Recycle Bin →</button>
+          </div>
+        )}
         </div>
       )}
 

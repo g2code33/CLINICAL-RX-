@@ -27,7 +27,7 @@ export function NotificationBanner() {
         </button>
       </div>
       {notifications.map((n) => (
-        <div key={n.id} className="rounded-xl border border-brand-300 bg-white p-3 shadow-2xl dark:border-brand-700 dark:bg-slate-800">
+        <div key={n.id} className="rounded-xl border border-brand-300 bg-white p-3 text-slate-900 shadow-2xl dark:border-brand-700 dark:bg-slate-800 dark:text-slate-100">
           <div className="flex items-start justify-between gap-2">
             <div className="text-sm font-bold text-brand-700 dark:text-brand-300">{n.title}</div>
             <button className="text-slate-400 hover:text-slate-600" onClick={() => dismiss(n.id)}>✕</button>
