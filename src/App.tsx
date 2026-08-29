@@ -229,8 +229,9 @@ export default function App() {
         <Route path="/question-bank" element={<QuestionBank />} />
         <Route path="/progress" element={<Progress />} />
         <Route path="/bundles" element={<Bundles />} />
-        <Route path="/ai" element={<AiWorkspace />} />
+        <Route path="/ai" element={<AiChat />} />
         <Route path="/ai-capture" element={<AiChat />} />
+        <Route path="/ai-workspace" element={<AiWorkspace />} />
         <Route path="/recycle-bin" element={<RecycleBin />} />
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="/settings/ai" element={<AiSettings />} />

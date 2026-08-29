@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { PageHeader, EmptyState } from '../components/ui';
 import { useData, uid } from '../stores/data';
 import { newChatSession } from '../services/defaults';
@@ -7,7 +8,7 @@ import { useContextMenu, ctxHandlers, type CtxItem } from '../components/Context
 import { AiThinking } from '../components/AiThinking';
 import { runAiModule, aiReady, aiModuleLabel, analyzeLearning, generateQuestions, revisionCoach, organizeNote } from '../services/aiTools';
 import type { AiModuleKey, RunOpts } from '../services/aiTools';
-import type { ChatSession } from '../types';
+import type { ChatSession, WardRound, WardEntry } from '../types';
 import { useConfirm } from '../components/ui/primitives';
 
 type Mode = 'chat' | 'explain' | 'analyze' | 'organize' | 'questions' | 'revision' | 'wardround';
@@ -31,7 +32,16 @@ function fmtTime(ts: number): string {
 }
 
 export function AiChat() {
-  const [mode, setMode] = useState<Mode>('chat');
+  const [search, setSearch] = useSearchParams();
+  const [mode, setMode] = useState<Mode>(() => {
+    // Accept ?m= for legacy deep-links from Dashboard / AiHomePanel / CommandPalette.
+    const m = search.get('m');
+    if (m === 'revision') return 'revision';
+    if (m === 'clinical' || m === 'search') return 'explain';
+    if (m === 'bundler') return 'analyze';
+    if (m === 'research') return 'organize';
+    return 'chat';
+  });
   const { confirm, confirmDialog } = useConfirm();
   const [activeId, setActiveId] = useState<string | null>(null);
   const [input, setInput] = useState('');
@@ -49,6 +59,8 @@ export function AiChat() {
   const fileRef = useRef<HTMLInputElement>(null);
 
   const chats = useData((s) => s.chats);
+  const wardRounds = useData((s) => s.wardRounds);
+  const wardEntries = useData((s) => s.wardEntries);
   const save = useData((s) => s.save);
   const remove = useData((s) => s.remove);
   const setStatus = useData((s) => s.setStatus);
@@ -92,6 +104,19 @@ export function AiChat() {
         setActiveId(sid);
       }
     } catch { /* ignore */ }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Honour ?q=... deep-link prompt from Dashboard / AiHomePanel / CommandPalette.
+  useEffect(() => {
+    const q = search.get('q');
+    if (!q) return;
+    // Remove it from the URL so reloads don't re-send.
+    setSearch({}, { replace: true });
+    setInput(q);
+    // Auto-fire on next tick so any mode-switch from ?m= is applied first.
+    const t = setTimeout(() => { void send(q); }, 50);
+    return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -496,7 +521,21 @@ ${wardCtx}`
               <div className="text-4xl">{active.icon}</div>
               <div className="text-sm font-semibold">{active.label} · {aiModuleLabel(active.module)}</div>
               <p className="max-w-md text-xs text-slate-400">{active.placeholder}</p>
-              {active.auto ? (
+              {mode === 'wardround' ? (
+                <WardRoundLauncher
+                  rounds={wardRounds}
+                  entries={wardEntries}
+                  onPick={async (roundId, patientLabel) => {
+                    try {
+                      const { openRoundAi } = await import('../services/wardAi');
+                      const { sessionId } = await openRoundAi(roundId, patientLabel);
+                      setActiveId(sessionId);
+                    } catch (e: any) {
+                      setStatus('⚠️ ' + (e?.message || 'Could not open Ward Round AI'));
+                    }
+                  }}
+                />
+              ) : active.auto ? (
                 <button className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700" onClick={() => void send()}>
                   ▶ Run now
                 </button>
@@ -611,3 +650,85 @@ ${wardCtx}`
 
 // Re-export for use in other pages that want the same tooling without a big import chain.
 export { EmptyState };
+
+/** Inline round → patient picker shown in Ward Round AI tab empty state so the
+ *  student can launch a round/patient conversation straight from the AI tab. */
+function WardRoundLauncher({
+  rounds, entries, onPick,
+}: {
+  rounds: WardRound[];
+  entries: WardEntry[];
+  onPick: (roundId: string, patientLabel?: string | null) => void;
+}) {
+  const [roundId, setRoundId] = useState<string | null>(null);
+  const chosen = rounds.find((r) => r.id === roundId) ?? null;
+  const patients = chosen
+    ? Array.from(new Set((entries || []).filter((e) => e.roundId === chosen.id && (e.patientLabel || '').trim()).map((e) => e.patientLabel!.trim()))).sort()
+    : [];
+
+  if (!rounds.length) {
+    return (
+      <div className="max-w-md rounded-xl border border-dashed border-slate-300 p-4 text-xs text-slate-500 dark:border-slate-700">
+        No ward rounds yet. Start one from the 🏥 Ward Rounds page, then come back here to discuss it with Ward Round AI.
+      </div>
+    );
+  }
+
+  if (!chosen) {
+    return (
+      <div className="w-full max-w-md space-y-2">
+        <div className="text-xs font-semibold text-slate-500">Pick a ward round</div>
+        <div className="max-h-64 space-y-1 overflow-y-auto">
+          {rounds.slice().sort((a, b) => (b.date + b.updatedAt).localeCompare(a.date + a.updatedAt)).map((r) => {
+            const n = (entries || []).filter((e) => e.roundId === r.id).length;
+            return (
+              <button key={r.id} className="flex w-full items-center justify-between gap-2 rounded-lg border border-slate-200 px-3 py-2 text-left text-sm hover:border-brand-400 hover:bg-brand-50 dark:border-slate-700 dark:hover:bg-brand-950/30"
+                onClick={() => setRoundId(r.id)}>
+                <span>
+                  <span className="font-semibold">🏥 {r.ward}</span>
+                  <span className="ml-2 text-xs text-slate-500">{r.date}</span>
+                  {r.status === 'active' && <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">Active</span>}
+                </span>
+                <span className="text-xs text-slate-400">{n} capture{n === 1 ? '' : 's'}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="w-full max-w-md space-y-3">
+      <div className="flex items-center justify-between text-xs">
+        <button className="text-brand-600 hover:underline" onClick={() => setRoundId(null)}>← Change round</button>
+        <span className="font-semibold text-slate-600 dark:text-slate-300">🏥 {chosen.ward} · {chosen.date}</span>
+      </div>
+      <div className="space-y-2">
+        <button
+          className="w-full rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700"
+          onClick={() => onPick(chosen.id, null)}
+        >
+          ▶ Discuss the whole round
+        </button>
+        {patients.length > 0 && (
+          <div className="space-y-1">
+            <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Or pick a patient</div>
+            <div className="flex flex-wrap gap-1.5">
+              {patients.map((p) => {
+                const n = entries.filter((e) => e.roundId === chosen.id && (e.patientLabel || '').trim() === p).length;
+                return (
+                  <button key={p}
+                    className="rounded-full border border-slate-200 px-3 py-1 text-xs hover:border-brand-400 hover:bg-brand-50 dark:border-slate-700 dark:hover:bg-brand-950/30"
+                    onClick={() => onPick(chosen.id, p)}>
+                    🛏️ {p} <span className="text-slate-400">({n})</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
