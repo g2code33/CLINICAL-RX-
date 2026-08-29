@@ -23,7 +23,7 @@ import {
   startRound,
 } from '../services/wardRounds';
 import { activityForDay, activityForWeek, monthBounds, activityBetween } from '../services/wardRounds';
-import { EXPLAIN_MODES, analyzeRound, canRunAi, queueAnalysis, type ExplainMode } from '../services/wardAi';
+import { EXPLAIN_MODES, analyzeRound, canRunAi, openRoundAi, navigateToRoundAi, queueAnalysis, type ExplainMode } from '../services/wardAi';
 import { bundleFromWardEntries, bundleFromWardRounds } from '../services/bundler';
 import { downloadText } from '../services/export';
 import { privacyWarning, scanForPhi } from '../services/privacy';
@@ -999,6 +999,21 @@ function ActiveRound({ round, onClose, onDeleted }: { round: WardRound; onClose:
         <button className="btn-secondary" onClick={() => setAnalysisOpen(true)} disabled={!counts.total}>
           🤖 Analyze Ward Round
         </button>
+        <button
+          className="btn-primary"
+          disabled={!counts.total}
+          onClick={async () => {
+            try {
+              const { sessionId } = await openRoundAi(round.id, null);
+              navigateToRoundAi(sessionId);
+            } catch (e: any) {
+              useData.getState().setStatus('⚠️ ' + (e?.message || 'Could not open Ward Round AI'));
+            }
+          }}
+          title="Open the dedicated Ward Round AI teacher for a deep, ongoing conversation about this round"
+        >
+          🏥 Open in Ward Round AI
+        </button>
         {round.status === 'active' ? (
           <button className="btn-primary" onClick={() => setFinishOpen(true)}>
             Finish Ward Round
@@ -1114,6 +1129,21 @@ function ActiveRound({ round, onClose, onDeleted }: { round: WardRound; onClose:
                         ＋ Add to {label}
                       </button>
                     )}
+                    <button
+                      className="btn-ghost !py-1 text-xs"
+                      disabled={es.length === 0}
+                      onClick={async () => {
+                        try {
+                          const { sessionId } = await openRoundAi(round.id, label);
+                          navigateToRoundAi(sessionId);
+                        } catch (e: any) {
+                          useData.getState().setStatus('⚠️ ' + (e?.message || 'Could not open Ward Round AI'));
+                        }
+                      }}
+                      title={`Discuss ${label}'s case in Ward Round AI`}
+                    >
+                      🏥 Ask AI about {label}
+                    </button>
                   </div>
                   {es.length === 0 ? (
                     <p className="text-xs text-slate-400">No captures here yet.</p>
@@ -1239,8 +1269,14 @@ function FinishModal({ open, round, onClose, onDone }: { open: boolean; round: W
     setBusy(true);
     try {
       await finishRound(round.id);
-      await analyzeRound(round.id);
+      await analyzeRound(round.id).catch(() => {}); // non-fatal: Ward Round AI still works even if structured analysis fails
+      // Open Ward Round AI with this round loaded so the conversation continues there.
+      const { sessionId } = await openRoundAi(round.id, null,
+        'I just finished this ward round. Give me the full teaching walkthrough: key learning points, medications to study, clinical reasoning patterns, knowledge gaps, and quiz me on the cases.');
       setFinished(true);
+      onClose();
+      onDone?.();
+      navigateToRoundAi(sessionId);
     } finally {
       setBusy(false);
     }

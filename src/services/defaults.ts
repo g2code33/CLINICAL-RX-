@@ -27,6 +27,7 @@ export const AI_MODULES = [
   { key: 'revision', label: '📚 AI Revision Coach' },
   { key: 'chat', label: '💬 AI Clinical Chat' },
   { key: 'bundler', label: '📦 AI Daily/Weekly Bundler' },
+  { key: 'wardRound', label: '🏥 Ward Round AI' },
 ] as const;
 
 export function defaultAiConfig() {

@@ -178,3 +178,46 @@ html, body { overflow-x: hidden; }
 
 /* Toast/notification region never covers the whole screen on small windows. */
 .toast-region { max-width: min(92vw, 26rem); }
+
+/* ==========================================================================
+   GLOBAL CONTRAST SAFETY NET
+   Any element with a light tint/white background (Tailwind bg-*-50, bg-white,
+   bg-white/opacity, bg-*-50/opacity) automatically gets dark slate text in
+   light mode, and its inverse in dark mode. This prevents the "white text on
+   white/tinted background" bug recurring on any screen, even if an author
+   forgets to set text color on a card/pill/highlight.
+   Elements that deliberately set their own text color (e.g. text-red-600 on
+   bg-red-50) win because their rule is more specific than this wildcard.
+   ========================================================================== */
+:where([class*='bg-white'], [class*='bg-slate-50'], [class*='bg-brand-50'], [class*='bg-emerald-50'],
+       [class*='bg-red-50'], [class*='bg-amber-50'], [class*='bg-yellow-50'], [class*='bg-sky-50'],
+       [class*='bg-violet-50'], [class*='bg-rose-50'], [class*='bg-fuchsia-50'], [class*='bg-pink-50'],
+       [class*='bg-orange-50'], [class*='bg-teal-50'], [class*='bg-cyan-50'], [class*='bg-lime-50'],
+       [class*='bg-blue-50'], [class*='bg-purple-50'], [class*='bg-indigo-50'], [class*='bg-stone-50'],
+       [class*='bg-zinc-50'], [class*='bg-gray-50']) {
+  color: rgb(15 23 42); /* slate-900 */
+}
+.dark :where([class*='bg-slate-800'], [class*='bg-slate-900'], [class*='bg-slate-700'],
+            [class*='bg-brand-900'], [class*='bg-brand-950'],
+            [class*='bg-emerald-900'], [class*='bg-emerald-950'],
+            [class*='bg-red-900'], [class*='bg-red-950'],
+            [class*='bg-amber-900'], [class*='bg-amber-950'],
+            [class*='bg-sky-900'], [class*='bg-violet-900'], [class*='bg-rose-900'],
+            [class*='bg-fuchsia-900'], [class*='bg-pink-900'], [class*='bg-orange-900'],
+            [class*='bg-teal-900'], [class*='bg-cyan-900'], [class*='bg-lime-900'],
+            [class*='bg-blue-900'], [class*='bg-purple-900'], [class*='bg-indigo-900']) {
+  color: rgb(241 245 249); /* slate-100 */
+}
+/* Pills (rounded tiny tags) on tinted backgrounds get a slightly darker shade
+   so they remain legible even when sitting on a tint card. */
+:where([class*='bg-'][class*='-50']) :where(span.rounded, span.rounded-full, span.rounded-lg) {
+  color: inherit;
+}
+/* Inputs inside tinted cards need explicit contrast (bg-transparent on tint
+   leaves text washed out). */
+:where([class*='bg-brand-50'], [class*='bg-emerald-50'], [class*='bg-amber-50'], [class*='bg-sky-50'],
+       [class*='bg-violet-50'], [class*='bg-red-50'], [class*='bg-rose-50'], [class*='bg-fuchsia-50'],
+       [class*='bg-indigo-50'], [class*='bg-blue-50'], [class*='bg-teal-50'], [class*='bg-cyan-50'])
+  :where(input:not([class*='text-']), textarea:not([class*='text-']), select:not([class*='text-'])) {
+  color: rgb(15 23 42);
+}

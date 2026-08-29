@@ -10,7 +10,7 @@ import type { AiModuleKey, RunOpts } from '../services/aiTools';
 import type { ChatSession } from '../types';
 import { useConfirm } from '../components/ui/primitives';
 
-type Mode = 'chat' | 'explain' | 'analyze' | 'organize' | 'questions' | 'revision';
+type Mode = 'chat' | 'explain' | 'analyze' | 'organize' | 'questions' | 'revision' | 'wardround';
 
 const MODES: Array<{ key: Mode; icon: string; label: string; module: AiModuleKey; placeholder: string; auto?: boolean }> = [
   { key: 'chat', icon: '💬', label: 'Chat', module: 'chat', placeholder: 'Ask anything…' },
@@ -19,6 +19,7 @@ const MODES: Array<{ key: Mode; icon: string; label: string; module: AiModuleKey
   { key: 'organize', icon: '📝', label: 'Organize', module: 'notes', placeholder: 'e.g. "Saw a patient with high BP on amlodipine, had FBC done…"' },
   { key: 'questions', icon: '❓', label: 'Questions', module: 'questionGen', placeholder: 'Focus (optional, e.g. antihypertensives) or leave blank → Enter' },
   { key: 'revision', icon: '📚', label: 'Revision', module: 'revision', placeholder: 'Generate my revision plan', auto: true },
+  { key: 'wardround', icon: '🏥', label: 'Ward Round', module: 'wardRound', placeholder: 'Ask about a ward round, a patient case, medicines, clinical reasoning…' },
 ];
 
 function fmtTime(ts: number): string {
@@ -63,7 +64,8 @@ export function AiChat() {
     ];
   }
 
-  const sessions = chats.filter((c) => c.section === mode).sort((a, b) => b.updatedAt - a.updatedAt);
+  const sectionKey2: any = mode === 'wardround' ? 'wardRound' : mode;
+    const sessions = chats.filter((c) => c.section === sectionKey2).sort((a, b) => b.updatedAt - a.updatedAt);
   const visibleSessions = sessions.filter((c) => showHidden || !c.hidden);
   const hiddenCount = sessions.filter((c) => c.hidden).length;
   const active = MODES.find((m) => m.key === mode)!;
@@ -78,9 +80,26 @@ export function AiChat() {
     setParsedRecords(null);
   }, [mode]);
 
+  // Jump into a Ward Round AI session if signalled from ward rounds page.
+  useEffect(() => {
+    try {
+      const sid = sessionStorage.getItem('crx:wardAiSession');
+      if (!sid) return;
+      sessionStorage.removeItem('crx:wardAiSession');
+      const exists = useData.getState().chats.find((c) => c.id === sid);
+      if (exists) {
+        setMode('wardround');
+        setActiveId(sid);
+      }
+    } catch { /* ignore */ }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Switching section: keep the last-used session for that section if any.
   useEffect(() => {
-    const list = chats.filter((c) => c.section === mode);
+    // The Ward Round AI section key is 'wardRound' (camelCase) in chats, but the mode tab is lowercase 'wardround'.
+    const sectionKey: any = mode === 'wardround' ? 'wardRound' : mode;
+    const list = chats.filter((c) => c.section === sectionKey);
     if (list.length) setActiveId(list[0].id);
     else setActiveId(null);
     setInput('');
@@ -213,7 +232,9 @@ export function AiChat() {
     let session: ChatSession = currentSession!;
     if (!session) {
       const title = userText.replace(/\s+/g, ' ').slice(0, 48) || active.label;
-      session = newChatSession(mode, title);
+      // Ward Round AI chats are stored under section 'wardRound' (camelCase) to match the module key.
+      const sectionForSave: any = mode === 'wardround' ? 'wardRound' : mode;
+      session = newChatSession(sectionForSave, title);
       await save('chat', session);
       setActiveId(session.id);
     }
@@ -265,6 +286,21 @@ export function AiChat() {
       else if (mode === 'organize') {
         res = await organizeNote(prompt, opts);
         if (res.ok) setParsedRecords(extractStructured(res.text));
+      } else if (mode === 'wardround') {
+        // Extra context for ward round chat: if the session is tied to a round/patient, pull the full digest.
+        let wardCtx = '';
+        try {
+          const { buildRoundAiContext } = await import('../services/wardAi');
+          const m = /\[wr:([^:]+)(?::([^\]]+))?\]/.exec(afterUser.title || '');
+          if (m) wardCtx = buildRoundAiContext(m[1], m[2] || null);
+        } catch { /* ignore */ }
+        const sysExtra = wardCtx
+          ? `You are in the dedicated Ward Round AI teacher mode. The student has a specific round (and optionally patient) loaded below. Use that data heavily — connect medicines to class/mechanism/counselling, conditions to pathophys, investigations to interpretation, and flag knowledge gaps. Be educational, never give patient-specific treatment directives; remind to verify with supervisor/formulary when it matters. Use headings and bullets.
+
+LOADED ROUND DATA:
+${wardCtx}`
+          : '';
+        res = await runAiModule(moduleKey, prompt, sysExtra, opts);
       } else {
         res = await runAiModule(moduleKey, prompt, '', opts);
       }
@@ -421,7 +457,7 @@ export function AiChat() {
                     {...ctxHandlers(showMenu, sessionMenu(s))}
                   >
                     <span className="min-w-0 flex-1 truncate">
-                      {s.hidden && '🙈 '}{s.title || 'Untitled'}
+                      {s.hidden && '🙈 '}{(s.title || 'Untitled').replace(/^\[[^\]]+\]\s*/, '')}
                       <span className={`ml-1 opacity-60 ${s.id === activeId ? 'text-white' : 'text-slate-400'}`}>{s.messages.length} msgs · {fmtTime(s.updatedAt)}</span>
                     </span>
                     <button

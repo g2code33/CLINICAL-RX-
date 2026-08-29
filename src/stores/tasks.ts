@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 
-export type TaskKind = 'quiz' | 'chat' | 'analyze' | 'organize' | 'questions' | 'revision' | 'explain';
+export type TaskKind = 'quiz' | 'chat' | 'analyze' | 'organize' | 'questions' | 'revision' | 'explain' | 'wardRound';
 
 export interface RunningTask {
   id: string;

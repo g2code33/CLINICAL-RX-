@@ -12,7 +12,8 @@ export type AiModuleKey =
   | 'questionGen'
   | 'revision'
   | 'chat'
-  | 'bundler';
+  | 'bundler'
+  | 'wardRound';
 
 export type RunOpts = AiChatOpts & { excludeSessionId?: string };
 
@@ -24,6 +25,7 @@ const MODULE_LABEL: Record<AiModuleKey, string> = {
   revision: 'AI Revision Coach',
   chat: 'AI Clinical Chat',
   bundler: 'AI Daily/Weekly Bundler',
+  wardRound: '🏥 Ward Round AI',
 };
 
 const SECTION_LABEL: Record<string, string> = {
@@ -34,6 +36,7 @@ const SECTION_LABEL: Record<string, string> = {
   questionGen: 'Questions',
   revision: 'Revision',
   bundler: 'Bundler',
+  wardRound: 'Ward Round',
 };
 
 export function aiModuleLabel(key: AiModuleKey): string {
