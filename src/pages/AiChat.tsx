@@ -39,7 +39,7 @@ interface ModeDef {
 
 const MODES: ModeDef[] = [
   // ——— Everyday AI assistants (the 7 original personas, restored) ———
-  { key: 'general',  icon: '🤖', label: 'General',      group: 'assistants', module: 'chat',       placeholder: 'Ask anything — study, app questions, quick explanations…' },
+  { key: 'general',  icon: '🤖', label: 'General',      group: 'assistants', module: 'chat',       placeholder: 'Ask anything — attach images (🖼) for AI vision: prescriptions, drug labels, slides, notes…', hint: 'Free-form assistant — accepts images on vision-capable models' },
   { key: 'clinical', icon: '🩺', label: 'Clinical',     group: 'assistants', module: 'tutor',      placeholder: 'e.g. Explain hypertension, how amlodipine works, an investigation…', hint: 'Disease / medicine / investigation explainer with WHO→WHAT→WHERE→WHY→HOW→DT' },
   { key: 'revision', icon: '📚', label: 'Revision',     group: 'assistants', module: 'revision',   placeholder: 'Generate my revision plan', auto: true, hint: 'Spaced-repetition revision coach' },
   { key: 'search',   icon: '🔎', label: 'Search',       group: 'assistants', module: 'search',     placeholder: 'Search my saved records — diseases, meds, notes, rounds…', hint: 'Answers strictly from YOUR saved records' },
@@ -103,6 +103,14 @@ export function AiChat() {
   const fileRef = useRef<HTMLInputElement>(null);
   // Ward Round AI picker state (visible from the typing bar).
   const [wardPickerOpen, setWardPickerOpen] = useState(false);
+  // Collapsible AI mode groups: all collapsed by default to reduce scatter;
+  // tapping a group header toggles it, and selecting a mode auto-closes all
+  // groups (except when the active mode's group is shown in its header chip).
+  const [openGroup, setOpenGroup] = useState<ModeGroup | null>(null);
+  // Auto-open the group that contains the active mode when the mode changes
+  // via deep links / ward-round auto-open, so the selected tab is always
+  // reachable even if the user hasn't manually expanded anything yet.
+  useEffect(() => { setOpenGroup(null); }, [mode]);
 
   const chats = useData((s) => s.chats);
   const wardRounds = useData((s) => s.wardRounds);
@@ -427,29 +435,54 @@ export function AiChat() {
         action={<button className="btn-primary" onClick={newChat}>＋ New chat</button>}
       />
 
-      {/* Grouped mode strip — horizontal scroll keeps it clean on mobile. */}
-      <div className="no-scrollbar mb-3 flex gap-2 overflow-x-auto pb-1">
-        {(['assistants', 'tools', 'special'] as ModeGroup[]).map((g) => (
-          <div key={g} className="flex shrink-0 items-center gap-1 rounded-xl bg-slate-100 p-1 dark:bg-slate-800/70">
-            <span className="hidden px-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400 sm:inline">
-              {GROUP_LABEL[g]}
-            </span>
-            {MODES.filter((m) => m.group === g).map((m) => (
+      {/* Collapsible grouped mode picker — groups hidden by default to
+          cut scatter; tap a group chip to expand and pick. The active mode
+          always shows on its group's chip so you can see what's selected
+          at a glance without any group open. */}
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        {(['assistants', 'tools', 'special'] as ModeGroup[]).map((g) => {
+          const groupModes = MODES.filter((m) => m.group === g);
+          const activeInGroup = groupModes.find((m) => m.key === mode);
+          const isOpen = openGroup === g;
+          return (
+            <div key={g} className="relative">
               <button
-                key={m.key}
-                onClick={() => setMode(m.key)}
-                className={`whitespace-nowrap rounded-full px-2.5 py-1 text-[11px] font-semibold transition-colors ${
-                  mode === m.key
-                    ? 'bg-brand-600 text-white shadow-sm'
-                    : 'bg-white text-slate-600 hover:bg-brand-50 hover:text-brand-700 dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-slate-600'
+                onClick={() => setOpenGroup(isOpen ? null : g)}
+                className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
+                  activeInGroup
+                    ? 'border-brand-300 bg-brand-50 text-brand-800 dark:border-brand-700 dark:bg-brand-900/40 dark:text-brand-200'
+                    : 'border-slate-200 bg-white text-slate-600 hover:border-brand-300 hover:text-brand-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:border-brand-600'
                 }`}
-                title={m.hint || aiModuleLabel(m.module)}
+                aria-expanded={isOpen}
+                title={GROUP_LABEL[g]}
               >
-                {m.icon} {m.label}
+                {activeInGroup ? <>{activeInGroup.icon} {activeInGroup.label}</> : <>▸ {GROUP_LABEL[g]}</>}
+                <span className={`text-[9px] transition-transform ${isOpen ? 'rotate-180' : ''}`}>▾</span>
               </button>
-            ))}
-          </div>
-        ))}
+              {isOpen && (
+                <div className="absolute left-0 top-full z-30 mt-1.5 flex max-w-[calc(100vw-2rem)] flex-wrap gap-1.5 rounded-xl border border-slate-200 bg-white p-2 shadow-xl dark:border-slate-700 dark:bg-slate-800" style={{ minWidth: 200 }}>
+                  <div className="w-full pb-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                    {GROUP_LABEL[g]}
+                  </div>
+                  {groupModes.map((m) => (
+                    <button
+                      key={m.key}
+                      onClick={() => { setMode(m.key); setOpenGroup(null); }}
+                      className={`whitespace-nowrap rounded-full px-2.5 py-1 text-[11px] font-semibold transition ${
+                        mode === m.key
+                          ? 'bg-brand-600 text-white shadow-sm'
+                          : 'bg-slate-100 text-slate-700 hover:bg-brand-50 hover:text-brand-700 dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-brand-900/40'
+                      }`}
+                      title={m.hint || aiModuleLabel(m.module)}
+                    >
+                      {m.icon} {m.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
 
       <div className="relative flex min-h-0 flex-1 flex-col gap-3 md:flex-row">
