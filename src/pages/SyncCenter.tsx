@@ -611,7 +611,9 @@ function LinkPlanModal({
             <button
               key={opt}
               className={`w-full rounded border p-2 text-left ${
-                opt === plan.recommended ? 'border-brand-500 bg-brand-500/5' : 'border-slate-300 dark:border-slate-600'
+                opt === plan.recommended
+                  ? 'border-emerald-400 bg-emerald-50 text-emerald-950 dark:border-emerald-500 dark:bg-emerald-950/50 dark:text-emerald-50'
+                  : 'border-slate-300 text-slate-900 dark:border-slate-600 dark:text-slate-100'
               }`}
               disabled={busy}
               onClick={() => onChoose(opt)}

@@ -836,20 +836,28 @@ function AcademicSettings() {
                 key={st.id}
                 className={`flex flex-wrap items-center gap-2 rounded-lg border px-3 py-2 ${
                   isCurrent
-                    ? 'border-brand-400 bg-brand-50 dark:border-brand-600 dark:bg-brand-950'
-                    : 'border-slate-200 dark:border-slate-700'
+                    ? 'border-emerald-400 bg-emerald-50 text-emerald-950 shadow-sm dark:border-emerald-500 dark:bg-emerald-950/60 dark:text-emerald-50'
+                    : 'border-slate-200 text-slate-900 dark:border-slate-700 dark:text-slate-100'
                 }`}
               >
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-1.5">
                     <span className="text-sm font-semibold">{st.name}</span>
                     {/* Status in words + glyph, never colour alone. */}
-                    <span className="rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium dark:bg-slate-700">
+                    <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-medium ${
+                      isCurrent
+                        ? 'bg-emerald-600 text-white dark:bg-emerald-500'
+                        : 'bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-200'
+                    }`}>
                       {st.status === 'current' ? '● Current' : st.status === 'completed' ? '✓ Completed' : '○ Upcoming'}
                     </span>
                   </div>
                   <input
-                    className="mt-1 w-36 rounded border border-slate-300 bg-transparent px-2 py-0.5 text-xs dark:border-slate-600"
+                    className={`mt-1 w-36 rounded border px-2 py-0.5 text-xs ${
+                      isCurrent
+                        ? 'border-emerald-300 bg-white text-emerald-950 placeholder:text-emerald-700/60 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 dark:border-emerald-700 dark:bg-emerald-900/70 dark:text-emerald-50 dark:placeholder:text-emerald-300/50'
+                        : 'border-slate-300 bg-white text-slate-900 placeholder:text-slate-400 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100'
+                    }`}
                     value={st.academicYear}
                     aria-label={`Academic year for ${st.name}`}
                     onChange={(e) => void academicSaveStage({ ...st, academicYear: e.target.value })}

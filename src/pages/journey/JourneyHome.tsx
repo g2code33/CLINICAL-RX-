@@ -423,7 +423,9 @@ export function JourneyTimeline() {
               <button
                 key={s.id}
                 className={`flex w-full flex-wrap items-center gap-3 rounded-lg border p-3 text-left transition-colors hover:border-brand-400 ${
-                  isCurrent ? 'border-brand-500 bg-brand-500/5' : 'border-slate-200 dark:border-slate-700'
+                  isCurrent
+                    ? 'border-emerald-400 bg-emerald-50 text-emerald-950 shadow-sm dark:border-emerald-500 dark:bg-emerald-950/60 dark:text-emerald-50'
+                    : 'border-slate-200 text-slate-900 dark:border-slate-700 dark:text-slate-100'
                 }`}
                 onClick={() => navigate(`/journey/archive?stage=${s.id}`)}
               >
@@ -431,7 +433,7 @@ export function JourneyTimeline() {
                   <div className="font-semibold">
                     {isCurrent ? '●' : s.status === 'completed' ? '✓' : '○'} {s.name}
                   </div>
-                  <div className="text-xs opacity-70">{s.academicYear}</div>
+                  <div className={`text-xs ${isCurrent ? 'opacity-80' : 'opacity-70'}`}>{s.academicYear}</div>
                 </div>
                 <div className="flex flex-1 flex-wrap gap-1 text-xs">
                   {periods.map((p) => (
