@@ -11,6 +11,11 @@ import { runAiModule, aiReady, aiModuleLabel, analyzeLearning, generateQuestions
 import type { AiModuleKey, RunOpts } from '../services/aiTools';
 import type { ChatSession, WardRound, WardEntry } from '../types';
 import { useConfirm } from '../components/ui/primitives';
+import {
+  buildJourneyRecordContext, buildJourneySectionContext, journeyMeta,
+  journeyTag, listJourneyRecords, openJourneyAi, parseJourneyTag,
+  type JourneyFocus,
+} from '../services/journeyAi';
 
 /* ======================================================================
    Slash commands — type "/" anywhere in the composer to open the menu.
@@ -252,6 +257,7 @@ export function AiChat() {
   const [listOpen, setListOpen] = useState(true);
   const [pendingImages, setPendingImages] = useState<string[]>([]);
   const [wardPickerOpen, setWardPickerOpen] = useState(false);
+  const [journeyPickerOpen, setJourneyPickerOpen] = useState(false);
   const [slashSettingsOpen, setSlashSettingsOpen] = useState(false);
   const [slashGroups, setSlashGroups] = useState<Record<SlashCmdGroup, boolean>>(() => loadSlashGroups());
   const [slashOpen, setSlashOpen] = useState(false);
@@ -290,16 +296,58 @@ export function AiChat() {
 
   const active = MODES.find((m) => m.key === mode)!;
   const sectionKey: AiModuleKey = active.module;
-  const sessions = chats.filter((c) => c.section === sectionKey).sort((a, b) => b.updatedAt - a.updatedAt);
+  const isJourney = mode.startsWith('j:');
+  const journeyFocus: JourneyFocus | null = isJourney ? (mode.slice(2) as JourneyFocus) : null;
+  const currentSessionRef = useRef<ChatSession | null>(null);
+  const visibleSessionsAll = chats.filter((c) => c.section === sectionKey).sort((a, b) => b.updatedAt - a.updatedAt);
+  const currentSession = activeId ? chats.find((c) => c.id === activeId) ?? null : null;
+  useEffect(() => { currentSessionRef.current = currentSession; }, [currentSession]);
+
+  // For Journey modes the chat list is scoped to the EXACT [j:<focus>(:<recId)]
+  // tag, the same way wardround chats are scoped per round/patient. Non-journey
+  // modes just filter by module.
+  const activeTag = useMemo(() => {
+    if (!isJourney || !journeyFocus) return null;
+    // If there's a current session, mirror its tag; otherwise default to the
+    // section-wide tag for this focus.
+    if (currentSessionRef.current) {
+      const parsed = parseJourneyTag(currentSessionRef.current.title);
+      if (parsed && parsed.focus === journeyFocus) return journeyTag(journeyFocus, parsed.recordId);
+    }
+    return journeyTag(journeyFocus, null);
+  }, [mode, currentSession, isJourney, journeyFocus]);
+
+  const sessions = useMemo(() => {
+    if (!isJourney) return visibleSessionsAll;
+    const prefix = journeyTag(journeyFocus!, null); // [j:focus]
+    return visibleSessionsAll.filter((c) => {
+      const t = c.title || '';
+      return t.startsWith('[j:' + journeyFocus + ':') || t.startsWith(prefix + ' ');
+    });
+  }, [chats, sectionKey, isJourney, journeyFocus]);
   const visibleSessions = sessions.filter((c) => showHidden || !c.hidden);
   const hiddenCount = sessions.filter((c) => c.hidden).length;
-  const currentSession = activeId ? chats.find((c) => c.id === activeId) ?? null : null;
 
   const wardAttachment: { roundId: string; patientLabel: string | null; round?: WardRound } | null = (() => {
     if (mode !== 'wardround' || !currentSession) return null;
     const m = /\[wr:([^:]+)(?::([^\]]+))?\]/.exec(currentSession.title || '');
     if (!m) return null;
     return { roundId: m[1], patientLabel: m[2] || null, round: wardRounds.find((x) => x.id === m[1]) };
+  })();
+
+  // Current journey record loaded (parsed from session title tag), mirroring
+  // wardAttachment above. recordId === null means "discuss whole section".
+  const journeyAttachment: { focus: JourneyFocus; recordId: string | null; label: string } | null = (() => {
+    if (!isJourney || !journeyFocus || !currentSession) return null;
+    const parsed = parseJourneyTag(currentSession.title);
+    if (!parsed || parsed.focus !== journeyFocus) return null;
+    const meta = journeyMeta(journeyFocus);
+    let label = meta.plural;
+    if (parsed.recordId) {
+      const rec = (listJourneyRecords(journeyFocus).find((o) => o.id === parsed.recordId));
+      label = rec?.label || meta.singular;
+    }
+    return { focus: journeyFocus, recordId: parsed.recordId, label };
   })();
 
   /* ---------- Slash command catalogue ---------- */
@@ -446,6 +494,7 @@ export function AiChat() {
   useEffect(() => {
     setParsedRecords(null);
     setWardPickerOpen(false);
+    setJourneyPickerOpen(false);
     setSlashOpen(false);
   }, [mode]);
 
@@ -464,16 +513,34 @@ export function AiChat() {
     const q = search.get('q');
     if (!q) return;
     setSearch({}, { replace: true });
-    setInput(q);
-    const t = setTimeout(() => { void send(q); }, 50);
-    return () => clearTimeout(t);
+    // When arriving from a Journey Ask-AI button and no record is specified,
+    // open a section-wide journey session (so the title carries [j:focus])
+    // and auto-kick it off with the starter prompt.
+    (async () => {
+      if (isJourney && journeyFocus && !activeId) {
+        try {
+          const { sessionId } = await openJourneyAi(journeyFocus, null, q);
+          setActiveId(sessionId);
+          return;
+        } catch { /* fall through */ }
+      }
+      setInput(q);
+      const t = setTimeout(() => { void send(q); }, 50);
+    })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
     const list = chats.filter((c) => c.section === active.module);
-    if (list.length) setActiveId(list[0].id);
-    else setActiveId(null);
+    // For journey modes prefer a session matching the active tag, otherwise
+    // fall back to the most recent session in the section.
+    let picked: string | null = null;
+    if (isJourney && activeTag) {
+      const exact = list.find((c) => (c.title || '').startsWith(activeTag!));
+      if (exact) picked = exact.id;
+    }
+    if (!picked && list.length) picked = list[0].id;
+    setActiveId(picked);
     setInput('');
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode]);
@@ -588,7 +655,10 @@ export function AiChat() {
 
     let session: ChatSession = currentSession!;
     if (!session) {
-      const title = userText.replace(/\s+/g, ' ').slice(0, 48) || active.label;
+      let title = userText.replace(/\s+/g, ' ').slice(0, 48) || active.label;
+      if (isJourney && journeyFocus) {
+        title = journeyTag(journeyFocus, null) + ' ' + active.icon + ' ' + title;
+      }
       session = newChatSession(sectionKey, title);
       await save('chat', session);
       setActiveId(session.id);
@@ -650,11 +720,27 @@ export function AiChat() {
           wardCtx ? `LOADED ROUND DATA (reference these specifics — do NOT give a generic answer when concrete data is present):\n\n${wardCtx}` : '',
         ].filter(Boolean).join('\n\n');
         res = await runAiModule(sectionKey, prompt, sysExtra, opts);
-      } else {
-        // Inject section persona for Journey modes (e.g. Skills-only, Projects-only)
-        // plus any other mode-specific extra context.
-        const sysExtra = active.sysExtra ?? '';
+      } else if (isJourney && journeyFocus) {
+        // Journey mode: inject section persona + either the loaded RECORD
+        // dump (if the user picked one) or the section-wide overview. This
+        // mirrors wardround's LOADED ROUND DATA block exactly.
+        const parsed = parseJourneyTag(afterUser.title || '');
+        const tagFocus = parsed?.focus === journeyFocus ? journeyFocus : null;
+        const recId = tagFocus ? parsed!.recordId : null;
+        const journeyHint = !tagFocus
+          ? 'Pick a specific rotation / skill / project / goal / etc. (chip below the composer) to talk about a single record in depth, or ask section-wide questions — I will ground every answer in your real saved records.'
+          : '';
+        const ctx = recId
+          ? buildJourneyRecordContext(journeyFocus, recId)
+          : buildJourneySectionContext(journeyFocus);
+        const sysExtra = [
+          active.sysExtra ?? '',
+          journeyHint,
+          ctx ? `LOADED ${recId ? 'RECORD' : 'SECTION'} DATA (reference these specifics — do NOT give generic advice when concrete data is present; flag anything that is missing):\n\n${ctx}` : '',
+        ].filter(Boolean).join('\n\n');
         res = await runAiModule(sectionKey, prompt, sysExtra, opts);
+      } else {
+        res = await runAiModule(sectionKey, prompt, active.sysExtra ?? '', opts);
       }
     } catch (e: any) {
       res = { ok: false as const, error: e?.message || 'Something went wrong. Please try again.' };
@@ -701,6 +787,15 @@ export function AiChat() {
       setActiveId(sessionId); setMode('wardround'); setWardPickerOpen(false);
       inputRef.current?.focus();
     } catch (e: any) { setStatus('⚠️ ' + (e?.message || 'Could not open Ward Round AI')); }
+  }
+
+  async function pickJourney(recordId: string | null) {
+    if (!journeyFocus) return;
+    try {
+      const { sessionId } = await openJourneyAi(journeyFocus, recordId);
+      setActiveId(sessionId); setJourneyPickerOpen(false);
+      inputRef.current?.focus();
+    } catch (e: any) { setStatus('⚠️ ' + (e?.message || 'Could not open Journey AI')); }
   }
 
   const showStreaming = streaming && streaming.sessionId === currentSession?.id;
@@ -795,6 +890,8 @@ export function AiChat() {
               <p className="max-w-md text-[11px] text-slate-400">Tip: type <code className="rounded bg-slate-100 px-1 dark:bg-slate-700">/</code> in the box below for quick prompts, teaching actions, and ward-round shortcuts.</p>
               {mode === 'wardround' ? (
                 <WardRoundLauncher rounds={wardRounds} entries={wardEntries} onPick={pickWardRound} />
+              ) : isJourney && journeyFocus ? (
+                <JourneyRecordLauncher focus={journeyFocus} onPick={pickJourney} starter={active.starter} />
               ) : active.starter ? (
                 <div className="flex flex-col items-center gap-2">
                   <button className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700"
@@ -881,12 +978,34 @@ export function AiChat() {
             </div>
           )}
 
+          {isJourney && journeyFocus && (
+            <div className="flex flex-wrap items-center gap-2 border-t border-slate-200 px-3 pt-2 dark:border-slate-700">
+              {journeyAttachment ? (
+                <>
+                  <span className="inline-flex items-center gap-1 rounded-full bg-brand-50 px-2 py-0.5 text-[11px] font-semibold text-brand-800 dark:bg-brand-600 dark:text-white">
+                    {journeyMeta(journeyFocus).icon} {journeyAttachment.label}
+                  </span>
+                  <button className="text-[11px] text-slate-500 underline-offset-2 hover:underline" onClick={() => setJourneyPickerOpen(true)}>
+                    {journeyAttachment.recordId ? 'Change' : 'Pick a record'}
+                  </button>
+                  <button className="text-[11px] text-slate-400 hover:text-red-500" onClick={newChat} title="Start fresh">New (whole section)</button>
+                </>
+              ) : (
+                <button className="inline-flex items-center gap-1 rounded-full bg-brand-600 px-3 py-1 text-xs font-semibold text-white hover:bg-brand-700"
+                  onClick={() => setJourneyPickerOpen(true)} title={`Pick a ${journeyMeta(journeyFocus).singular} to discuss`}>
+                  {journeyMeta(journeyFocus).icon} Pick a {journeyMeta(journeyFocus).singular} to dive in
+                </button>
+              )}
+            </div>
+          )}
+
           {/* Composer */}
           <div className="border-t border-slate-200 p-3 dark:border-slate-700">
             <div className="flex gap-2">
               <input ref={fileRef} type="file" accept="image/*" multiple className="hidden" onChange={(e) => onPickImages(e.target.files)} />
               <button className="btn-ghost !px-2 !py-1 text-lg" onClick={() => fileRef.current?.click()} title="Attach image(s)" disabled={thisBusy || pendingImages.length >= 4}>🖼</button>
               {mode === 'wardround' && (<button className="btn-ghost !px-2 !py-1 text-sm" onClick={() => setWardPickerOpen(true)} title="Pick / change ward round or patient">🏥</button>)}
+              {isJourney && journeyFocus && (<button className="btn-ghost !px-2 !py-1 text-sm" onClick={() => setJourneyPickerOpen(true)} title={`Pick / change ${journeyMeta(journeyFocus).singular}`}>{journeyMeta(journeyFocus).icon}</button>)}
               <div className="relative flex-1">
                 <input
                   ref={inputRef}
@@ -954,6 +1073,20 @@ export function AiChat() {
             </div>
             <p className="mb-2 text-xs text-slate-500">Choose a round to discuss the whole list, or tap a patient for a deep case walkthrough.</p>
             <WardRoundLauncher rounds={wardRounds} entries={wardEntries} onPick={pickWardRound} />
+          </div>
+        </div>
+      )}
+
+      {/* Journey record picker */}
+      {journeyPickerOpen && journeyFocus && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-3" onClick={() => setJourneyPickerOpen(false)}>
+          <div className="w-full max-w-md rounded-2xl bg-white p-4 shadow-2xl dark:bg-slate-800" onClick={(e) => e.stopPropagation()}>
+            <div className="mb-2 flex items-center justify-between">
+              <div className="text-sm font-bold">{journeyMeta(journeyFocus).icon} Pick {journeyMeta(journeyFocus).singular}</div>
+              <button className="btn-ghost !p-1 text-sm" onClick={() => setJourneyPickerOpen(false)}>✕</button>
+            </div>
+            <p className="mb-2 text-xs text-slate-500">Discuss your whole {journeyMeta(journeyFocus).plural.toLowerCase()}, or pick one specific record for a deep focused chat.</p>
+            <JourneyRecordLauncher focus={journeyFocus} onPick={pickJourney} />
           </div>
         </div>
       )}
@@ -1034,6 +1167,83 @@ function ModeGroupChip({
               {m.icon} {m.label}
             </button>
           ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ---- Journey record picker (mirrors WardRoundLauncher UX) ---- */
+function JourneyRecordLauncher({
+  focus, onPick, starter,
+}: {
+  focus: JourneyFocus;
+  onPick: (recordId: string | null) => void | Promise<void>;
+  starter?: string;
+}) {
+  const meta = journeyMeta(focus);
+  const [query, setQuery] = useState('');
+  const options = listJourneyRecords(focus);
+  const filtered = options.filter((o) => {
+    if (!query.trim()) return true;
+    const q = query.toLowerCase();
+    return (o.label + ' ' + (o.sub || '') + ' ' + (o.meta || '')).toLowerCase().includes(q);
+  });
+  const supportsRecords = !!meta.module;
+  return (
+    <div className="w-full space-y-2">
+      {supportsRecords && options.length > 0 && (
+        <button
+          className="w-full rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700"
+          onClick={() => onPick(null)}>
+          ▶ Discuss my {meta.plural.toLowerCase()} as a whole ({options.length} record{options.length === 1 ? '' : 's'})
+        </button>
+      )}
+      {supportsRecords && options.length > 0 && (
+        <>
+          <input className="input !py-1.5 text-xs" placeholder={`Search ${meta.plural.toLowerCase()}…`} value={query} onChange={(e) => setQuery(e.target.value)} />
+          <div className="max-h-64 space-y-1 overflow-y-auto pr-1">
+            {filtered.length === 0 && <p className="p-2 text-xs text-slate-400">No {meta.plural.toLowerCase()} match.</p>}
+            {filtered.map((o) => (
+              <button key={o.id}
+                className="flex w-full items-center justify-between gap-2 rounded-lg border border-slate-200 px-3 py-2 text-left text-sm transition hover:border-brand-400 hover:bg-brand-50 dark:border-slate-700 dark:hover:bg-brand-950/30"
+                onClick={() => onPick(o.id)}>
+                <span className="min-w-0">
+                  <span className="flex items-center gap-1.5 font-semibold">
+                    {meta.icon} <span className="truncate">{o.label}</span>
+                    {o.badge && <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-[9px] font-bold text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">{o.badge}</span>}
+                  </span>
+                  {o.sub && <span className="ml-5 block truncate text-xs text-slate-500">{o.sub}</span>}
+                </span>
+                {o.meta && <span className="shrink-0 text-right text-[11px] text-slate-400">{o.meta}</span>}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+      {supportsRecords && options.length === 0 && (
+        <p className="rounded-xl border border-dashed border-slate-300 p-4 text-xs text-slate-500 dark:border-slate-700">
+          You haven't saved any {meta.plural.toLowerCase()} yet — add one in the PharmD Journey tab first, then come back for an AI deep-dive.
+          {starter && (
+            <>
+              <br /><br />
+              You can still discuss your journey as a whole:
+            </>
+          )}
+        </p>
+      )}
+      {!supportsRecords && (
+        <p className="max-w-md text-[11px] text-slate-400">
+          This mode discusses an overall snapshot (no per-record picker needed). Click the button below to run the analysis, then ask any follow-up.
+        </p>
+      )}
+      {starter && (
+        <div className="flex flex-col items-center gap-2 pt-1">
+          <button
+            className="rounded-lg bg-slate-100 px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-200 dark:bg-slate-700 dark:text-slate-100 dark:hover:bg-slate-600"
+            onClick={() => onPick(null)}>
+            ▶ Run starter analysis
+          </button>
         </div>
       )}
     </div>
