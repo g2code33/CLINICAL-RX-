@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { PageHeader, EmptyState } from '../components/ui';
 import { useData, uid } from '../stores/data';
+import { useUi } from '../stores/ui';
 import { newChatSession } from '../services/defaults';
 import { copyToClipboard } from '../services/export';
 import { useContextMenu, ctxHandlers, type CtxItem } from '../components/ContextMenu';
@@ -176,6 +177,14 @@ export function AiChat() {
   const remove = useData((s) => s.remove);
   const setStatus = useData((s) => s.setStatus);
   const showMenu = useContextMenu();
+  // Workspace-aware: the same AI page and same shared brain is used from both
+  // the Clinical and PharmD Journey workspaces. Titles/subtitles adapt.
+  const appMode = useUi((s) => s.appMode);
+  const isPharmd = appMode === 'pharmd';
+  const pageTitle = isPharmd ? 'Ask Journey AI' : 'Ask Clinical AI';
+  const pageSubtitle = isPharmd
+    ? 'One brain, shared across your PharmD Journey and clinical records — ask anything about your journey, CV, skills, research, rotations or goals.'
+    : 'Type / in the composer for quick actions · one brain, shared memory across every AI section and both workspaces.';
 
   function sessionMenu(s: ChatSession): CtxItem[] {
     return [
@@ -602,16 +611,16 @@ export function AiChat() {
   const showStreaming = streaming && streaming.sessionId === currentSession?.id;
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="flex min-h-full flex-1 flex-col">
       {confirmDialog}
       <PageHeader
-        title="Ask Clinical AI"
-        subtitle="Type / in the composer for quick actions · each section keeps its own chats, but memory is shared."
+        title={pageTitle}
+        subtitle={pageSubtitle}
         action={<button className="btn-primary" onClick={newChat}>＋ New chat</button>}
       />
 
       {/* Collapsible grouped mode picker */}
-      <div className="mb-3 flex flex-wrap items-center gap-2">
+      <div className="mb-3 flex shrink-0 flex-wrap items-center gap-2">
         {(['assistants', 'tools', 'special'] as ModeGroup[]).map((g) => {
           const groupModes = MODES.filter((m) => m.group === g);
           const activeInGroup = groupModes.find((m) => m.key === mode);
@@ -619,6 +628,9 @@ export function AiChat() {
         })}
       </div>
 
+      {/* Row: chat list | messages. min-h-0 lets children with overflow-y-auto
+          constrain correctly; otherwise the row grows to content height and
+          the whole page scrolls. */}
       <div className="relative flex min-h-0 flex-1 flex-col gap-3 md:flex-row">
         {!listOpen ? (
           <button className="flex h-fit shrink-0 flex-col items-center gap-1 self-start rounded-lg border border-slate-200 px-2.5 py-2 text-sm hover:bg-slate-100 dark:border-slate-700 dark:hover:bg-slate-700"
@@ -629,7 +641,7 @@ export function AiChat() {
         <>
         {listOpen && (<div className="absolute inset-0 z-20 bg-slate-900/30 md:hidden" onClick={() => setListOpen(false)} />)}
         <div className="absolute inset-y-0 left-0 z-30 flex w-64 max-w-[80vw] flex-col bg-white p-1.5 text-slate-900 shadow-xl dark:bg-slate-800 dark:text-slate-100 md:static md:z-auto md:w-60 md:shrink-0 md:p-0 md:shadow-none">
-          <div className="mb-1 flex items-center justify-between px-1 text-xs font-semibold text-slate-400">
+          <div className="mb-1 flex shrink-0 items-center justify-between px-1 text-xs font-semibold text-slate-400">
             <div className="flex items-center gap-1">
               <button className="btn-ghost !p-0 text-sm" onClick={() => setListOpen(false)} title="Hide chat list">☰</button>
               <span>{active.label} ({sessions.length})</span>
@@ -640,7 +652,8 @@ export function AiChat() {
               </button>
             )}
           </div>
-          <div className="min-h-0 flex-1 space-y-1 overflow-y-auto rounded-lg border border-slate-200 p-1.5 dark:border-slate-700">
+          {/* Chat list scrolls independently from the message panel */}
+          <div className="min-h-0 flex-1 space-y-1 overflow-y-auto overscroll-contain rounded-lg border border-slate-200 p-1.5 dark:border-slate-700">
             {visibleSessions.length === 0 && (<p className="p-2 text-xs text-slate-400">{hiddenCount ? 'All chats hidden.' : 'No chats yet — type / below to start.'}</p>)}
             {visibleSessions.map((s) => (
               <div key={s.id}>
@@ -675,7 +688,9 @@ export function AiChat() {
         </>
         )}
 
-        {/* Chat area */}
+        {/* Chat area — card flexes to fill the remaining row height,
+            message list scrolls internally so the composer and mode chips
+            stay in view. */}
         <div className="card relative flex min-h-0 min-w-0 flex-1 flex-col">
           {!currentSession && !streaming ? (
             <div className="flex flex-1 flex-col items-center justify-center gap-3 p-6 text-center">
@@ -692,7 +707,7 @@ export function AiChat() {
               )}
             </div>
           ) : (
-            <div className="flex-1 space-y-3 overflow-y-auto p-4">
+            <div className="flex-1 min-h-0 space-y-3 overflow-y-auto overscroll-contain p-4">
               {(currentSession?.messages ?? []).map((m, i) => (
                 <div key={m.id || i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                   <div className={`max-w-[85%] whitespace-pre-wrap rounded-2xl px-4 py-2.5 text-sm ${m.role === 'user' ? 'bg-brand-600 text-white' : 'bg-slate-100 text-slate-900 dark:bg-slate-700 dark:text-slate-100'}`}>

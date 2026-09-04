@@ -15,6 +15,7 @@ import {
 } from '../../services/portfolio';
 import { downloadText, copyToClipboard } from '../../services/export';
 import { askAi, availability } from '../../services/aiOrchestrator';
+import { JourneyAiButton } from '../../components/JourneyAiButton';
 
 /**
  * 📚 ACADEMIC ARCHIVE and 📁 PROFESSIONAL PORTFOLIO / 📄 CV
@@ -85,9 +86,15 @@ export function AcademicArchive() {
         title="📚 Academic Archive"
         subtitle="Every previous level, exactly as you recorded it. Nothing is ever rewritten by progressing."
         action={
-          <button className="btn-secondary" onClick={() => navigate('/journey')}>
-            ← Journey
-          </button>
+          <div className="flex w-full items-center gap-2 sm:w-auto">
+            <JourneyAiButton
+              section="archive"
+              prompt="Review my academic archive across previous levels. Compare what I learned/recorded at each level and surface topics that have recurred (so I should really know them cold) and topics that appeared once and dropped off (so I should revisit)."
+            />
+            <button className="btn-secondary" onClick={() => navigate('/journey')}>
+              ← Journey
+            </button>
+          </div>
         }
       />
 
@@ -230,9 +237,15 @@ export function PortfolioPage() {
         title="📁 Professional Portfolio"
         subtitle="Only what you explicitly choose to show. Everything else stays private."
         action={
-          <button className="btn-secondary" onClick={() => navigate('/journey')}>
-            ← Journey
-          </button>
+          <div className="flex w-full items-center gap-2 sm:w-auto">
+            <JourneyAiButton
+              section="portfolio"
+              prompt="Critique my professional portfolio vs my private records. What's strong? What important evidence is still marked private that I should consider promoting? Suggest an ordering of sections for maximum CV impact and tell me what a recruiter would notice first."
+            />
+            <button className="btn-secondary" onClick={() => navigate('/journey')}>
+              ← Journey
+            </button>
+          </div>
         }
       />
 

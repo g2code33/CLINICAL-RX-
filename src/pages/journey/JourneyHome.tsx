@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { PageHeader } from '../../components/ui';
+import { JourneyAiButton } from '../../components/JourneyAiButton';
 import { useData } from '../../stores/data';
 import {
   allStageSnapshots,
@@ -124,9 +125,15 @@ export default function JourneyHome() {
         title="🎓 PharmD Journey"
         subtitle="Your academic, clinical and professional record — preserved across every level."
         action={
-          <button className="btn-secondary" onClick={() => navigate('/journey/timeline')}>
-            📈 Timeline
-          </button>
+          <div className="flex w-full items-center gap-2 sm:w-auto">
+            <JourneyAiButton
+              section="journey"
+              prompt="You are looking at my full PharmD Journey — academic stages, skills, projects, rotations, achievements, certifications, goals and portfolio. Give me a frank 3-bullet summary of where I stand right now, 3 genuine gaps I should work on, and a prioritised plan for the next 3 months. Reference only what I actually recorded."
+            />
+            <button className="btn-secondary" onClick={() => navigate('/journey/timeline')}>
+              📈 Timeline
+            </button>
+          </div>
         }
       />
 
@@ -405,9 +412,15 @@ export function JourneyTimeline() {
         title="📈 Academic & Professional Timeline"
         subtitle="Every level, rotation, project and achievement — from your real dated records."
         action={
-          <button className="btn-secondary" onClick={() => navigate('/journey')}>
-            ← Journey
-          </button>
+          <div className="flex w-full items-center gap-2 sm:w-auto">
+            <JourneyAiButton
+              section="timeline"
+              prompt="Walk through my academic & professional timeline. Point out any slow periods I should be ready to explain in an interview, highlight my strongest narrative arc, and suggest 2-3 things I could add next to make the timeline more compelling."
+            />
+            <button className="btn-secondary" onClick={() => navigate('/journey')}>
+              ← Journey
+            </button>
+          </div>
         }
       />
 

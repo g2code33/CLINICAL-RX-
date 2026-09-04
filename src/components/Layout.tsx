@@ -69,8 +69,11 @@ const PHARMD_NAV = [
   { to: '/admin', iconKey: 'nav.admin', label: 'Admin' },
 ];
 
-/** Routes that belong to BOTH workspaces, so they never force a mode change. */
-const SHARED_ROUTES = ['/progress', '/settings', '/admin', '/auth', '/reset', '/sync', '/recycle-bin'];
+/** Routes that belong to BOTH workspaces, so they never force a mode change.
+ *  /ai and /ai-workspace are shared because the AI is ONE brain that knows
+ *  about both clinical and PharmD Journey data — reachable from either
+ *  workspace without flipping the shell out from under you. */
+const SHARED_ROUTES = ['/ai', '/ai-workspace', '/progress', '/settings', '/admin', '/auth', '/reset', '/sync', '/recycle-bin'];
 
 const PHARMD_BOTTOM_NAV = [
   { to: '/journey', iconKey: 'nav.journey', label: 'Journey' },
@@ -186,8 +189,8 @@ export function Layout({ children }: { children: ReactNode }) {
       <div className="app-shell flex flex-col overflow-hidden bg-slate-50 text-slate-800 dark:bg-slate-900 dark:text-slate-100 lg:flex-row">
         {/* ================= DESKTOP SIDEBAR (lg+) ================= */}
         {sidebarOpen ? (
-          <aside aria-label="Primary navigation" className="hidden w-64 shrink-0 flex-col border-r border-slate-200 bg-white text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 lg:flex">
-            <div className="flex items-center gap-3 border-b border-slate-200 px-5 py-5 dark:border-slate-700">
+          <aside aria-label="Primary navigation" className="hidden h-full min-h-0 w-64 shrink-0 flex-col overflow-hidden border-r border-slate-200 bg-white text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 lg:flex">
+            <div className="flex shrink-0 items-center gap-3 border-b border-slate-200 px-5 py-5 dark:border-slate-700">
               <img src="./v2.PNG" alt="CLINICAL Rx logo" className="h-9 w-9 shrink-0 rounded-xl object-cover" />
               <div className="min-w-0">
                 <div className="truncate text-base font-extrabold tracking-tight text-brand-700 dark:text-brand-300">
@@ -196,7 +199,7 @@ export function Layout({ children }: { children: ReactNode }) {
                 <div className="text-[11px] text-slate-400">v{APP_VERSION} · {workspaceName}</div>
               </div>
             </div>
-            <nav className="flex-1 space-y-0.5 overflow-y-auto p-3">
+            <nav className="min-h-0 flex-1 space-y-0.5 overflow-y-auto overscroll-contain p-3">
               {navItems.map((n) => (
                 <NavLink
                   key={n.to}
@@ -236,11 +239,11 @@ export function Layout({ children }: { children: ReactNode }) {
             </div>
           </aside>
         ) : (
-          <aside className="hidden w-16 shrink-0 flex-col border-r border-slate-200 bg-white py-2 text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 lg:flex">
-            <div className="mb-2 flex justify-center">
+          <aside className="hidden h-full min-h-0 w-16 shrink-0 flex-col overflow-hidden border-r border-slate-200 bg-white py-2 text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 lg:flex">
+            <div className="mb-2 flex shrink-0 justify-center">
               <img src="./v2.PNG" alt="CLINICAL Rx" className="h-9 w-9 rounded-xl object-cover" />
             </div>
-            <nav className="flex flex-1 flex-col items-stretch gap-1 px-1.5">
+            <nav className="flex min-h-0 flex-1 flex-col items-stretch gap-1 overflow-y-auto overscroll-contain px-1.5">
               {navItems.map((n) => (
                 <NavLink
                   key={n.to}
@@ -370,8 +373,8 @@ export function Layout({ children }: { children: ReactNode }) {
           </header>
 
           {/* -------- Content -------- */}
-          <main id="main-content" tabIndex={-1} className="flex-1 overflow-y-auto outline-none" aria-label="Main content">
-            <div className="mx-auto w-full max-w-7xl px-4 py-4 pb-24 sm:px-6 lg:px-8 lg:py-8 lg:pb-10">
+          <main id="main-content" tabIndex={-1} className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain outline-none" aria-label="Main content">
+            <div className="mx-auto flex min-h-full w-full max-w-7xl flex-col px-4 py-4 pb-24 sm:px-6 lg:px-8 lg:py-8 lg:pb-10">
               {children}
             </div>
           </main>
@@ -422,7 +425,7 @@ export function Layout({ children }: { children: ReactNode }) {
             </div>
 
             {/* Drawer nav — tapping any item closes the drawer automatically */}
-            <nav className="flex-1 overflow-y-auto py-2">
+            <nav className="min-h-0 flex-1 overflow-y-auto overscroll-contain py-2">
               {navItems.map((n) => (
                 <NavLink
                   key={n.to}
