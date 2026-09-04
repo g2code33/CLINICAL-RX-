@@ -75,8 +75,11 @@ function saveSlashGroups(g: Record<SlashCmdGroup, boolean>) {
   try { localStorage.setItem(SLASH_SETTINGS_KEY, JSON.stringify(g)); } catch { /* ignore */ }
 }
 
-/** Logical groups for the AI mode strip so the 11 tabs don't feel scattered. */
-type ModeGroup = 'assistants' | 'tools' | 'special';
+/** Logical groups for the AI mode strip: Assistants (general-purpose),
+ *  Study tools (one-shot generators), Deep modes (context-heavy teachers),
+ *  and Journey (one mode per PharmD Journey section, all using the shared
+ *  career brain but each primed for that specific section's data). */
+type ModeGroup = 'assistants' | 'tools' | 'special' | 'journey';
 type Mode =
   | 'general'
   | 'clinical'
@@ -88,7 +91,25 @@ type Mode =
   | 'analyze'
   | 'organize'
   | 'questions'
-  | 'wardround';
+  | 'wardround'
+  // PharmD Journey — one mode per section, all share the 'career' AI module
+  // (single brain, same memory) but each carries a section-specific persona
+  // and auto-starter prompt so Ask AI from any Journey page lands exactly
+  // where the student expects.
+  | 'j:journey'
+  | 'j:timeline'
+  | 'j:experience'
+  | 'j:skills'
+  | 'j:projects'
+  | 'j:research'
+  | 'j:leadership'
+  | 'j:achievements'
+  | 'j:certifications'
+  | 'j:goals'
+  | 'j:portfolio'
+  | 'j:archive'
+  | 'j:courses'
+  | 'j:progress';
 
 interface ModeDef {
   key: Mode;
@@ -99,6 +120,11 @@ interface ModeDef {
   placeholder: string;
   auto?: boolean;
   hint?: string;
+  /** Extra system-prompt context injected for this mode (section persona). */
+  sysExtra?: string;
+  /** Starter prompt used when the mode is opened fresh via Ask AI from its
+   *  section page, and shown as a suggestion chip in the empty state. */
+  starter?: string;
 }
 
 const MODES: ModeDef[] = [
@@ -113,12 +139,57 @@ const MODES: ModeDef[] = [
   { key: 'organize', icon: '📝', label: 'Organize',     group: 'tools',      module: 'notes',      placeholder: 'Turn a rough note into structured records (e.g. "Saw a patient with high BP…")' },
   { key: 'questions',icon: '❓', label: 'Questions',    group: 'tools',      module: 'questionGen',placeholder: 'Focus (optional, e.g. antihypertensives) or leave blank → Enter' },
   { key: 'wardround',icon: '🏥', label: 'Ward Round',   group: 'special',    module: 'wardRound',  placeholder: 'Pick a round/patient (🏥 button), then ask anything — meds, reasoning, quizzes…', hint: 'Deep ward-round teacher — pick a round and patient for a case-specific chat' },
+
+  // PharmD Journey modes (fourth group)
+  { key: 'j:journey',       icon: '🎓', label: 'My Journey',        group: 'journey', module: 'career', placeholder: 'Ask about your whole PharmD Journey — progress, gaps, plan…',
+    sysExtra: 'FOCUS: the student\'s entire PharmD Journey (academic stage, level, overall progress). Give a frank summary, gap analysis and prioritised plan. Reference only what is actually saved.',
+    starter: 'Give me a frank 3-bullet summary of where I stand right now, 3 genuine gaps I should work on, and a prioritised plan for the next 3 months. Reference only what I actually recorded.' },
+  { key: 'j:timeline',      icon: '📈', label: 'Timeline',          group: 'journey', module: 'career', placeholder: 'Ask about your academic & professional timeline…',
+    sysExtra: 'FOCUS: the student\'s dated timeline across levels, rotations, projects and achievements. Point out slow periods, strong narrative arcs, and what to add next.',
+    starter: 'Walk through my academic & professional timeline. Point out any slow periods I should be ready to explain in an interview, highlight my strongest narrative arc, and suggest 2-3 things I could add next to make the timeline more compelling.' },
+  { key: 'j:experience',    icon: '🏥', label: 'Clinical Exp.',    group: 'journey', module: 'career', placeholder: 'Ask about rotations, placements and experience…',
+    sysExtra: 'FOCUS: the student\'s clinical experience / rotations. Suggest STAR-format stories for interviews, point out missing rotation types or thin entries.',
+    starter: 'Review my saved clinical experience / rotations. Summarise my strongest rotation stories for an interview, point out gaps (any rotation type I\'m missing, any with too little detail), and give me 3 reflective questions I should answer about my placements to strengthen them.' },
+  { key: 'j:skills',        icon: '🧠', label: 'Skills',            group: 'journey', module: 'career', placeholder: 'Ask about your skills, evidence and gaps…',
+    sysExtra: 'FOCUS: the student\'s competencies, confidence ratings and attached evidence. Highlight under-evidenced or weak skills, and which 3 to highlight in interviews.',
+    starter: 'Look at my recorded skills (categories, confidence levels and attached evidence). Tell me which skills look weak or under-evidenced, suggest what evidence I could add, and which 3 skills I should highlight in an interview.' },
+  { key: 'j:projects',      icon: '💻', label: 'Projects',          group: 'journey', module: 'career', placeholder: 'Ask about your projects and how to present them…',
+    sysExtra: 'FOCUS: the student\'s projects (pharmacy, research, software, community, digital health). Suggest strong STAR CV bullets and flag thin descriptions.',
+    starter: 'Review my projects. For each one, suggest 1-2 strong STAR-format CV bullets I could write. Flag any project descriptions that look too thin to put on a CV and tell me what to add.' },
+  { key: 'j:research',      icon: '🔬', label: 'Research',          group: 'journey', module: 'career', placeholder: 'Ask about research interests, reading and outputs…',
+    sysExtra: 'FOCUS: the student\'s research interests, outputs and reading. Suggest realistic next student-research questions and interview talking points.',
+    starter: 'Review my research interests and outputs. Suggest realistic next research questions or small studies I could do as a student, point out any gaps between my stated interests and what I\'ve actually recorded, and give me talking points for a research-minded interview.' },
+  { key: 'j:leadership',    icon: '🏅', label: 'Leadership',        group: 'journey', module: 'career', placeholder: 'Ask about leadership roles and activities…',
+    sysExtra: 'FOCUS: the student\'s leadership positions and activities. Suggest CV bullets and reflective questions that surface concrete impact.',
+    starter: 'Review my leadership roles and activities. For each, suggest strong CV bullet points, and ask me 3 reflective questions that would surface concrete impact (numbers, initiatives, outcomes) I should add to make the entries interview-ready.' },
+  { key: 'j:achievements',  icon: '🏆', label: 'Achievements',      group: 'journey', module: 'career', placeholder: 'Ask about achievements and awards…',
+    sysExtra: 'FOCUS: the student\'s dated achievements. Suggest CV/interview phrasing and flag missing categories.',
+    starter: 'Review my recorded achievements. Suggest how to phrase the most impressive ones in CV/interview language, and point out categories of achievement (academic, clinical, leadership, community) that look missing so I can fill them in.' },
+  { key: 'j:certifications',icon: '📜', label: 'Certifications',   group: 'journey', module: 'career', placeholder: 'Ask about certifications and credentials…',
+    sysExtra: 'FOCUS: the student\'s certifications and credentials. Flag upcoming expirations where dates are present, suggest complementary credentials, and CV listing advice.',
+    starter: 'Review my certifications. Flag any expiring soon (if dates are present), suggest credentials that would complement what I already have given my journey/level, and tell me how to list each cleanly on a CV.' },
+  { key: 'j:goals',         icon: '🎯', label: 'Goals',             group: 'journey', module: 'career', placeholder: 'Ask about goals, milestones and planning…',
+    sysExtra: 'FOCUS: the student\'s goals and milestones. Assess realism vs stretch, suggest next milestones for stalled goals, and spot timeline conflicts.',
+    starter: 'Review my goals and milestones. Which goals look realistic vs over-stretched? Suggest concrete next-step milestones for the goals with no progress yet, and spot if any goals conflict with my recorded clinical/academic timeline.' },
+  { key: 'j:portfolio',     icon: '📁', label: 'Portfolio',         group: 'journey', module: 'career', placeholder: 'Ask about your portfolio and CV readiness…',
+    sysExtra: 'FOCUS: the student\'s professional portfolio (portfolio-visible records). Critique vs private records, suggest ordering and recruiter impact.',
+    starter: 'Critique my professional portfolio vs my private records. What\'s strong? What important evidence is still marked private that I should consider promoting? Suggest an ordering of sections for maximum CV impact and tell me what a recruiter would notice first.' },
+  { key: 'j:archive',       icon: '📚', label: 'Archive',           group: 'journey', module: 'career', placeholder: 'Ask about your academic archive across levels…',
+    sysExtra: 'FOCUS: the student\'s academic archive across previous levels. Surface recurring topics (must-know) and dropped topics (revisit).',
+    starter: 'Review my academic archive across previous levels. Compare what I learned/recorded at each level and surface topics that have recurred (so I should really know them cold) and topics that appeared once and dropped off (so I should revisit).' },
+  { key: 'j:courses',       icon: '📘', label: 'Courses',           group: 'journey', module: 'career', placeholder: 'Ask about courses and academic progress…',
+    sysExtra: 'FOCUS: the student\'s enrolled/completed courses and academic performance context. Suggest study priorities based on current courses.',
+    starter: 'Review my courses (current and completed). Suggest how to tie what I\'m learning to my skills, projects and portfolio, and which course topics would make strong CV evidence or interview stories.' },
+  { key: 'j:progress',      icon: '📊', label: 'Progress',          group: 'journey', module: 'career', placeholder: 'Ask about overall progress and momentum…',
+    sysExtra: 'FOCUS: the student\'s overall progress (clinical learning, journey momentum, streaks, gaps). Celebrate momentum, name the next lever to pull.',
+    starter: 'Look at my overall progress across clinical learning and the PharmD Journey — streaks, coverage, recent activity. Tell me what\'s working, what\'s stalling, and the single highest-impact thing I should do this week.' },
 ];
 
 const GROUP_LABEL: Record<ModeGroup, string> = {
   assistants: 'Assistants',
   tools: 'Study tools',
   special: 'Deep modes',
+  journey: '🎓 Journey',
 };
 
 function fmtTime(ts: number): string {
@@ -133,6 +204,27 @@ export function AiChat() {
   const [search, setSearch] = useSearchParams();
   const [mode, setMode] = useState<Mode>(() => {
     const m = search.get('m');
+    // When arriving from a PharmD page ?section=<slug> maps to the matching
+    // Journey mode; otherwise fall back to the legacy alias map.
+    const section = search.get('section');
+    const sectionMap: Record<string, Mode> = {
+      journey: 'j:journey',
+      timeline: 'j:timeline',
+      'clinical-experience': 'j:experience',
+      experience: 'j:experience',
+      skills: 'j:skills',
+      projects: 'j:projects',
+      research: 'j:research',
+      leadership: 'j:leadership',
+      achievements: 'j:achievements',
+      certifications: 'j:certifications',
+      goals: 'j:goals',
+      portfolio: 'j:portfolio',
+      archive: 'j:archive',
+      courses: 'j:courses',
+      progress: 'j:progress',
+    };
+    if (section && sectionMap[section]) return sectionMap[section];
     const legacy: Record<string, Mode> = {
       general: 'general', chat: 'general',
       clinical: 'clinical', tutor: 'clinical', explain: 'clinical',
@@ -251,9 +343,9 @@ export function AiChat() {
     { id: 'flashcards', cmd: '/flashcards', label: 'Make flashcards', hint: 'Q/A flashcards I can copy into Anki', group: 'study', icon: '🗂', insert: 'Turn what we just covered into 8–12 Anki-style flashcards (Q: on one side, A: on the other). Make cards atomic (one fact per card), not multi-question.' },
     { id: 'recall', cmd: '/recall', label: 'Active recall test', hint: 'Blank-page active recall prompts', group: 'study', icon: '🧠', insert: 'Give me 10 active-recall prompts (short-answer questions) on this topic/round. I\'ll answer from memory before scrolling on — don\'t give the answers yet; after I reply, mark and explain.' },
     // Career
-    { id: 'cv', cmd: '/cv', label: 'Draft CV bullet', hint: 'Turn an experience into a CV line', group: 'career', icon: '📄', modes: ['career', 'general'], insert: 'Help me turn this rotation / experience into a strong CV bullet using the STAR + quantified-impact style. I\'ll paste my rough note next.' },
-    { id: 'interview', cmd: '/interview', label: 'Interview question', hint: 'Practice a pharmacy/clinical interview question', group: 'career', icon: '🎙', modes: ['career', 'general'], insert: 'Ask me a realistic pharmacy-student / intern interview question (clinical or behavioural), wait for my answer, then give me structured feedback: what worked, what to tighten, and a model answer.' },
-    { id: 'swot', cmd: '/swot', label: 'SWOT analysis', hint: 'SWOT on my current progress / an opportunity', group: 'career', icon: '📊', modes: ['career', 'general'], insert: 'Using my saved PharmD Journey / rotations / skills, help me do a SWOT analysis (Strengths, Weaknesses, Opportunities, Threats) of my current professional position. Only use what\'s actually saved; flag what is missing.' },
+    { id: 'cv', cmd: '/cv', label: 'Draft CV bullet', hint: 'Turn an experience into a CV line', group: 'career', icon: '📄', modes: ['career','general','j:journey','j:timeline','j:experience','j:skills','j:projects','j:research','j:leadership','j:achievements','j:certifications','j:goals','j:portfolio','j:archive','j:courses','j:progress'], insert: 'Help me turn this rotation / experience into a strong CV bullet using the STAR + quantified-impact style. I\'ll paste my rough note next.' },
+    { id: 'interview', cmd: '/interview', label: 'Interview question', hint: 'Practice a pharmacy/clinical interview question', group: 'career', icon: '🎙', modes: ['career','general','j:journey','j:timeline','j:experience','j:skills','j:projects','j:research','j:leadership','j:achievements','j:certifications','j:goals','j:portfolio','j:archive','j:courses','j:progress'], insert: 'Ask me a realistic pharmacy-student / intern interview question (clinical or behavioural), wait for my answer, then give me structured feedback: what worked, what to tighten, and a model answer.' },
+    { id: 'swot', cmd: '/swot', label: 'SWOT analysis', hint: 'SWOT on my current progress / an opportunity', group: 'career', icon: '📊', modes: ['career','general','j:journey','j:timeline','j:experience','j:skills','j:projects','j:research','j:leadership','j:achievements','j:certifications','j:goals','j:portfolio','j:archive','j:courses','j:progress'], insert: 'Using my saved PharmD Journey / rotations / skills, help me do a SWOT analysis (Strengths, Weaknesses, Opportunities, Threats) of my current professional position. Only use what\'s actually saved; flag what is missing.' },
   ], []);
 
   const activeSlashCommands = useMemo(() => {
@@ -559,7 +651,10 @@ export function AiChat() {
         ].filter(Boolean).join('\n\n');
         res = await runAiModule(sectionKey, prompt, sysExtra, opts);
       } else {
-        res = await runAiModule(sectionKey, prompt, '', opts);
+        // Inject section persona for Journey modes (e.g. Skills-only, Projects-only)
+        // plus any other mode-specific extra context.
+        const sysExtra = active.sysExtra ?? '';
+        res = await runAiModule(sectionKey, prompt, sysExtra, opts);
       }
     } catch (e: any) {
       res = { ok: false as const, error: e?.message || 'Something went wrong. Please try again.' };
@@ -621,7 +716,7 @@ export function AiChat() {
 
       {/* Collapsible grouped mode picker */}
       <div className="mb-3 flex shrink-0 flex-wrap items-center gap-2">
-        {(['assistants', 'tools', 'special'] as ModeGroup[]).map((g) => {
+        {(['assistants', 'tools', 'special', 'journey'] as ModeGroup[]).map((g) => {
           const groupModes = MODES.filter((m) => m.group === g);
           const activeInGroup = groupModes.find((m) => m.key === mode);
           return <ModeGroupChip key={g} group={g} modes={groupModes} activeMode={mode} onPick={(k) => setMode(k)} label={GROUP_LABEL[g]} activeInGroup={activeInGroup} />;
@@ -700,6 +795,16 @@ export function AiChat() {
               <p className="max-w-md text-[11px] text-slate-400">Tip: type <code className="rounded bg-slate-100 px-1 dark:bg-slate-700">/</code> in the box below for quick prompts, teaching actions, and ward-round shortcuts.</p>
               {mode === 'wardround' ? (
                 <WardRoundLauncher rounds={wardRounds} entries={wardEntries} onPick={pickWardRound} />
+              ) : active.starter ? (
+                <div className="flex flex-col items-center gap-2">
+                  <button className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700"
+                    onClick={() => { setInput(active.starter!); setTimeout(() => void send(active.starter!), 30); }}>
+                    ▶ Run starter analysis
+                  </button>
+                  <p className="max-w-md text-[11px] text-slate-400">
+                    Runs a built-in analysis for this section using your real records. You can also ask any follow-up question below.
+                  </p>
+                </div>
               ) : active.auto ? (
                 <button className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700" onClick={() => void send()}>▶ Run now</button>
               ) : (
