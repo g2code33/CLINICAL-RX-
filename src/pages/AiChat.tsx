@@ -114,7 +114,8 @@ type Mode =
   | 'j:portfolio'
   | 'j:archive'
   | 'j:courses'
-  | 'j:progress';
+  | 'j:progress'
+  | 'j:health';
 
 interface ModeDef {
   key: Mode;
@@ -188,6 +189,9 @@ const MODES: ModeDef[] = [
   { key: 'j:progress',      icon: '📊', label: 'Progress',          group: 'journey', module: 'career', placeholder: 'Ask about overall progress and momentum…',
     sysExtra: 'FOCUS: the student\'s overall progress (clinical learning, journey momentum, streaks, gaps). Celebrate momentum, name the next lever to pull.',
     starter: 'Look at my overall progress across clinical learning and the PharmD Journey — streaks, coverage, recent activity. Tell me what\'s working, what\'s stalling, and the single highest-impact thing I should do this week.' },
+  { key: 'j:health',        icon: '🩺', label: 'Health APIs',       group: 'journey', module: 'career', placeholder: 'Ask about drug labels, interactions, or how to use the study APIs…',
+    sysExtra: 'FOCUS: helping the student use openFDA, RxNav, UMLS and WebMD/RxList for study. Explain endpoints, give example queries (URLs/params), point out which API is best for which study task, and remind about licensing/commercial-use rules. Never fabricate API responses — show how to query and interpret results.',
+    starter: 'Give me a quick study tour of my configured Health APIs: for each one (openFDA, RxNav, UMLS, WebMD/RxList) tell me the most useful endpoint for a pharmacy student, an example URL I can paste into my browser, what response fields to pay attention to, and how it helps with revising drugs/interactions/terminology.' },
 ];
 
 const GROUP_LABEL: Record<ModeGroup, string> = {
@@ -228,6 +232,7 @@ export function AiChat() {
       archive: 'j:archive',
       courses: 'j:courses',
       progress: 'j:progress',
+      'health-apis': 'j:health',
     };
     if (section && sectionMap[section]) return sectionMap[section];
     const legacy: Record<string, Mode> = {

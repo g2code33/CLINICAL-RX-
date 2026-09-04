@@ -23,7 +23,7 @@ import type {
 export type JourneyFocus =
   | 'journey' | 'timeline' | 'experience' | 'skills' | 'projects'
   | 'research' | 'leadership' | 'achievements' | 'certifications'
-  | 'goals' | 'portfolio' | 'archive' | 'courses' | 'progress';
+  | 'goals' | 'portfolio' | 'archive' | 'courses' | 'progress' | 'health';
 
 export interface JourneyPickOption {
   id: string;                // record id, or special sentinel 'section'
@@ -55,6 +55,7 @@ const SECTION_META: Record<JourneyFocus, {
   archive:      { icon: '📚', singular: 'archived level',    plural: 'Archive',        sectionLabel: 'Your academic archive' },
   courses:      { icon: '📘', singular: 'course',            plural: 'Courses',        module: 'course', sectionLabel: 'Your courses' },
   progress:     { icon: '📊', singular: 'Progress snapshot', plural: 'Progress',       sectionLabel: 'Your overall progress' },
+  health:       { icon: '🩺', singular: 'Health API',        plural: 'Health APIs',    sectionLabel: 'Your configured study health APIs' },
 };
 
 /** Plural/singular label and icon for a journey focus. */

@@ -37,6 +37,7 @@ import { LockScreen } from './components/LockScreen';
 // Phase 6 — PharmD Journey + Professional Career Engine
 import JourneyHome, { JourneyTimeline } from './pages/journey/JourneyHome';
 import { AcademicArchive, PortfolioPage } from './pages/journey/ArchiveAndPortfolio';
+import HealthApisPage from './pages/journey/HealthApis';
 import {
   AchievementsPage,
   CertificationsPage,
@@ -214,6 +215,7 @@ export default function App() {
     { path: '/journey/achievements', element: <AchievementsPage /> },
     { path: '/journey/certifications', element: <CertificationsPage /> },
     { path: '/journey/goals', element: <GoalsPage /> },
+    { path: '/journey/health-apis', element: <HealthApisPage /> },
     { path: '/archive', element: <Archive /> },
     { path: '/courses', element: <Courses /> },
     { path: '/learning', element: <LearningOverview /> },

@@ -33,6 +33,71 @@ export const AI_MODULES = [
   { key: 'wardRound', label: '🏥 Ward Round AI' },
 ] as const;
 
+/**
+ * 🩺 Study health APIs — curated list of real pharmaceutical/clinical data
+ * APIs that help with studying. Separate from the AI LLM keys. Some are free
+ * (openFDA, RxNav) and some require a free/commercial license (UMLS, WebMD).
+ *
+ * The `id`s are stable — they are used as the storage key under
+ * `settings.healthApis`, so renaming here won't lose a saved key.
+ */
+export const HEALTH_APIS = [
+  {
+    id: 'openfda',
+    icon: '💊',
+    name: 'openFDA API',
+    url: 'https://open.fda.gov/',
+    data: 'Drug labels, adverse events, recalls',
+    access: '🆓 Free public dataset · API key optional (raises rate limit)',
+    docs: 'https://open.fda.gov/apis/',
+    requiresKey: false,
+    keyPlaceholder: 'Optional — register at api.data.gov for higher rate limits',
+  },
+  {
+    id: 'rxnav',
+    icon: '🔗',
+    name: 'RxNav API (NLM)',
+    url: 'https://lhncbc.nlm.nih.gov/RxNav/',
+    data: 'Drug-to-drug interactions, RxNorm mapping, clinical drug identifiers',
+    access: '🆓 Free API · no key required for basic use',
+    docs: 'https://rxnav.nlm.nih.gov/',
+    requiresKey: false,
+    keyPlaceholder: 'Usually not required',
+  },
+  {
+    id: 'umls',
+    icon: '📖',
+    name: 'UMLS (Unified Medical Language System)',
+    url: 'https://www.nlm.nih.gov/research/umls/index.html',
+    data: 'SNOMED CT, ICD-10, RxNorm vocabulary & terminology mapping',
+    access: '🆓 Free license (UMLS Terminology Services account)',
+    docs: 'https://uts.nlm.nih.gov/uts/',
+    requiresKey: true,
+    keyPlaceholder: 'UTS API key (from your UMLS profile)',
+  },
+  {
+    id: 'webmd',
+    icon: '🌐',
+    name: 'RxList / WebMD Network API',
+    url: 'https://www.webmd.com/',
+    data: 'Consumer drug monographs, disease articles, interactions',
+    access: '💼 Commercial license required (Medscape/WebMD network)',
+    docs: 'https://developer.webmd.com/',
+    requiresKey: true,
+    keyPlaceholder: 'API key from WebMD/Medscape developer portal',
+  },
+] as const;
+
+export type HealthApiId = (typeof HEALTH_APIS)[number]['id'];
+
+export function defaultHealthApis() {
+  const out: Record<string, { name: string; key: string; baseUrl?: string; enabled: boolean; notes?: string }> = {};
+  for (const a of HEALTH_APIS) {
+    out[a.id] = { name: a.name, key: '', enabled: false };
+  }
+  return out;
+}
+
 export function defaultAiConfig() {
   const conf: Record<string, { enabled: boolean; provider: AiProvider; apiKey: string; model: string; baseUrl?: string }> = {};
   for (const m of AI_MODULES) {
@@ -65,6 +130,7 @@ export function newSettings(): Settings {
     autoDailyBundle: true,
     autoWeeklyBundle: true,
     ai: defaultAiConfig(),
+    healthApis: defaultHealthApis(),
     learningProfile: { preferredExplanation: ['simple-first', 'step-by-step', 'pharmacy-focused', 'clinical-examples'] },
     onlineAccount: { connected: false },
     aiPendingBundles: [],

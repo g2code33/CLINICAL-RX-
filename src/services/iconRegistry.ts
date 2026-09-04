@@ -72,6 +72,7 @@ export const ICON_CATALOG: IconDef[] = [
   { key: 'nav.portfolio', fallback: '📁', label: 'Portfolio & CV', group: 'PharmD navigation' },
   { key: 'nav.archive', fallback: '📚', label: 'Academic Archive', group: 'PharmD navigation' },
   { key: 'nav.courses', fallback: '📚', label: 'Courses', group: 'PharmD navigation' },
+  { key: 'nav.healthApis', fallback: '🩺', label: 'My Health APIs', group: 'PharmD navigation' },
   { key: 'nav.favorites', fallback: '⭐', label: 'Favorites', group: 'PharmD navigation' },
 
   // ---- AI modules ----

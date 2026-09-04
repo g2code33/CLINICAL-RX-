@@ -15,7 +15,7 @@ import {
 import { PageHeader, PasswordInput } from '../components/ui';
 import { Modal } from '../components/Modal';
 import { UpdatePanel } from '../components/UpdatePanel';
-import { AI_MODULES, newSettings } from '../services/defaults';
+import { AI_MODULES, HEALTH_APIS, newSettings } from '../services/defaults';
 import { loadSampleData, removeSampleData } from '../services/demo';
 import { syncClient, DEFAULT_BACKEND_URL } from '../services/syncClient';
 import { hasElectronBridge } from '../db/adapter';
@@ -428,6 +428,69 @@ export function SettingsPage() {
         })}
       </div>
       <p className="mt-3 text-[11px] text-slate-400">🔐 On the desktop app, keys should be stored in the OS secure credential store. This version stores them with your local data — export backups with care.</p>
+    </div>
+
+    {/* 🩺 MY HEALTH APIs — separate from AI LLM keys */}
+    <div id="health-apis" className="mt-6 card">
+      <h2 className="mb-1 font-semibold">🩺 My Health APIs (study data sources)</h2>
+      <p className="mb-3 text-xs text-slate-400">
+        Real pharmaceutical and medical data APIs to help your studies (drug labels, interactions, SNOMED/ICD-10/RxNorm terminology, consumer monographs).
+        These keys are <strong>separate</strong> from the AI LLM keys above — they are never sent to an AI provider.
+      </p>
+      <div className="grid gap-3 md:grid-cols-2">
+        {HEALTH_APIS.map((api) => {
+          const cfg = (draft.healthApis?.[api.id]) ?? { name: api.name, key: '', enabled: false };
+          return (
+            <div key={api.id} className="rounded-lg border border-slate-200 p-3 dark:border-slate-700">
+              <div className="mb-1 flex items-center justify-between gap-2">
+                <div className="text-sm font-semibold">{api.icon} {api.name}</div>
+                <a href={api.docs} target="_blank" rel="noreferrer" className="text-[11px] text-brand-600 underline-offset-2 hover:underline">Docs →</a>
+              </div>
+              <div className="mb-2 text-[11px] opacity-80">{api.access}</div>
+              <div className="grid gap-2">
+                <label className="flex items-center gap-2 text-xs">
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 accent-brand-600"
+                    checked={cfg.enabled}
+                    disabled={api.requiresKey && !cfg.key?.trim()}
+                    onChange={(e) => {
+                      const apis = { ...(draft.healthApis ?? {}) };
+                      apis[api.id] = { ...cfg, enabled: e.target.checked };
+                      void persist({ ...draft, healthApis: apis });
+                    }}
+                  />
+                  Enable
+                </label>
+                <div>
+                  <label className="text-[11px] opacity-70">API key</label>
+                  <input
+                    type={showKeys['h:' + api.id] ? 'text' : 'password'}
+                    className="input w-full !py-1.5 text-xs"
+                    placeholder={api.keyPlaceholder}
+                    value={cfg.key ?? ''}
+                    onChange={(e) => {
+                      const apis = { ...(draft.healthApis ?? {}) };
+                      apis[api.id] = { ...cfg, key: e.target.value };
+                      void persist({ ...draft, healthApis: apis });
+                    }}
+                  />
+                </div>
+                <div className="flex gap-1">
+                  <button
+                    className="btn-secondary !py-1 text-[11px]"
+                    onClick={() => setShowKeys({ ...showKeys, ['h:' + api.id]: !showKeys['h:' + api.id] })}
+                  >{showKeys['h:' + api.id] ? '🙈 Hide' : '👁 Show'}</button>
+                  <a className="btn-secondary !py-1 text-[11px]" href={api.url} target="_blank" rel="noreferrer">Open site</a>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <p className="mt-3 text-[11px] text-slate-400">
+        See the full My Health APIs page inside <a className="underline" href="#/journey/health-apis">🎓 PharmD Journey → 🩺 My Health APIs</a> for study tips and per-API notes.
+      </p>
     </div>
 
           <div className="mt-4">

@@ -61,6 +61,7 @@ const PHARMD_NAV = [
   { to: '/journey/goals', iconKey: 'nav.goals', label: 'Goals' },
   { to: '/journey/portfolio', iconKey: 'nav.portfolio', label: 'Portfolio & CV' },
   { to: '/journey/archive', iconKey: 'nav.archive', label: 'Academic Archive' },
+  { to: '/journey/health-apis', iconKey: 'nav.healthApis', label: 'My Health APIs' },
   { to: '/courses', iconKey: 'nav.courses', label: 'Courses' },
   { to: '/progress', iconKey: 'nav.progress', label: 'Progress' },
   { to: '/recycle-bin', iconKey: 'nav.trash', label: 'Recycle Bin' },

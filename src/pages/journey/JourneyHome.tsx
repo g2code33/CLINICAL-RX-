@@ -33,6 +33,7 @@ const SECTIONS = [
   { to: '/journey/goals', icon: '🎯', label: 'Goals', hint: 'Targets & milestones' },
   { to: '/journey/portfolio', icon: '📁', label: 'Portfolio & CV', hint: 'What you choose to show' },
   { to: '/journey/archive', icon: '📚', label: 'Academic Archive', hint: 'Every previous level' },
+  { to: '/journey/health-apis', icon: '🩺', label: 'My Health APIs', hint: 'Open & commercial APIs for study' },
 ];
 
 export default function JourneyHome() {
