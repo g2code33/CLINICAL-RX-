@@ -43,7 +43,7 @@ export default function HealthApisPage() {
               section="health-apis"
               prompt="Give me a quick study tour of my configured Health APIs: for each one (openFDA, RxNav, UMLS, WebMD/RxList) tell me the most useful endpoint for a pharmacy student, an example URL I can paste into my browser, what response fields to pay attention to, and how it helps with revising drugs/interactions/terminology."
             />
-            <button className="btn-secondary" onClick={() => navigate('/settings/ai#health-apis')}>
+            <button className="btn-secondary" onClick={() => navigate('/settings?section=healthApis')}>
               🔑 Manage keys in Settings
             </button>
             <button className="btn-secondary" onClick={() => navigate('/journey')}>
