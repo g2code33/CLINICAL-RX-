@@ -41,6 +41,7 @@ const NAV = [
   { to: '/bundles', iconKey: 'nav.bundles', label: 'Bundles' },
   { to: '/progress', iconKey: 'nav.progress', label: 'Progress' },
   { to: '/ai', iconKey: 'nav.ai', label: 'AI' },
+  { to: '/journey/health-apis', iconKey: 'nav.healthApis', label: 'My Health APIs' },
   { to: '/recycle-bin', iconKey: 'nav.trash', label: 'Recycle Bin' },
   { to: '/sync', iconKey: 'nav.sync', label: 'Sync & Backup' },
   { to: '/settings', iconKey: 'nav.settings', label: 'Settings' },
