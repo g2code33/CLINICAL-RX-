@@ -78,6 +78,7 @@ const SHARED_ROUTES = ['/ai', '/ai-workspace', '/progress', '/settings', '/admin
 
 const PHARMD_BOTTOM_NAV = [
   { to: '/journey', iconKey: 'nav.journey', label: 'Journey' },
+  { to: '/journey/health-apis', iconKey: 'nav.healthApis', label: 'Health APIs' },
   { to: '/journey/skills', iconKey: 'nav.skills', label: 'Skills' },
   { to: '/journey/portfolio', iconKey: 'nav.portfolio', label: 'Portfolio' },
   { to: '/journey/archive', iconKey: 'nav.archive', label: 'Archive' },
