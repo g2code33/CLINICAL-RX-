@@ -38,6 +38,7 @@ import { LockScreen } from './components/LockScreen';
 import JourneyHome, { JourneyTimeline } from './pages/journey/JourneyHome';
 import { AcademicArchive, PortfolioPage } from './pages/journey/ArchiveAndPortfolio';
 import HealthApisPage from './pages/journey/HealthApis';
+import CommunityPharmacyPage from './pages/journey/CommunityPharmacy';
 import {
   AchievementsPage,
   CertificationsPage,
@@ -208,6 +209,7 @@ export default function App() {
     { path: '/journey/archive', element: <AcademicArchive /> },
     { path: '/journey/portfolio', element: <PortfolioPage /> },
     { path: '/journey/clinical-experience', element: <ClinicalExperiencePage /> },
+    { path: '/journey/community-pharmacy', element: <CommunityPharmacyPage /> },
     { path: '/journey/skills', element: <SkillsPage /> },
     { path: '/journey/projects', element: <ProjectsPage /> },
     { path: '/journey/research', element: <ResearchPage /> },

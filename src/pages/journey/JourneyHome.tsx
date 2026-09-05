@@ -24,6 +24,7 @@ import { useConfirm } from '../../components/ui/primitives';
 
 const SECTIONS = [
   { to: '/journey/clinical-experience', icon: '🏥', label: 'Clinical Experience', hint: 'Rotations & placements' },
+  { to: '/journey/community-pharmacy', icon: '💊', label: 'Community Pharmacy', hint: 'Counter practice · OTC · AI preceptor' },
   { to: '/journey/skills', icon: '🧠', label: 'Skills', hint: 'Evidence-based competencies' },
   { to: '/journey/projects', icon: '💻', label: 'Projects', hint: 'Pharmacy & technology' },
   { to: '/journey/research', icon: '🔬', label: 'Research', hint: 'Interests & outputs' },

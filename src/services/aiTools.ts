@@ -35,7 +35,7 @@ const MODULE_PERSONA: Record<AiModuleKey, string> = {
   bundler:
     'You are the Bundler AI. Summarise a period of learning, surface recurring themes, knowledge gaps and revision priorities. Structure output as: SUMMARY · KEY THEMES · KNOWLEDGE GAPS · RECOMMENDED REVISION · HIGHLIGHTS. Base every statement on the records provided; never invent activity that is not there.',
   career:
-    'You are the Career Assistant for a pharmacy student. You can see the student\'s PharmD Journey: academic stages, clinical experience (rotations), skills with self-rated confidence and attached evidence, projects, research, leadership roles, achievements, certifications and goals. Help them analyse professional development, spot genuine gaps, structure a CV, prepare for interviews and understand professional pathways. CRITICAL: never invent an achievement, qualification, rotation, publication or skill. Clearly separate STORED FACTS from SUGGESTIONS. Any CV wording you draft is a DRAFT the student must review before use — say so.',
+    'You are the Career Assistant for a pharmacy student. You can see the student\'s PharmD Journey: academic stages, clinical experience (rotations), community-pharmacy encounters, drug cards, practice scenarios, skills with self-rated confidence and attached evidence, projects, research, leadership roles, achievements, certifications and goals. Help them analyse professional development, spot genuine gaps, structure a CV, prepare for interviews, and — critically — act as a knowledgeable community-pharmacy preceptor: walk through OTC consults, identify red flags, teach drugs, suggest counselling scripts, and run simulated cases using WWHAM/ASMETHOD/ENCORE frameworks. CRITICAL: never invent an achievement, qualification, rotation, publication, skill, or drug recommendation the student did not actually record. Clearly separate STORED FACTS from SUGGESTIONS. When the user attaches IMAGES (prescriptions, drug labels, slides, notes, packaging photos, ward stickers), you CAN and SHOULD read them — describe what you see and answer about them directly. Speak in general educational terms suitable for a trainee pharmacist; advise checking with a supervising pharmacist/formulary/BNF/MGF for patient-specific decisions.',
   research:
     'You are the Research Assistant. Help form research questions, organise reading, plan studies, critique papers and draft research notes. Distinguish clearly between the student\'s stored local knowledge and general evidence. Never fabricate citations or claim to have read a paper you haven\'t been given.',
   analyzer:
@@ -225,38 +225,67 @@ export function getAiConfig(key: AiModuleKey): AiModuleConfig | null {
 }
 
 /**
- * Effective config: if a module has no API key of its own, borrow one from any
- * OTHER enabled module that uses the same provider (so one key makes every
- * section work). The module's own model is kept when set.
+ * Effective config: if a module has no API key of its own (or no config at
+ * all — happens for newly added modules and sections whose key the user
+ * hasn't opened Settings for yet), borrow one from any OTHER enabled module.
+ * This means ONE working API key makes EVERY AI section work out of the box.
+ * The module's own model is kept when set; otherwise we adopt the donor's
+ * provider + key + model.
  */
 export function getEffectiveAiConfig(key: AiModuleKey): AiModuleConfig | null {
-  const cfg = getAiConfig(key);
-  if (!cfg) return null;
-
-  // 1) The section's OWN key always wins.
-  if (cfg.enabled && cfg.apiKey && cfg.apiKey.trim()) return cfg;
-
   const all = useData.getState().settings?.ai ?? {};
+  const cfg = getAiConfig(key);
 
-  // 2) Borrow a key from another enabled module on the SAME provider
-  //    (keeps the section's own provider + model choice).
-  for (const [k, c] of Object.entries(all)) {
-    if (k === key || !c) continue;
-    if (c.enabled && c.provider === cfg.provider && c.apiKey && c.apiKey.trim()) {
-      return { ...cfg, apiKey: c.apiKey.trim(), model: cfg.model || c.model || '' };
+  // 1) The section's OWN key always wins if enabled + non-empty.
+  if (cfg?.enabled && cfg.apiKey && cfg.apiKey.trim()) return cfg;
+
+  // 2) Same-provider donor (keeps this section's provider/model choice). Only
+  //    applies when this section has an existing config with a provider set.
+  if (cfg?.provider) {
+    for (const [k, c] of Object.entries(all)) {
+      if (k === key || !c) continue;
+      if (c.enabled && c.provider === cfg.provider && c.apiKey && c.apiKey.trim()) {
+        return { ...cfg, apiKey: c.apiKey.trim(), model: cfg.model || c.model || '' };
+      }
     }
   }
 
-  // 3) Fall back to ANY enabled module that has a key — use its whole
-  //    config (provider + key + model), so the section still works.
+  // 3) ANY enabled module with a key — adopt its full config so the section
+  //    works even when it has never been configured.
   for (const [k, c] of Object.entries(all)) {
     if (k === key || !c) continue;
     if (c.enabled && c.apiKey && c.apiKey.trim()) {
-      return { ...c };
+      return cfg ? { ...c, ...cfg, apiKey: c.apiKey.trim(), provider: c.provider, model: cfg.model || c.model } : { ...c };
     }
   }
 
-  return cfg;
+  // 4) Nothing anywhere — return the module's config (even if empty) so the
+  //    caller can show an "add key" prompt rather than silently failing.
+  return cfg ?? null;
+}
+
+/** Vision-capable model patterns (multimodal models that accept image inputs). */
+const VISION_MODEL_PATTERNS = [
+  /gpt-4o/i, /gpt-4-vision/i, /o1/i, /chatgpt-4o/i,
+  /claude-3/i, /claude-3[-.]5/i, /claude-3\.5/i, /claude-4/i,
+  /gemini.*vision|gemini-1\.[5-9]|gemini-2|gemini-pro-vision|gemini-flash/i,
+  /llava|llama-3\.[2-9]-|pixtral|qwen-vl|qwen2-vl|yi-vl|phi-3-vision|grok-vision/i,
+  /openai\/gpt-4o|openai\/gpt-4-vision|openai\/chatgpt-4o/i,
+  /anthropic\/claude-3/i,
+  /google\/gemini/i,
+  /llava|pixtral|vision/i,
+];
+
+export function modelSupportsVision(model: string, provider?: string): boolean {
+  if (!model) return false;
+  if (provider === 'anthropic') return /claude-3|claude-4/i.test(model);
+  if (provider === 'gemini') return true;
+  return VISION_MODEL_PATTERNS.some((p) => p.test(model));
+}
+
+export function visionReady(key: AiModuleKey): boolean {
+  const cfg = getEffectiveAiConfig(key);
+  return !!cfg && cfg.enabled && !!cfg.apiKey && modelSupportsVision(cfg.model || '', cfg.provider);
 }
 
 export function aiReady(key: AiModuleKey): boolean {

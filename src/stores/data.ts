@@ -8,6 +8,9 @@ import type {
   Certification,
   ClinicalExperience,
   Course,
+  CPDrugCard,
+  CPEncounter,
+  CPScenario,
   Goal,
   LeadershipRole,
   Project,
@@ -81,6 +84,10 @@ export interface DataStore {
   research: ResearchItem[];
   leadership: LeadershipRole[];
   goals: Goal[];
+  // Community pharmacy workstation
+  cpEncounters: CPEncounter[];
+  cpDrugCards: CPDrugCard[];
+  cpScenarios: CPScenario[];
   status: string;
   removed: TrashItem[];
 
@@ -145,6 +152,8 @@ function labelFor(module: ModuleType, rec: Record<string, any>): string {
   }
   if (typeof rec.date === 'string') return `${module} · ${rec.date}`;
   if (typeof rec.organization === 'string') return `${rec.position || ''} @ ${rec.organization}`.trim();
+  if (typeof rec.genericName === 'string' && rec.genericName.trim()) return rec.genericName;
+  if (typeof rec.scenario === 'string' && rec.scenario.trim()) return rec.scenario.slice(0, 80);
   return `${module} · ${(rec.id || '').slice(0, 8)}`;
 }
 
@@ -181,6 +190,7 @@ const STAMPED_MODULES: ModuleType[] = [
   // so promotion can never rewrite their history.
   'clinicalExperience', 'skill', 'achievement', 'project', 'research',
   'leadership', 'goal',
+  'cpEncounter', 'cpDrugCard', 'cpScenario',
 ];
 
 const LIST_KEY: Partial<Record<ModuleType, keyof DataStore>> = {
@@ -198,6 +208,10 @@ const LIST_KEY: Partial<Record<ModuleType, keyof DataStore>> = {
   // store keys, so without these the arrays would silently never update.
   research: 'research',
   leadership: 'leadership',
+  // Community pharmacy modules use explicit keys (camelCase plurals).
+  cpEncounter: 'cpEncounters',
+  cpDrugCard: 'cpDrugCards',
+  cpScenario: 'cpScenarios',
 };
 
 function listKeyFor(module: ModuleType, state: Record<string, unknown>): keyof DataStore {
@@ -239,6 +253,9 @@ export const useData = create<DataStore>((set, get) => ({
   research: [],
   leadership: [],
   goals: [],
+  cpEncounters: [],
+  cpDrugCards: [],
+  cpScenarios: [],
   removed: loadTrash(),
   status: 'Initializing…',
 
@@ -247,7 +264,7 @@ export const useData = create<DataStore>((set, get) => ({
     set({ status: 'Loading local data…' });
     try {
       const platform = await adapter.platform();
-      const [profiles, settingsList, days, diseases, medicines, investigations, questions, lessons, revisions, bundles, chats, quizzes, reminders, wardRounds, wardEntries, wardAnalyses, academicStages, academicPeriods, courses, activities, clinicalExperiences, skills, achievements, certifications, projects, research, leadership, goals] =
+      const [profiles, settingsList, days, diseases, medicines, investigations, questions, lessons, revisions, bundles, chats, quizzes, reminders, wardRounds, wardEntries, wardAnalyses, academicStages, academicPeriods, courses, activities, clinicalExperiences, skills, achievements, certifications, projects, research, leadership, goals, cpEncounters, cpDrugCards, cpScenarios] =
         await Promise.all([
           adapter.list('profile'),
           adapter.list('settings'),
@@ -277,6 +294,9 @@ export const useData = create<DataStore>((set, get) => ({
           adapter.list('research'),
           adapter.list('leadership'),
           adapter.list('goal'),
+          adapter.list('cpEncounter'),
+          adapter.list('cpDrugCard'),
+          adapter.list('cpScenario'),
         ]);
       // Defensive parse: skip any corrupt record instead of throwing, so the
       // app can never be locked on the splash screen by bad stored data.
@@ -318,6 +338,9 @@ export const useData = create<DataStore>((set, get) => ({
         research: sortByUpdated(parse(research)),
         leadership: sortByUpdated(parse(leadership)),
         goals: sortByUpdated(parse(goals)),
+        cpEncounters: sortByUpdated(parse(cpEncounters)),
+        cpDrugCards: sortByUpdated(parse(cpDrugCards)),
+        cpScenarios: sortByUpdated(parse(cpScenarios)),
         ready: true,
         status: 'Ready · ' + (hasElectronBridge() ? 'SQLite (offline)' : 'Web storage'),
       });
@@ -379,6 +402,9 @@ export const useData = create<DataStore>((set, get) => ({
       research: get().research,
       leadership: get().leadership,
       goal: get().goals,
+      cpEncounter: get().cpEncounters,
+      cpDrugCard: get().cpDrugCards,
+      cpScenario: get().cpScenarios,
       academicStage: get().academicStages,
       academicPeriod: get().academicPeriods,
       course: get().courses,

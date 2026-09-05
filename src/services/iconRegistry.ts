@@ -62,6 +62,7 @@ export const ICON_CATALOG: IconDef[] = [
   { key: 'nav.journey', fallback: '🎓', label: 'My Journey', group: 'PharmD navigation' },
   { key: 'nav.timeline', fallback: '📈', label: 'Timeline', group: 'PharmD navigation' },
   { key: 'nav.experience', fallback: '🏥', label: 'Clinical Experience', group: 'PharmD navigation' },
+  { key: 'nav.communityPharmacy', fallback: '💊', label: 'Community Pharmacy', group: 'PharmD navigation' },
   { key: 'nav.skills', fallback: '🧠', label: 'Skills', group: 'PharmD navigation' },
   { key: 'nav.projects', fallback: '💻', label: 'Projects', group: 'PharmD navigation' },
   { key: 'nav.research', fallback: '🔬', label: 'Research', group: 'PharmD navigation' },

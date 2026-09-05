@@ -53,6 +53,7 @@ const PHARMD_NAV = [
   { to: '/journey', iconKey: 'nav.journey', label: 'My Journey' },
   { to: '/journey/timeline', iconKey: 'nav.timeline', label: 'Timeline' },
   { to: '/journey/clinical-experience', iconKey: 'nav.experience', label: 'Clinical Experience' },
+  { to: '/journey/community-pharmacy', iconKey: 'nav.communityPharmacy', label: 'Community Pharmacy' },
   { to: '/journey/skills', iconKey: 'nav.skills', label: 'Skills' },
   { to: '/journey/projects', iconKey: 'nav.projects', label: 'Projects' },
   { to: '/journey/research', iconKey: 'nav.research', label: 'Research' },
