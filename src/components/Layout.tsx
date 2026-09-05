@@ -208,7 +208,7 @@ export function Layout({ children }: { children: ReactNode }) {
                 <NavLink
                   key={n.to}
                   to={n.to}
-                  end={n.to === '/'}
+                  end={n.to === '/' || n.to === '/journey'}
                   className={({ isActive }) =>
                     `flex items-center gap-3.5 rounded-xl px-3.5 py-2.5 text-[15px] font-medium transition-all duration-150 ${
                       isActive
@@ -252,7 +252,7 @@ export function Layout({ children }: { children: ReactNode }) {
                 <NavLink
                   key={n.to}
                   to={n.to}
-                  end={n.to === '/'}
+                  end={n.to === '/' || n.to === '/journey'}
                   title={n.label}
                   className={({ isActive }) =>
                     `flex min-h-11 flex-1 items-center justify-center rounded-xl text-[22px] transition-colors ${
@@ -434,7 +434,7 @@ export function Layout({ children }: { children: ReactNode }) {
                 <NavLink
                   key={n.to}
                   to={n.to}
-                  end={n.to === '/'}
+                  end={n.to === '/' || n.to === '/journey'}
                   onClick={() => setDrawerOpen(false)}
                   className={({ isActive }) =>
                     `flex w-full items-center gap-4 px-5 py-[15px] text-left transition-colors duration-150 ${
@@ -474,7 +474,7 @@ export function Layout({ children }: { children: ReactNode }) {
               <NavLink
                 key={n.to}
                 to={n.to}
-                end={n.to === '/'}
+                end={n.to === '/' || n.to === '/journey'}
                 className={({ isActive }) =>
                   `flex min-w-[54px] flex-1 flex-col items-center justify-center gap-0.5 rounded-xl px-1 py-1.5 transition-all duration-150 active:scale-95 ${
                     isActive
