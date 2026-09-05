@@ -6,15 +6,16 @@ import { useNavigate } from 'react-router-dom';
  * Tapping opens the shared AI (one brain, same memory as clinical AI) with a
  * pre-seeded prompt scoped to the current section so the assistant already
  * knows what the student wants help with. ?q= is picked up by AiChat which
- * auto-sends the prompt on mount; m=career selects the career/portfolio-aware
- * persona that understands journey data best.
+ * auto-sends the prompt on mount. Defaults to m=career (broad Career/Portfolio
+ * assistant) — pass `mode` to target a specific module (e.g. 'community',
+ * 'j_experience', 'j_goals').
  */
-export function JourneyAiButton({ section, prompt }: { section: string; prompt: string }) {
+export function JourneyAiButton({ section, prompt, mode = 'career' }: { section: string; prompt: string; mode?: string }) {
   const navigate = useNavigate();
   function go() {
     const params = new URLSearchParams();
     params.set('section', section);
-    params.set('m', 'career');
+    params.set('m', mode);
     params.set('q', prompt);
     navigate({ pathname: '/ai', search: '?' + params.toString() });
   }

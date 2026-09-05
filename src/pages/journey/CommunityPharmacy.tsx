@@ -95,6 +95,7 @@ export default function CommunityPharmacyPage() {
           <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
             <JourneyAiButton
               section="community-pharmacy"
+              mode="community"
               prompt="You are my community pharmacy preceptor. I'm on my Community Pharmacy workstation — a place where I log patient encounters, build a drug library, and practice scenarios. Ask me what kind of patient just walked in, then role-play the encounter with me step by step: ask WWHAM/ASMETHOD-style questions, probe for red flags, and Socratically guide me to the right recommendation, counselling and referral decision. Be warm, practical and grounded in real community-pharmacy practice in Ghana/West Africa."
             />
             <button className="btn-secondary" onClick={() => navigate('/journey')}>
@@ -414,7 +415,7 @@ function EncounterEditor({ encounter, drugCards, onClose }: { encounter: CPEncou
           />
         </div>
         <div className="flex flex-wrap gap-2">
-          <JourneyAiButton section={`cp-encounter-${e.id}`} prompt={aiPrompt} />
+          <JourneyAiButton mode="community" section={`cp-encounter-${e.id}`} prompt={aiPrompt} />
           <button className="btn-secondary" onClick={del} title="Delete">
             🗑
           </button>
@@ -796,7 +797,7 @@ function DrugEditor({ card, onClose }: { card: CPDrugCard; onClose: () => void }
       <div className="flex items-start justify-between gap-2">
         <input className="input flex-1 text-lg font-semibold" value={d.genericName}
           onChange={(e) => patch({ genericName: e.target.value, title: e.target.value })} />
-        <JourneyAiButton section={`cp-drug-${d.id}`} prompt={cpDrugCardPrompt(d)} />
+        <JourneyAiButton mode="community" section={`cp-drug-${d.id}`} prompt={cpDrugCardPrompt(d)} />
       </div>
 
       <div className="grid gap-2 sm:grid-cols-3">
@@ -971,7 +972,7 @@ function ScenarioEditor({ scen, onClose }: { scen: CPScenario; onClose: () => vo
       <div className="flex flex-wrap items-start justify-between gap-2">
         <input className="input flex-1 text-lg font-semibold" value={s.title}
           onChange={(e) => patch({ title: e.target.value })} />
-        <JourneyAiButton section={`cp-scen-${s.id}`} prompt={cpScenarioPrompt(s, true)} />
+        <JourneyAiButton mode="community" section={`cp-scen-${s.id}`} prompt={cpScenarioPrompt(s, true)} />
       </div>
 
       <label className="block">
@@ -1063,7 +1064,7 @@ function QuickAiTab({
       : '';
     const params = new URLSearchParams();
     params.set('section', 'community-pharmacy');
-    params.set('m', 'career');
+    params.set('m', 'community');
     params.set('q', studyPrefix + query);
     navigate({ pathname: '/ai', search: '?' + params.toString() });
   }
@@ -1229,7 +1230,7 @@ function StudyTab({
   function discuss(item: CPStudyItem) {
     const params = new URLSearchParams();
     params.set('section', 'community-pharmacy');
-    params.set('m', 'career');
+    params.set('m', 'community');
     params.set('q',
 `Teach me this community-pharmacy topic deeply: "${item.topic}" (${item.kind}, priority ${item.priority}).
 
@@ -1250,7 +1251,7 @@ ${item.notes ? `My note: ${item.notes}` : ''}`);
     const pool = active.map((i) => `- [${i.kind}] ${i.topic}`).join('\n');
     const params = new URLSearchParams();
     params.set('section', 'community-pharmacy');
-    params.set('m', 'career');
+    params.set('m', 'community');
     params.set('q',
 `Quiz me Socratically on my community-pharmacy study list. Ask ONE question at a time, starting with a high-priority topic. After each answer give frank feedback (what I got right, what I missed, corrections), wait for my reply, then ask the next. Mix drug-class, condition, red-flag and counselling questions. Study list:\n${pool}`);
     navigate({ pathname: '/ai', search: '?' + params.toString() });
@@ -1261,7 +1262,7 @@ ${item.notes ? `My note: ${item.notes}` : ''}`);
     const med = studyItems.filter((i) => i.priority === 2 && !i.mastered).map((i) => i.topic);
     const params = new URLSearchParams();
     params.set('section', 'community-pharmacy');
-    params.set('m', 'career');
+    params.set('m', 'community');
     params.set('q',
 `Build me a realistic 14-day community-pharmacy study plan (20-30 min/day) based on my list. Each day: a drug class or condition to study, one red flag to memorise, one counselling skill to practise on a real or simulated patient, and one 1-minute MCQ at the end of the day's entry. Space items using spaced-repetition (prioritise high-priority first, recycle every 3-5 days).
 
@@ -1408,7 +1409,7 @@ function CPBundlerTab() {
     if (!result) return;
     const params = new URLSearchParams();
     params.set('section', 'community-pharmacy');
-    params.set('m', 'career');
+    params.set('m', 'community');
     params.set('q', `Here is my Community Pharmacy bundle for ${start} → ${end}:\n\n${result}\n\nNow let's discuss: what is the single most important thing I should drill tomorrow? Ask me a Socratic question about it.`);
     navigate({ pathname: '/ai', search: '?' + params.toString() });
   }

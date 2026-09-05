@@ -8,7 +8,7 @@
 //    then refresh it in the background when online.
 //  - Static assets: cache-first with background refresh.
 //  - NEVER intercept cross-origin API/AI calls.
-const CACHE = 'clinical-rx-v7';
+const CACHE = 'clinical-rx-v8';
 
 self.addEventListener('install', (event) => {
   event.waitUntil(

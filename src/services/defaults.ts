@@ -20,17 +20,37 @@ import type {
 } from '../types';
 
 export const AI_MODULES = [
-  { key: 'chat', label: '🤖 General Assistant' },
-  { key: 'tutor', label: '🩺 Clinical Assistant' },
-  { key: 'revision', label: '📚 Revision Coach' },
-  { key: 'search', label: '🔎 AI Search' },
-  { key: 'bundler', label: '📦 Bundler AI' },
-  { key: 'career', label: '🎓 Career Assistant' },
-  { key: 'research', label: '🔬 Research Assistant' },
-  { key: 'analyzer', label: '📊 AI Learning Analyzer' },
-  { key: 'notes', label: '📝 AI Note Organizer' },
-  { key: 'questionGen', label: '❓ AI Question Generator' },
-  { key: 'wardRound', label: '🏥 Ward Round AI' },
+  // ---- Assistants tab ----
+  { key: 'chat', label: '🤖 General Assistant', group: 'Assistants' },
+  { key: 'tutor', label: '🩺 Clinical Assistant', group: 'Assistants' },
+  { key: 'revision', label: '📚 Revision Coach', group: 'Assistants' },
+  { key: 'search', label: '🔎 AI Search', group: 'Assistants' },
+  { key: 'bundler', label: '📦 Bundler AI', group: 'Assistants' },
+  { key: 'career', label: '🎓 Career Assistant', group: 'Assistants' },
+  { key: 'community', label: '💊 Community Pharmacy Preceptor', group: 'Assistants' },
+  { key: 'research', label: '🔬 Research Assistant', group: 'Assistants' },
+  // ---- Study tools ----
+  { key: 'analyzer', label: '📊 AI Learning Analyzer', group: 'Study tools' },
+  { key: 'notes', label: '📝 AI Note Organizer', group: 'Study tools' },
+  { key: 'questionGen', label: '❓ AI Question Generator', group: 'Study tools' },
+  // ---- Deep modes ----
+  { key: 'wardRound', label: '🏥 Ward Round AI', group: 'Deep modes' },
+  // ---- PharmD Journey per-tab assistants ----
+  { key: 'j_journey', label: '🎓 My Journey AI', group: 'Journey' },
+  { key: 'j_timeline', label: '📈 Timeline AI', group: 'Journey' },
+  { key: 'j_experience', label: '🏥 Clinical Experience AI', group: 'Journey' },
+  { key: 'j_skills', label: '🧠 Skills AI', group: 'Journey' },
+  { key: 'j_projects', label: '💻 Projects AI', group: 'Journey' },
+  { key: 'j_research', label: '🔬 Journey Research AI', group: 'Journey' },
+  { key: 'j_leadership', label: '🏅 Leadership AI', group: 'Journey' },
+  { key: 'j_achievements', label: '🏆 Achievements AI', group: 'Journey' },
+  { key: 'j_certifications', label: '📜 Certifications AI', group: 'Journey' },
+  { key: 'j_goals', label: '🎯 Goals AI', group: 'Journey' },
+  { key: 'j_portfolio', label: '📁 Portfolio AI', group: 'Journey' },
+  { key: 'j_archive', label: '📚 Archive AI', group: 'Journey' },
+  { key: 'j_courses', label: '📘 Courses AI', group: 'Journey' },
+  { key: 'j_progress', label: '📊 Progress AI', group: 'Journey' },
+  { key: 'j_health', label: '🩺 Health APIs AI', group: 'Journey' },
 ] as const;
 
 /**

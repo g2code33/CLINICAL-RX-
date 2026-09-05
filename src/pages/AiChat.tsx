@@ -92,6 +92,7 @@ type Mode =
   | 'search'
   | 'bundler'
   | 'career'
+  | 'community'
   | 'research'
   | 'analyze'
   | 'organize'
@@ -135,63 +136,49 @@ interface ModeDef {
 
 const MODES: ModeDef[] = [
   { key: 'general',  icon: '🤖', label: 'General',      group: 'assistants', module: 'chat',       placeholder: 'Ask anything — attach images (🖼) for AI vision: prescriptions, drug labels, slides, notes…', hint: 'Free-form assistant — accepts images on vision-capable models' },
-  { key: 'clinical', icon: '🩺', label: 'Clinical',     group: 'assistants', module: 'tutor',      placeholder: 'e.g. Explain hypertension, how amlodipine works, an investigation…', hint: 'Disease / medicine / investigation explainer with WHO→WHAT→WHERE→WHY→HOW→DT' },
+  { key: 'clinical', icon: '🩺', label: 'Clinical',     group: 'assistants', module: 'tutor',      placeholder: 'e.g. Explain hypertension, how amlodipine works, an investigation…', hint: 'Disease / medicine / investigation explainer' },
   { key: 'revision', icon: '📚', label: 'Revision',     group: 'assistants', module: 'revision',   placeholder: 'Generate my revision plan', auto: true, hint: 'Spaced-repetition revision coach' },
   { key: 'search',   icon: '🔎', label: 'Search',       group: 'assistants', module: 'search',     placeholder: 'Search my saved records — diseases, meds, notes, rounds…', hint: 'Answers strictly from YOUR saved records' },
   { key: 'bundler',  icon: '📦', label: 'Bundler',      group: 'assistants', module: 'bundler',    placeholder: 'Summarise a day/week of learning, find gaps and revision priorities', auto: true },
   { key: 'career',   icon: '🎓', label: 'Career',       group: 'assistants', module: 'career',     placeholder: 'CV help, interview prep, rotation reflection, goals…' },
+  { key: 'community',icon: '💊', label: 'Community Pharmacy', group: 'assistants', module: 'community', placeholder: 'OTC consults, red flags, counselling scripts, WWHAM practice…', hint: 'Dedicated community-pharmacy preceptor' },
   { key: 'research', icon: '🔬', label: 'Research',     group: 'assistants', module: 'research',   placeholder: 'Form a research question, plan a study, organise reading…' },
   { key: 'analyze',  icon: '📊', label: 'Analyze',      group: 'tools',      module: 'analyzer',   placeholder: 'Analyze my recent clinical learning', auto: true },
   { key: 'organize', icon: '📝', label: 'Organize',     group: 'tools',      module: 'notes',      placeholder: 'Turn a rough note into structured records (e.g. "Saw a patient with high BP…")' },
   { key: 'questions',icon: '❓', label: 'Questions',    group: 'tools',      module: 'questionGen',placeholder: 'Focus (optional, e.g. antihypertensives) or leave blank → Enter' },
-  { key: 'wardround',icon: '🏥', label: 'Ward Round',   group: 'special',    module: 'wardRound',  placeholder: 'Pick a round/patient (🏥 button), then ask anything — meds, reasoning, quizzes…', hint: 'Deep ward-round teacher — pick a round and patient for a case-specific chat' },
+  { key: 'wardround',icon: '🏥', label: 'Ward Round',   group: 'special',    module: 'wardRound',  placeholder: 'Pick a round/patient (🏥 button), then ask anything — meds, reasoning, quizzes…', hint: 'Deep ward-round teacher' },
 
-  // PharmD Journey modes (fourth group)
-  { key: 'j:journey',       icon: '🎓', label: 'My Journey',        group: 'journey', module: 'career', placeholder: 'Ask about your whole PharmD Journey — progress, gaps, plan…',
-    sysExtra: 'FOCUS: the student\'s entire PharmD Journey (academic stage, level, overall progress). Give a frank summary, gap analysis and prioritised plan. Reference only what is actually saved.',
+  // PharmD Journey per-tab assistants (each has its own AI module + Settings slot).
+  { key: 'j:journey',       icon: '🎓', label: 'My Journey',        group: 'journey', module: 'j_journey', placeholder: 'Ask about your whole PharmD Journey — progress, gaps, plan…',
     starter: 'Give me a frank 3-bullet summary of where I stand right now, 3 genuine gaps I should work on, and a prioritised plan for the next 3 months. Reference only what I actually recorded.' },
-  { key: 'j:timeline',      icon: '📈', label: 'Timeline',          group: 'journey', module: 'career', placeholder: 'Ask about your academic & professional timeline…',
-    sysExtra: 'FOCUS: the student\'s dated timeline across levels, rotations, projects and achievements. Point out slow periods, strong narrative arcs, and what to add next.',
+  { key: 'j:timeline',      icon: '📈', label: 'Timeline',          group: 'journey', module: 'j_timeline', placeholder: 'Ask about your academic & professional timeline…',
     starter: 'Walk through my academic & professional timeline. Point out any slow periods I should be ready to explain in an interview, highlight my strongest narrative arc, and suggest 2-3 things I could add next to make the timeline more compelling.' },
-  { key: 'j:experience',    icon: '🏥', label: 'Clinical Exp.',    group: 'journey', module: 'career', placeholder: 'Ask about rotations, placements and experience…',
-    sysExtra: 'FOCUS: the student\'s clinical experience / rotations. Suggest STAR-format stories for interviews, point out missing rotation types or thin entries.',
-    starter: 'Review my saved clinical experience / rotations. Summarise my strongest rotation stories for an interview, point out gaps (any rotation type I\'m missing, any with too little detail), and give me 3 reflective questions I should answer about my placements to strengthen them.' },
-  { key: 'j:skills',        icon: '🧠', label: 'Skills',            group: 'journey', module: 'career', placeholder: 'Ask about your skills, evidence and gaps…',
-    sysExtra: 'FOCUS: the student\'s competencies, confidence ratings and attached evidence. Highlight under-evidenced or weak skills, and which 3 to highlight in interviews.',
-    starter: 'Look at my recorded skills (categories, confidence levels and attached evidence). Tell me which skills look weak or under-evidenced, suggest what evidence I could add, and which 3 skills I should highlight in an interview.' },
-  { key: 'j:projects',      icon: '💻', label: 'Projects',          group: 'journey', module: 'career', placeholder: 'Ask about your projects and how to present them…',
-    sysExtra: 'FOCUS: the student\'s projects (pharmacy, research, software, community, digital health). Suggest strong STAR CV bullets and flag thin descriptions.',
-    starter: 'Review my projects. For each one, suggest 1-2 strong STAR-format CV bullets I could write. Flag any project descriptions that look too thin to put on a CV and tell me what to add.' },
-  { key: 'j:research',      icon: '🔬', label: 'Research',          group: 'journey', module: 'career', placeholder: 'Ask about research interests, reading and outputs…',
-    sysExtra: 'FOCUS: the student\'s research interests, outputs and reading. Suggest realistic next student-research questions and interview talking points.',
-    starter: 'Review my research interests and outputs. Suggest realistic next research questions or small studies I could do as a student, point out any gaps between my stated interests and what I\'ve actually recorded, and give me talking points for a research-minded interview.' },
-  { key: 'j:leadership',    icon: '🏅', label: 'Leadership',        group: 'journey', module: 'career', placeholder: 'Ask about leadership roles and activities…',
-    sysExtra: 'FOCUS: the student\'s leadership positions and activities. Suggest CV bullets and reflective questions that surface concrete impact.',
-    starter: 'Review my leadership roles and activities. For each, suggest strong CV bullet points, and ask me 3 reflective questions that would surface concrete impact (numbers, initiatives, outcomes) I should add to make the entries interview-ready.' },
-  { key: 'j:achievements',  icon: '🏆', label: 'Achievements',      group: 'journey', module: 'career', placeholder: 'Ask about achievements and awards…',
-    sysExtra: 'FOCUS: the student\'s dated achievements. Suggest CV/interview phrasing and flag missing categories.',
-    starter: 'Review my recorded achievements. Suggest how to phrase the most impressive ones in CV/interview language, and point out categories of achievement (academic, clinical, leadership, community) that look missing so I can fill them in.' },
-  { key: 'j:certifications',icon: '📜', label: 'Certifications',   group: 'journey', module: 'career', placeholder: 'Ask about certifications and credentials…',
-    sysExtra: 'FOCUS: the student\'s certifications and credentials. Flag upcoming expirations where dates are present, suggest complementary credentials, and CV listing advice.',
-    starter: 'Review my certifications. Flag any expiring soon (if dates are present), suggest credentials that would complement what I already have given my journey/level, and tell me how to list each cleanly on a CV.' },
-  { key: 'j:goals',         icon: '🎯', label: 'Goals',             group: 'journey', module: 'career', placeholder: 'Ask about goals, milestones and planning…',
-    sysExtra: 'FOCUS: the student\'s goals and milestones. Assess realism vs stretch, suggest next milestones for stalled goals, and spot timeline conflicts.',
-    starter: 'Review my goals and milestones. Which goals look realistic vs over-stretched? Suggest concrete next-step milestones for the goals with no progress yet, and spot if any goals conflict with my recorded clinical/academic timeline.' },
-  { key: 'j:portfolio',     icon: '📁', label: 'Portfolio',         group: 'journey', module: 'career', placeholder: 'Ask about your portfolio and CV readiness…',
-    sysExtra: 'FOCUS: the student\'s professional portfolio (portfolio-visible records). Critique vs private records, suggest ordering and recruiter impact.',
-    starter: 'Critique my professional portfolio vs my private records. What\'s strong? What important evidence is still marked private that I should consider promoting? Suggest an ordering of sections for maximum CV impact and tell me what a recruiter would notice first.' },
-  { key: 'j:archive',       icon: '📚', label: 'Archive',           group: 'journey', module: 'career', placeholder: 'Ask about your academic archive across levels…',
-    sysExtra: 'FOCUS: the student\'s academic archive across previous levels. Surface recurring topics (must-know) and dropped topics (revisit).',
-    starter: 'Review my academic archive across previous levels. Compare what I learned/recorded at each level and surface topics that have recurred (so I should really know them cold) and topics that appeared once and dropped off (so I should revisit).' },
-  { key: 'j:courses',       icon: '📘', label: 'Courses',           group: 'journey', module: 'career', placeholder: 'Ask about courses and academic progress…',
-    sysExtra: 'FOCUS: the student\'s enrolled/completed courses and academic performance context. Suggest study priorities based on current courses.',
-    starter: 'Review my courses (current and completed). Suggest how to tie what I\'m learning to my skills, projects and portfolio, and which course topics would make strong CV evidence or interview stories.' },
-  { key: 'j:progress',      icon: '📊', label: 'Progress',          group: 'journey', module: 'career', placeholder: 'Ask about overall progress and momentum…',
-    sysExtra: 'FOCUS: the student\'s overall progress (clinical learning, journey momentum, streaks, gaps). Celebrate momentum, name the next lever to pull.',
-    starter: 'Look at my overall progress across clinical learning and the PharmD Journey — streaks, coverage, recent activity. Tell me what\'s working, what\'s stalling, and the single highest-impact thing I should do this week.' },
-  { key: 'j:health',        icon: '🩺', label: 'Health APIs',       group: 'journey', module: 'career', placeholder: 'Ask about drug labels, interactions, or how to use the study APIs…',
-    sysExtra: 'FOCUS: helping the student use openFDA, RxNav, UMLS and WebMD/RxList for study. Explain endpoints, give example queries (URLs/params), point out which API is best for which study task, and remind about licensing/commercial-use rules. Never fabricate API responses — show how to query and interpret results.',
-    starter: 'Give me a quick study tour of my configured Health APIs: for each one (openFDA, RxNav, UMLS, WebMD/RxList) tell me the most useful endpoint for a pharmacy student, an example URL I can paste into my browser, what response fields to pay attention to, and how it helps with revising drugs/interactions/terminology.' },
+  { key: 'j:experience',    icon: '🏥', label: 'Clinical Exp.',    group: 'journey', module: 'j_experience', placeholder: 'Ask about rotations, placements and experience…',
+    starter: 'Review my saved clinical experience / rotations. Summarise my strongest rotation stories for an interview, point out gaps, and give me 3 reflective questions I should answer about my placements.' },
+  { key: 'j:skills',        icon: '🧠', label: 'Skills',            group: 'journey', module: 'j_skills', placeholder: 'Ask about your skills, evidence and gaps…',
+    starter: 'Look at my recorded skills (categories, confidence levels and attached evidence). Tell me which look weak or under-evidenced and suggest what evidence I could add.' },
+  { key: 'j:projects',      icon: '💻', label: 'Projects',          group: 'journey', module: 'j_projects', placeholder: 'Ask about your projects and how to present them…',
+    starter: 'Review my projects. For each, suggest 1-2 strong STAR-format CV bullets. Flag thin descriptions.' },
+  { key: 'j:research',      icon: '🔬', label: 'Research',          group: 'journey', module: 'j_research', placeholder: 'Ask about research interests, reading and outputs…',
+    starter: 'Review my research interests and outputs. Suggest realistic next student-research questions and talking points.' },
+  { key: 'j:leadership',    icon: '🏅', label: 'Leadership',        group: 'journey', module: 'j_leadership', placeholder: 'Ask about leadership roles and activities…',
+    starter: 'Review my leadership roles and activities. For each, suggest strong CV bullet points, and ask me 3 reflective questions to surface concrete impact.' },
+  { key: 'j:achievements',  icon: '🏆', label: 'Achievements',      group: 'journey', module: 'j_achievements', placeholder: 'Ask about achievements and awards…',
+    starter: 'Review my recorded achievements. Suggest CV/interview phrasing for the strongest ones, and flag achievement categories that look missing.' },
+  { key: 'j:certifications',icon: '📜', label: 'Certifications',   group: 'journey', module: 'j_certifications', placeholder: 'Ask about certifications and credentials…',
+    starter: 'Review my certifications. Flag any expiring soon, suggest complementary credentials, and tell me how to list them on a CV.' },
+  { key: 'j:goals',         icon: '🎯', label: 'Goals',             group: 'journey', module: 'j_goals', placeholder: 'Ask about goals, milestones and planning…',
+    starter: 'Review my goals and milestones. Which look realistic vs over-stretched? Suggest next-step milestones for stalled goals and spot timeline conflicts.' },
+  { key: 'j:portfolio',     icon: '📁', label: 'Portfolio',         group: 'journey', module: 'j_portfolio', placeholder: 'Ask about your portfolio and CV readiness…',
+    starter: 'Critique my professional portfolio vs my private records. What\'s strong? What should I promote? Suggest an ordering for CV impact.' },
+  { key: 'j:archive',       icon: '📚', label: 'Archive',           group: 'journey', module: 'j_archive', placeholder: 'Ask about your academic archive across levels…',
+    starter: 'Review my academic archive. Surface recurring topics (must-know) and dropped topics (revisit).' },
+  { key: 'j:courses',       icon: '📘', label: 'Courses',           group: 'journey', module: 'j_courses', placeholder: 'Ask about courses and academic progress…',
+    starter: 'Review my courses. Suggest how to tie what I\'m learning to my skills, projects and portfolio.' },
+  { key: 'j:progress',      icon: '📊', label: 'Progress',          group: 'journey', module: 'j_progress', placeholder: 'Ask about overall progress and momentum…',
+    starter: 'Look at my overall progress — streaks, coverage, recent activity. Tell me what\'s working, what\'s stalling, and the single highest-impact thing I should do this week.' },
+  { key: 'j:health',        icon: '🩺', label: 'Health APIs',       group: 'journey', module: 'j_health', placeholder: 'Ask about drug labels, interactions, or how to use the study APIs…',
+    starter: 'Give me a quick study tour of my Health APIs (openFDA, RxNav, UMLS, WebMD/RxList): best endpoint for a student, example URL, key fields.' },
 ];
 
 const GROUP_LABEL: Record<ModeGroup, string> = {
@@ -221,10 +208,10 @@ export function AiChat() {
       timeline: 'j:timeline',
       'clinical-experience': 'j:experience',
       experience: 'j:experience',
-      'community-pharmacy': 'career',
-      'cp-encounter': 'career',
-      'cp-drug': 'career',
-      'cp-scen': 'career',
+      'community-pharmacy': 'community',
+      'cp-encounter': 'community',
+      'cp-drug': 'community',
+      'cp-scen': 'community',
       skills: 'j:skills',
       projects: 'j:projects',
       research: 'j:research',
@@ -246,6 +233,7 @@ export function AiChat() {
       search: 'search',
       bundler: 'bundler',
       career: 'career',
+      community: 'community',
       research: 'research',
       analyze: 'analyze', analyzer: 'analyze',
       organize: 'organize', notes: 'organize',
@@ -746,6 +734,35 @@ export function AiChat() {
           active.sysExtra ?? '',
           journeyHint,
           ctx ? `LOADED ${recId ? 'RECORD' : 'SECTION'} DATA (reference these specifics — do NOT give generic advice when concrete data is present; flag anything that is missing):\n\n${ctx}` : '',
+        ].filter(Boolean).join('\n\n');
+        res = await runAiModule(sectionKey, prompt, sysExtra, opts);
+      } else if (mode === 'community') {
+        // Community pharmacy preceptor: inject recent encounters + drug cards
+        // + study list so the preceptor always knows what the student has
+        // been working on.
+        const list = (arr: any[], n = 8, fn: (x: any) => string) => arr.slice(0, n).map(fn).join('\n') || '(none)';
+        const cpCtx = (() => {
+          const s: any = useData.getState();
+          const enc = [...s.cpEncounters].sort((a: any, b: any) => (b.date || '').localeCompare(a.date || '')).slice(0, 8);
+          const drugs = s.cpDrugCards.slice(0, 15);
+          const lowConf = s.cpEncounters.filter((e: any) => (e.confidence ?? 3) <= 2);
+          return [
+            '=== COMMUNITY PHARMACY WORKSTATION DATA ===',
+            `Total encounters: ${s.cpEncounters.length} · Drug cards: ${s.cpDrugCards.length} · Scenarios: ${s.cpScenarios.length}`,
+            '',
+            'RECENT ENCOUNTERS:',
+            list(enc, 8, (e: any) => `- ${e.date} "${e.title}" [${e.encounterType}] action=${e.actionTaken} conf=${e.confidence}/5${e.recommendedProduct ? ' drug=' + e.recommendedProduct : ''}${e.redFlags?.length ? ' RED_FLAGS=' + e.redFlags.join(',') : ''}\n   Patient: ${String(e.patientPresentation || '').slice(0, 160)}`),
+            '',
+            'DRUG LIBRARY (first 15):',
+            drugs.length ? drugs.map((d: any) => `- ${d.genericName} (${d.schedule || '?'}, ${d.drugClass || '?'}) conf=${d.confidence}/5 — indications: ${(d.indicationsCommunity || []).slice(0, 3).join(', ')}`).join('\n') : '(none)',
+            '',
+            lowConf.length ? `LOW-CONFIDENCE ENCOUNTERS (need more study): ${lowConf.map((e: any) => e.title).join('; ')}` : '',
+          ].filter(Boolean).join('\n');
+        })();
+        const sysExtra = [
+          active.sysExtra ?? '',
+          'You are speaking to the student inside their Community Pharmacy workstation. Reference their logged encounters, drug cards and scenarios where relevant. Ask WWHAM/ASMETHOD-style clarifying questions before recommending.',
+          cpCtx,
         ].filter(Boolean).join('\n\n');
         res = await runAiModule(sectionKey, prompt, sysExtra, opts);
       } else {
