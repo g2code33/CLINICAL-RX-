@@ -220,8 +220,11 @@ export function buildMemoryContext(_section: AiModuleKey, excludeSessionId?: str
 
 export function getAiConfig(key: AiModuleKey): AiModuleConfig | null {
   const cfg = useData.getState().settings?.ai?.[key];
-  if (!cfg) return null;
-  return cfg;
+  // Always return a complete config — missing slots filled in with the
+  // module defaults so UI and fallback logic never see `undefined` fields.
+  const defaults: AiModuleConfig = { enabled: true, provider: 'openai', apiKey: '', model: 'gpt-4o-mini', baseUrl: '' };
+  if (!cfg) return defaults;
+  return { ...defaults, ...cfg };
 }
 
 /**

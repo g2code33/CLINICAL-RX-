@@ -50,6 +50,29 @@ import { LocalStorageAdapter } from '../db/localStorageAdapter';
 import { ElectronAdapter } from '../db/electronAdapter';
 import { hasElectronBridge } from '../db/adapter';
 import { enqueue, backendConfigured, addTombstone } from '../services/syncEngine';
+import { defaultAiConfig, defaultHealthApis, AI_MODULES } from '../services/defaults';
+
+/**
+ * Ensure every known AI module and health-API slot has a config entry, even
+ * for modules added in later versions (so users who upgrade don't see empty
+ * "no API key" warnings for newly-introduced sections). Existing keys/provider/
+ * model choices are preserved; only missing slots are filled with defaults.
+ */
+function migrateSettings(s: any): any {
+  if (!s) return s;
+  const aiDefaults = defaultAiConfig();
+  const haDefaults = defaultHealthApis();
+  const ai = { ...(s.ai ?? {}) };
+  for (const m of AI_MODULES) {
+    if (!ai[m.key]) ai[m.key] = { ...aiDefaults[m.key] };
+    else ai[m.key] = { ...aiDefaults[m.key], ...ai[m.key] };
+  }
+  const healthApis = { ...(s.healthApis ?? {}) };
+  for (const k of Object.keys(haDefaults)) {
+    if (!healthApis[k]) healthApis[k] = { ...haDefaults[k] };
+  }
+  return { ...s, ai, healthApis };
+}
 
 export interface DataStore {
   ready: boolean;
@@ -307,7 +330,25 @@ export const useData = create<DataStore>((set, get) => ({
           })
           .filter(Boolean);
       const profile = profiles.length ? parse(profiles)[0] : null;
-      const settings = settingsList.length ? parse(settingsList)[0] : null;
+      const parsedSettings = settingsList.length ? parse(settingsList)[0] : null;
+      // Auto-create default settings on first run, and ALWAYS migrate so new
+      // AI modules added in later versions get an entry (with a placeholder
+      // key) without the user having to touch Settings.
+      const settings = migrateSettings(parsedSettings ?? {
+        id: uid(), createdAt: Date.now(), updatedAt: Date.now(),
+        appearance: 'system', clinicalSite: '', course: 'Pharmacy',
+        autoDailyBundle: true, autoWeeklyBundle: true,
+        ai: defaultAiConfig(), healthApis: defaultHealthApis(),
+        learningProfile: { preferredExplanation: [] },
+        onlineAccount: { connected: false }, aiPendingBundles: [], autoBackup: 'off',
+      });
+      // Persist any backfilled entries so that the next boot is clean and
+      // Settings UI shows all modules immediately.
+      if (parsedSettings) {
+        adapter.put('settings', settings.id, settings, settings.createdAt, settings.updatedAt).catch(() => {});
+      } else {
+        adapter.put('settings', settings.id, settings, settings.createdAt, settings.updatedAt).catch(() => {});
+      }
       set({
         platform,
         profile,
@@ -370,8 +411,9 @@ export const useData = create<DataStore>((set, get) => ({
 
   saveSettings: async (s) => {
     const adapter = get().adapter;
-    await adapter.put('settings', s.id, s, s.createdAt, s.updatedAt);
-    set({ settings: s });
+    const migrated = migrateSettings(s);
+    await adapter.put('settings', migrated.id, migrated, migrated.createdAt, migrated.updatedAt);
+    set({ settings: migrated });
   },
 
   all: (module) => {
