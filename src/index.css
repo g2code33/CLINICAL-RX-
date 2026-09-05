@@ -29,6 +29,10 @@ html {
 body {
   font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   font-size: 16px;
+  color: rgb(15 23 42); /* slate-900 — black text on white backgrounds everywhere in light mode */
+}
+@media (prefers-color-scheme: dark) {
+  body { color: rgb(241 245 249); /* slate-100 */ }
 }
 
 @layer components {
@@ -48,7 +52,7 @@ body {
     @apply w-full rounded-lg border border-slate-300 bg-white px-3.5 py-2.5 text-base text-slate-900 placeholder-slate-400 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100;
   }
   .card {
-    @apply rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-800;
+    @apply rounded-2xl border border-slate-200 bg-white p-5 text-slate-900 shadow-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100;
   }
   .label {
     @apply mb-1.5 block text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400;
@@ -97,16 +101,36 @@ body {
 ::-webkit-scrollbar-thumb { @apply rounded-full bg-slate-300 dark:bg-slate-600; }
 ::-webkit-scrollbar-track { background: transparent; }
 
+/* ---- Horizontal chip-scroll: no ugly scrollbar, slight snap ---- */
+.overflow-x-auto {
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  scroll-snap-type: x proximity;
+}
+.overflow-x-auto::-webkit-scrollbar { display: none; }
+.overflow-x-auto > * { scroll-snap-align: start; }
+
 /* ---- Mobile modernization ---- */
 @media (max-width: 640px) {
   /* Prevent iOS double-tap zoom on buttons/links; smooth touch */
   button, a, input, select, textarea { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
   /* Card padding lighter on small screens so content breathes */
-  .card { @apply p-3.5; }
+  .card { @apply p-3.5 rounded-xl; }
   /* Slightly smaller page titles on phones */
-  h1 { font-size: 1.4rem !important; }
-  /* Sticky bottom nav safe-area handled in Layout; give inputs room */
+  h1 { font-size: 1.35rem !important; line-height: 1.25 !important; }
+  /* Buttons more compact on mobile — fat enough to tap, but no wasted space */
+  .btn { @apply px-3 py-2 text-[15px] rounded-lg; }
+  .btn-primary, .btn-secondary, .btn-ghost { min-height: 40px; }
+  /* Inputs keep 16px to avoid iOS zoom-in */
   input, select, textarea { font-size: 16px; }
+  /* Bottom spacing that accounts for the fixed nav */
+  main { padding-bottom: 5.5rem !important; }
+  /* Tighter gaps so more fits on one screen */
+  .space-y-5 > * + * { margin-top: 0.875rem !important; }
+  .space-y-4 > * + * { margin-top: 0.75rem !important; }
+  .space-y-3 > * + * { margin-top: 0.625rem !important; }
+  .mb-5 { margin-bottom: 1rem !important; }
+  .mb-4 { margin-bottom: 0.875rem !important; }
 }
 
 /* App shell fills the viewport; on mobile browsers prefer the "dynamic"
@@ -154,3 +178,94 @@ html, body { overflow-x: hidden; }
 
 /* Toast/notification region never covers the whole screen on small windows. */
 .toast-region { max-width: min(92vw, 26rem); }
+
+/* ==========================================================================
+   GLOBAL CONTRAST SAFETY NET
+   Any element with a light tint/white background (Tailwind bg-*-50, bg-white,
+   bg-white/opacity, bg-*-50/opacity) automatically gets dark slate text in
+   light mode, and its inverse in dark mode. This prevents the "white text on
+   white/tinted background" bug recurring on any screen, even if an author
+   forgets to set text color on a card/pill/highlight.
+   Elements that deliberately set their own text color (e.g. text-red-600 on
+   bg-red-50) win because their rule is more specific than this wildcard.
+   ========================================================================== */
+:where([class*='bg-white'], [class*='bg-slate-50'], [class*='bg-brand-50'], [class*='bg-emerald-50'],
+       [class*='bg-red-50'], [class*='bg-amber-50'], [class*='bg-yellow-50'], [class*='bg-sky-50'],
+       [class*='bg-violet-50'], [class*='bg-rose-50'], [class*='bg-fuchsia-50'], [class*='bg-pink-50'],
+       [class*='bg-orange-50'], [class*='bg-teal-50'], [class*='bg-cyan-50'], [class*='bg-lime-50'],
+       [class*='bg-blue-50'], [class*='bg-purple-50'], [class*='bg-indigo-50'], [class*='bg-stone-50'],
+       [class*='bg-zinc-50'], [class*='bg-gray-50']) {
+  color: rgb(15 23 42); /* slate-900 */
+}
+.dark :where([class*='bg-slate-800'], [class*='bg-slate-900'], [class*='bg-slate-700'],
+            [class*='bg-brand-900'], [class*='bg-brand-950'],
+            [class*='bg-emerald-900'], [class*='bg-emerald-950'],
+            [class*='bg-red-900'], [class*='bg-red-950'],
+            [class*='bg-amber-900'], [class*='bg-amber-950'],
+            [class*='bg-sky-900'], [class*='bg-violet-900'], [class*='bg-rose-900'],
+            [class*='bg-fuchsia-900'], [class*='bg-pink-900'], [class*='bg-orange-900'],
+            [class*='bg-teal-900'], [class*='bg-cyan-900'], [class*='bg-lime-900'],
+            [class*='bg-blue-900'], [class*='bg-purple-900'], [class*='bg-indigo-900']) {
+  color: rgb(241 245 249); /* slate-100 */
+}
+/* Pills (rounded tiny tags) on tinted backgrounds get a slightly darker shade
+   so they remain legible even when sitting on a tint card. */
+:where([class*='bg-'][class*='-50']) :where(span.rounded, span.rounded-full, span.rounded-lg) {
+  color: inherit;
+}
+/* Inputs inside tinted cards need explicit contrast (bg-transparent on tint
+   leaves text washed out). */
+:where([class*='bg-brand-50'], [class*='bg-emerald-50'], [class*='bg-amber-50'], [class*='bg-sky-50'],
+       [class*='bg-violet-50'], [class*='bg-red-50'], [class*='bg-rose-50'], [class*='bg-fuchsia-50'],
+       [class*='bg-indigo-50'], [class*='bg-blue-50'], [class*='bg-teal-50'], [class*='bg-cyan-50'])
+  :where(input:not([class*='text-']), textarea:not([class*='text-']), select:not([class*='text-'])) {
+  color: rgb(15 23 42);
+}
+
+/* Hide scrollbar but keep scrolling for tab strips etc. */
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+
+/* ---------- Dark mode: active/selected states must be green on white ----------
+   Any element that is the "selected" one (active tab, chosen pill, active nav,
+   checked option, aria-selected) in dark mode must render as solid brand-green
+   with white text — never a tinted semi-transparent surface with coloured text
+   that can wash out. The light-mode variants (brand-50 / brand-100) keep their
+   muted-green look with dark text. */
+.dark .bg-brand-900\/40,
+.dark .bg-brand-950\/30,
+.dark .bg-brand-950\/40,
+.dark .bg-brand-950 {
+  color: rgb(241 245 249);
+}
+/* Force brand-50/100 pills used as "active" chips in dark mode up to full brand-600
+   when they carry the active/selected class OR contain the white-text signal. */
+.dark [aria-selected='true'],
+.dark [aria-current='page'],
+.dark [aria-current='true'],
+.dark [data-active='true'],
+.dark .active {
+  background-color: rgb(22 163 74) !important; /* brand-600 */
+  color: rgb(255 255 255) !important;
+  border-color: rgb(22 163 74) !important;
+}
+/* When an element uses a brand-tinted dark surface AND carries a "selected"
+   signal (data-selected, .active, aria-current/selected, or it's the button
+   inside a parent marked active) — promote it to solid brand-green on white. */
+.dark [data-selected='true'].bg-brand-900\/40,
+.dark [data-selected='true'].bg-brand-950\/30,
+.dark [data-selected='true'].bg-brand-950\/40,
+.dark button[aria-pressed='true'].bg-brand-900\/40,
+.dark button[aria-pressed='true'].bg-brand-950\/30,
+.dark button[aria-pressed='true'].bg-brand-950\/40 {
+  background-color: rgb(22 163 74) !important;
+  color: #fff !important;
+  border-color: rgb(22 163 74) !important;
+}
+/* Anything set to bg-brand-600/700 MUST have white text — guards against a
+   stray text-slate-* class overriding the contrast. */
+.bg-brand-600, .bg-brand-700 { color: #fff !important; }
+.bg-brand-600\/90, .bg-brand-700\/90 { color: #fff !important; }
+.bg-brand-600 *, .bg-brand-700 * { color: inherit; }
+.bg-brand-600\/90 *, .bg-brand-700\/90 * { color: inherit; }

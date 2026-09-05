@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { PageHeader } from '../../components/ui';
+import { JourneyAiButton } from '../../components/JourneyAiButton';
 import { useData } from '../../stores/data';
 import {
   allStageSnapshots,
@@ -32,6 +33,7 @@ const SECTIONS = [
   { to: '/journey/goals', icon: '🎯', label: 'Goals', hint: 'Targets & milestones' },
   { to: '/journey/portfolio', icon: '📁', label: 'Portfolio & CV', hint: 'What you choose to show' },
   { to: '/journey/archive', icon: '📚', label: 'Academic Archive', hint: 'Every previous level' },
+  { to: '/journey/health-apis', icon: '🩺', label: 'My Health APIs', hint: 'openFDA · RxNav · UMLS · WebMD — lookups, history, favourites' },
 ];
 
 export default function JourneyHome() {
@@ -124,9 +126,15 @@ export default function JourneyHome() {
         title="🎓 PharmD Journey"
         subtitle="Your academic, clinical and professional record — preserved across every level."
         action={
-          <button className="btn-secondary" onClick={() => navigate('/journey/timeline')}>
-            📈 Timeline
-          </button>
+          <div className="flex w-full items-center gap-2 sm:w-auto">
+            <JourneyAiButton
+              section="journey"
+              prompt="You are looking at my full PharmD Journey — academic stages, skills, projects, rotations, achievements, certifications, goals and portfolio. Give me a frank 3-bullet summary of where I stand right now, 3 genuine gaps I should work on, and a prioritised plan for the next 3 months. Reference only what I actually recorded."
+            />
+            <button className="btn-secondary" onClick={() => navigate('/journey/timeline')}>
+              📈 Timeline
+            </button>
+          </div>
         }
       />
 
@@ -405,9 +413,15 @@ export function JourneyTimeline() {
         title="📈 Academic & Professional Timeline"
         subtitle="Every level, rotation, project and achievement — from your real dated records."
         action={
-          <button className="btn-secondary" onClick={() => navigate('/journey')}>
-            ← Journey
-          </button>
+          <div className="flex w-full items-center gap-2 sm:w-auto">
+            <JourneyAiButton
+              section="timeline"
+              prompt="Walk through my academic & professional timeline. Point out any slow periods I should be ready to explain in an interview, highlight my strongest narrative arc, and suggest 2-3 things I could add next to make the timeline more compelling."
+            />
+            <button className="btn-secondary" onClick={() => navigate('/journey')}>
+              ← Journey
+            </button>
+          </div>
         }
       />
 
@@ -423,7 +437,9 @@ export function JourneyTimeline() {
               <button
                 key={s.id}
                 className={`flex w-full flex-wrap items-center gap-3 rounded-lg border p-3 text-left transition-colors hover:border-brand-400 ${
-                  isCurrent ? 'border-brand-500 bg-brand-500/5' : 'border-slate-200 dark:border-slate-700'
+                  isCurrent
+                    ? 'border-emerald-400 bg-emerald-50 text-emerald-950 shadow-sm dark:border-emerald-500 dark:bg-emerald-950/60 dark:text-emerald-50'
+                    : 'border-slate-200 text-slate-900 dark:border-slate-700 dark:text-slate-100'
                 }`}
                 onClick={() => navigate(`/journey/archive?stage=${s.id}`)}
               >
@@ -431,7 +447,7 @@ export function JourneyTimeline() {
                   <div className="font-semibold">
                     {isCurrent ? '●' : s.status === 'completed' ? '✓' : '○'} {s.name}
                   </div>
-                  <div className="text-xs opacity-70">{s.academicYear}</div>
+                  <div className={`text-xs ${isCurrent ? 'opacity-80' : 'opacity-70'}`}>{s.academicYear}</div>
                 </div>
                 <div className="flex flex-1 flex-wrap gap-1 text-xs">
                   {periods.map((p) => (

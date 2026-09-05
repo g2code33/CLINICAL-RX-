@@ -67,6 +67,27 @@ export interface AiModuleConfig {
   localModel?: string;
 }
 
+/**
+ * 🩺 HEALTH API KEYS — separate from the AI LLM keys.
+ *
+ * These keys are for real pharmaceutical/clinical data APIs the student uses
+ * for study (openFDA, RxNav, UMLS, WebMD/RxList). They live in Settings under
+ * their own "My Health APIs" card so they are never accidentally sent to an
+ * LLM or confused with AI provider keys.
+ */
+export interface HealthApiKey {
+  /** Display name, e.g. "openFDA API key". */
+  name: string;
+  /** The key / token itself. '' means not configured. */
+  key: string;
+  /** Optional base URL override (for proxies / self-hosted mirrors). */
+  baseUrl?: string;
+  /** Enabled = the app will try to use this API when studying. */
+  enabled: boolean;
+  /** Notes the student adds (e.g. "UMLS requires a free UTS account"). */
+  notes?: string;
+}
+
 /** One entry in the AI activity log. Never contains API keys. */
 export interface AiLogEntry {
   id: string;
@@ -90,6 +111,9 @@ export interface Settings extends BaseRecord {
   autoDailyBundle: boolean;
   autoWeeklyBundle: boolean;
   ai: Record<string, AiModuleConfig>; // keyed by module name
+  /** Study health-APIs keys — separate from the AI keys. These are for real
+   *  clinical/medical data APIs (openFDA, RxNav, UMLS, WebMD/RxList). */
+  healthApis?: Record<string, HealthApiKey>;
   learningProfile: {
     preferredExplanation: string[];
   };
@@ -428,6 +452,7 @@ export type WardEntryType =
 
 export interface WardEntry extends BaseRecord {
   roundId: string;
+  patientLabel?: string; // e.g. "Patient 1" — groups captures under a patient within the round
   type: WardEntryType;
   title: string; // short subject, e.g. "Amlodipine" (may be empty for notes)
   content: string; // the student's own words — NEVER modified by AI

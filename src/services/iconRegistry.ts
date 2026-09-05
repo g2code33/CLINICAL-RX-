@@ -54,6 +54,7 @@ export const ICON_CATALOG: IconDef[] = [
   { key: 'nav.progress', fallback: '📊', label: 'Progress', group: 'Clinical navigation' },
   { key: 'nav.ai', fallback: '🤖', label: 'AI', group: 'Clinical navigation' },
   { key: 'nav.sync', fallback: '☁️', label: 'Sync & Backup', group: 'Clinical navigation' },
+  { key: 'nav.trash', fallback: '♻️', label: 'Recycle Bin', group: 'Clinical navigation' },
   { key: 'nav.settings', fallback: '⚙️', label: 'Settings', group: 'Clinical navigation' },
   { key: 'nav.admin', fallback: '🛡️', label: 'Admin Panel', group: 'Clinical navigation' },
 
@@ -71,6 +72,7 @@ export const ICON_CATALOG: IconDef[] = [
   { key: 'nav.portfolio', fallback: '📁', label: 'Portfolio & CV', group: 'PharmD navigation' },
   { key: 'nav.archive', fallback: '📚', label: 'Academic Archive', group: 'PharmD navigation' },
   { key: 'nav.courses', fallback: '📚', label: 'Courses', group: 'PharmD navigation' },
+  { key: 'nav.healthApis', fallback: '🩺', label: 'My Health APIs', group: 'PharmD navigation' },
   { key: 'nav.favorites', fallback: '⭐', label: 'Favorites', group: 'PharmD navigation' },
 
   // ---- AI modules ----

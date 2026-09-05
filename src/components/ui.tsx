@@ -2,14 +2,14 @@ import type { ReactNode } from 'react';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 
-export function PageHeader({ title, subtitle, action }: { title: string; subtitle?: string; action?: ReactNode }) {
+export function PageHeader({ title, subtitle, action }: { title: string; subtitle?: ReactNode; action?: ReactNode }) {
   return (
-    <div className="mb-5 flex items-start justify-between gap-4">
-      <div>
-        <h1 className="text-2xl font-bold text-slate-800 dark:text-slate-100">{title}</h1>
+    <div className="mb-4 flex flex-col items-start justify-between gap-3 sm:mb-5 sm:flex-row sm:items-center">
+      <div className="min-w-0">
+        <h1 className="text-xl font-bold leading-tight text-slate-800 dark:text-slate-100 sm:text-2xl">{title}</h1>
         {subtitle && <p className="mt-0.5 text-sm text-slate-500 dark:text-slate-400">{subtitle}</p>}
       </div>
-      {action}
+      {action && <div className="flex w-full shrink-0 sm:w-auto">{action}</div>}
     </div>
   );
 }

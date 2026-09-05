@@ -32,6 +32,17 @@ import type {
   WardEntry,
   WardRound,
 } from '../types';
+
+/** One item in the Recycle Bin — wraps the original record with metadata. */
+export interface TrashItem {
+  /** Synthetic id for the trash entry itself (not the record's original id). */
+  trashId: string;
+  module: ModuleType;
+  record: BaseRecord & Record<string, any>;
+  deletedAt: number;
+  /** Snapshot of the record's title/label at delete time, so we don't have to dig later. */
+  label: string;
+}
 import { LocalStorageAdapter } from '../db/localStorageAdapter';
 import { ElectronAdapter } from '../db/electronAdapter';
 import { hasElectronBridge } from '../db/adapter';
@@ -71,7 +82,7 @@ export interface DataStore {
   leadership: LeadershipRole[];
   goals: Goal[];
   status: string;
-  removed: Array<{ module: ModuleType; record: any }>;
+  removed: TrashItem[];
 
   init: () => Promise<void>;
   platformName: () => Promise<string>;
@@ -79,6 +90,9 @@ export interface DataStore {
   saveProfile: (p: Profile) => Promise<void>;
   saveSettings: (s: Settings) => Promise<void>;
   undoRemoved: () => Promise<number>;
+  restoreFromTrash: (trashId: string) => Promise<boolean>;
+  purgeFromTrash: (trashId: string) => Promise<void>;
+  emptyTrash: () => Promise<void>;
 
   all: (module: ModuleType) => Array<BaseRecord & Record<string, any>>;
   getById: (module: ModuleType, id: string) => any | null;
@@ -96,6 +110,42 @@ function uid(): string {
 
 function sortByUpdated<T extends { updatedAt: number }>(arr: T[]): T[] {
   return [...arr].sort((a, b) => b.updatedAt - a.updatedAt);
+}
+
+// ---- Recycle Bin persistence (separate from the main data bucket so deleted
+// items survive reinstalls of the main schema and never accidentally come back)
+const TRASH_KEY = 'clinical-rx:trash:v1';
+
+function loadTrash(): TrashItem[] {
+  try {
+    const raw = localStorage.getItem(TRASH_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveTrash(items: TrashItem[]) {
+  try { localStorage.setItem(TRASH_KEY, JSON.stringify(items)); } catch { /* storage full — ignore */ }
+}
+
+/** Best-effort human label for a record, used in the recycle bin list. */
+function labelFor(module: ModuleType, rec: Record<string, any>): string {
+  if (!rec) return '(unknown item)';
+  if (typeof rec.title === 'string' && rec.title.trim()) return rec.title;
+  if (typeof rec.name === 'string' && rec.name.trim()) return rec.name;
+  if (typeof rec.topic === 'string' && rec.topic.trim()) return rec.topic;
+  if (typeof rec.text === 'string' && rec.text.trim()) return rec.text.slice(0, 80);
+  if (typeof rec.content === 'string' && rec.content.trim()) return rec.content.slice(0, 80);
+  if (typeof rec.ward === 'string' && rec.ward.trim()) {
+    const d = rec.date ? ` · ${rec.date}` : '';
+    return `${rec.ward}${d}`;
+  }
+  if (typeof rec.date === 'string') return `${module} · ${rec.date}`;
+  if (typeof rec.organization === 'string') return `${rec.position || ''} @ ${rec.organization}`.trim();
+  return `${module} · ${(rec.id || '').slice(0, 8)}`;
 }
 
 // Maps a module to its array key on the store. Most are simply `module + 's'`,
@@ -189,7 +239,7 @@ export const useData = create<DataStore>((set, get) => ({
   research: [],
   leadership: [],
   goals: [],
-  removed: [],
+  removed: loadTrash(),
   status: 'Initializing…',
 
   init: async () => {
@@ -392,7 +442,7 @@ export const useData = create<DataStore>((set, get) => ({
   remove: async (module, id, opts) => {
     const adapter = get().adapter;
     const fromSync = opts?.fromSync === true;
-    // Keep the record for undo (unless this came from a sync apply).
+    // Keep the record for undo / recycle bin (unless this came from a sync apply).
     let snapshot: any = null;
     if (!fromSync) snapshot = get().all(module).find((r) => r.id === id) ?? null;
     await adapter.remove(module, id);
@@ -406,21 +456,69 @@ export const useData = create<DataStore>((set, get) => ({
     set((s) => {
       const listKey = listKeyFor(module, s as unknown as Record<string, unknown>);
       const existing = (s[listKey] as BaseRecord[]) || [];
-      const removed = snapshot ? [...s.removed, { module, record: snapshot }].slice(-10) : s.removed;
-      return { [listKey]: existing.filter((r) => r.id !== id), removed, status: fromSync ? '✓ Synced' : '✓ Deleted' } as any;
+      let nextRemoved = s.removed;
+      if (snapshot) {
+        const trashItem: TrashItem = {
+          trashId: 'trash_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 6),
+          module,
+          record: snapshot,
+          deletedAt: Date.now(),
+          label: labelFor(module, snapshot),
+        };
+        nextRemoved = [trashItem, ...s.removed];
+        saveTrash(nextRemoved);
+      }
+      return { [listKey]: existing.filter((r) => r.id !== id), removed: nextRemoved, status: fromSync ? '✓ Synced' : '✓ Deleted' } as any;
     });
   },
 
   undoRemoved: async () => {
     const st = get();
     if (!st.removed.length) return 0;
-    const last = st.removed[st.removed.length - 1];
+    const last = st.removed[0];
     const rec = last.record;
     if (rec && rec.id) {
       await st.save(last.module, rec, { fromSync: true });
     }
-    set({ removed: st.removed.slice(0, -1), status: '↩ Undid deletion' });
+    const next = st.removed.slice(1);
+    saveTrash(next);
+    set({ removed: next, status: '↩ Undid deletion' });
     return 1;
+  },
+
+  restoreFromTrash: async (trashId) => {
+    const st = get();
+    const idx = st.removed.findIndex((t) => t.trashId === trashId);
+    if (idx < 0) return false;
+    const item = st.removed[idx];
+    // Skip if a record with the same id already exists (user recreated it).
+    if (st.getById(item.module, item.record.id)) {
+      // Just remove from trash; data is already present.
+      const next = st.removed.filter((t) => t.trashId !== trashId);
+      saveTrash(next);
+      set({ removed: next, status: 'Item already exists — removed from bin' });
+      return true;
+    }
+    await st.save(item.module, item.record, { fromSync: true });
+    const next = st.removed.filter((t) => t.trashId !== trashId);
+    saveTrash(next);
+    set({ removed: next, status: `↩ Restored "${item.label}"` });
+    return true;
+  },
+
+  purgeFromTrash: async (trashId) => {
+    set((s) => {
+      const next = s.removed.filter((t) => t.trashId !== trashId);
+      saveTrash(next);
+      return { removed: next, status: 'Permanently deleted' };
+    });
+    // Also remove tombstone so a future sync of the same id is clean — but for
+    // now we leave the tombstone in place (safer: prevents cloud resurrect).
+  },
+
+  emptyTrash: async () => {
+    saveTrash([]);
+    set({ removed: [], status: '🗑 Recycle bin emptied' });
   },
 
   setStatus: (s) => set({ status: s }),

@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { PageHeader } from '../../components/ui';
+import { JourneyAiButton } from '../../components/JourneyAiButton';
 import { Modal } from '../../components/Modal';
 import { useData } from '../../stores/data';
 import {
@@ -203,16 +204,19 @@ function AddBar({ label, onAdd }: { label: string; onAdd: (title: string) => voi
   );
 }
 
-function Header({ title, subtitle }: { title: string; subtitle: string }) {
+function Header({ title, subtitle, aiPrompt, aiSection }: { title: string; subtitle: string; aiPrompt?: string; aiSection?: string }) {
   const navigate = useNavigate();
   return (
     <PageHeader
       title={title}
       subtitle={subtitle}
       action={
-        <button className="btn-secondary" onClick={() => navigate('/journey')}>
-          ← Journey
-        </button>
+        <div className="flex w-full items-center gap-2 sm:w-auto">
+          {aiPrompt && aiSection && <JourneyAiButton section={aiSection} prompt={aiPrompt} />}
+          <button className="btn-secondary" onClick={() => navigate('/journey')}>
+            ← Journey
+          </button>
+        </div>
       }
     />
   );
@@ -234,6 +238,8 @@ export function ClinicalExperiencePage() {
       <Header
         title="🏥 Clinical Experience"
         subtitle="Rotations and placements — the bigger picture around your individual ward rounds."
+        aiSection="clinical-experience"
+        aiPrompt="Review my saved clinical experience / rotations. Summarise my strongest rotation stories for an interview, point out gaps (any rotation type I'm missing, any with too little detail), and give me 3 reflective questions I should answer about my placements to strengthen them."
       />
       <AddBar
         label="Rotation name, e.g. Medical Ward Rotation"
@@ -391,6 +397,8 @@ export function SkillsPage() {
       <Header
         title="🧠 Skills"
         subtitle="Your competencies, rated by you and backed by evidence from your own records."
+        aiSection="skills"
+        aiPrompt="Look at my recorded skills (categories, confidence levels and attached evidence). Tell me which skills look weak or under-evidenced, suggest what evidence I could add, and which 3 skills I should highlight in an interview."
       />
 
       <div className="card">
@@ -534,7 +542,12 @@ export function ProjectsPage() {
 
   return (
     <div className="space-y-4">
-      <Header title="💻 Projects" subtitle="Pharmacy, research, software, digital health and community work." />
+      <Header
+        title="💻 Projects"
+        subtitle="Pharmacy, research, software, digital health and community work."
+        aiSection="projects"
+        aiPrompt="Review my projects. For each one, suggest 1-2 strong STAR-format CV bullets I could write. Flag any project descriptions that look too thin to put on a CV and tell me what to add."
+      />
       <AddBar label="Project name" onAdd={(t) => void saveCareerRecord('project', newProject(t))} />
 
       {sorted.length === 0 ? (
@@ -652,7 +665,12 @@ export function ResearchPage() {
 
   return (
     <div className="space-y-4">
-      <Header title="🔬 Research" subtitle="Interests, projects, reading and outputs. A foundation, not a reference manager." />
+      <Header
+        title="🔬 Research"
+        subtitle="Interests, projects, reading and outputs. A foundation, not a reference manager."
+        aiSection="research"
+        aiPrompt="Review my research interests and outputs. Suggest realistic next research questions or small studies I could do as a student, point out any gaps between my stated interests and what I've actually recorded, and give me talking points for a research-minded interview."
+      />
       <AddBar label="Research topic or title" onAdd={(t) => void saveCareerRecord('research', newResearch(t))} />
 
       {research.length === 0 ? (
@@ -735,7 +753,12 @@ export function LeadershipPage() {
 
   return (
     <div className="space-y-4">
-      <Header title="🏅 Leadership & Activities" subtitle="Positions you hold and have held. Past roles are preserved." />
+      <Header
+        title="🏅 Leadership & Activities"
+        subtitle="Positions you hold and have held. Past roles are preserved."
+        aiSection="leadership"
+        aiPrompt="Review my leadership roles and activities. For each, suggest strong CV bullet points, and ask me 3 reflective questions that would surface concrete impact (numbers, initiatives, outcomes) I should add to make the entries interview-ready."
+      />
 
       <div className="card flex flex-wrap gap-2">
         <TextInput className="min-w-32 flex-1" placeholder="Organization" value={org} onChange={(e) => setOrg(e.target.value)} />
@@ -819,7 +842,12 @@ export function AchievementsPage() {
 
   return (
     <div className="space-y-4">
-      <Header title="🏆 Achievements" subtitle="Real, dated accomplishments. Nothing here is ever auto-generated." />
+      <Header
+        title="🏆 Achievements"
+        subtitle="Real, dated accomplishments. Nothing here is ever auto-generated."
+        aiSection="achievements"
+        aiPrompt="Review my recorded achievements. Suggest how to phrase the most impressive ones in CV/interview language, and point out categories of achievement (academic, clinical, leadership, community) that look missing so I can fill them in."
+      />
       <AddBar label="Achievement title" onAdd={(t) => void saveCareerRecord('achievement', newAchievement(t))} />
 
       {sorted.length === 0 ? (
@@ -883,7 +911,12 @@ export function CertificationsPage() {
 
   return (
     <div className="space-y-4">
-      <Header title="📜 Certifications" subtitle="Credentials you hold. Reference numbers stay on this device and are never exported." />
+      <Header
+        title="📜 Certifications"
+        subtitle="Credentials you hold. Reference numbers stay on this device and are never exported."
+        aiSection="certifications"
+        aiPrompt="Review my certifications. Flag any expiring soon (if dates are present), suggest credentials that would complement what I already have given my journey/level, and tell me how to list each cleanly on a CV."
+      />
       <AddBar label="Certification name" onAdd={(t) => void saveCareerRecord('certification', newCertification(t))} />
 
       {sorted.length === 0 ? (
@@ -961,7 +994,12 @@ export function GoalsPage() {
 
   return (
     <div className="space-y-4">
-      <Header title="🎯 Goals" subtitle="Targets with real milestones. Progress only moves when you tick something off." />
+      <Header
+        title="🎯 Goals"
+        subtitle="Targets with real milestones. Progress only moves when you tick something off."
+        aiSection="goals"
+        aiPrompt="Review my goals and milestones. Which goals look realistic vs over-stretched? Suggest concrete next-step milestones for the goals with no progress yet, and spot if any goals conflict with my recorded clinical/academic timeline."
+      />
       <AddBar label="Goal, e.g. Become stronger in clinical pharmacotherapy" onAdd={(t) => void saveCareerRecord('goal', newGoal(t))} />
 
       {goals.length === 0 ? (
