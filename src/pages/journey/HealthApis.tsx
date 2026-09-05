@@ -57,9 +57,6 @@ export default function HealthApisPage() {
   const [historyScope, setHistoryScope] = useState<'all' | 'favorites' | TabId>('all');
   const [historySearch, setHistorySearch] = useState('');
   const [historyOpen, setHistoryOpen] = useState(false);
-  const [tagEditor, setTagEditor] = useState<{ id: string; draft: string } | null>(null);
-  const [labelEditId, setLabelEditId] = useState<string | null>(null);
-  const [labelDraft, setLabelDraft] = useState('');
 
   const keys = useMemo(() => settings?.healthApis ?? {}, [settings?.healthApis]);
   const hasKey = (id: string) => !!(keys[id]?.key?.trim() && keys[id]?.enabled);
@@ -156,16 +153,12 @@ export default function HealthApisPage() {
 
       {current && !busy && (
         <ResultCard
-          entry={current} showRaw={showRaw} onToggleRaw={() => setShowRaw(!showRaw)}
-          onToggleFav={() => toggleFavorite(current.id)} onRemove={() => { removeEntry(current.id); setCurrent(null); }}
+          entryId={current.id} showRaw={showRaw} onToggleRaw={() => setShowRaw(!showRaw)}
+          onRemove={() => { removeEntry(current.id); setCurrent(null); }}
           onLabelChange={(title) => updateEntry(current.id, { title })}
           onTagsChange={(tags) => updateEntry(current.id, { tags })}
           onNoteChange={(note) => updateEntry(current.id, { note })}
-          tagEditor={tagEditor?.id === current.id ? tagEditor.draft : null}
-          setTagEditor={(d) => setTagEditor(d === null ? null : { id: current.id, draft: d })}
-          labelEditing={labelEditId === current.id}
-          setLabelEditing={(editing, draft) => { if (editing) { setLabelEditId(current.id); setLabelDraft(draft ?? current.title); } else { if (labelDraft.trim()) updateEntry(current.id, { title: labelDraft.trim() }); setLabelEditId(null); } }}
-          labelDraft={labelDraft} setLabelDraft={setLabelDraft}
+          toggleFavorite={() => toggleFavorite(current.id)}
         />
       )}
 
@@ -184,20 +177,20 @@ export default function HealthApisPage() {
             ))}
           </div>
           <div className="max-h-[55vh] space-y-1.5 overflow-y-auto pr-1">
-            {history.length === 0 && <p className="rounded-lg bg-slate-100 p-4 text-center text-sm text-slate-700 dark:bg-slate-800 dark:text-slate-200">No saved lookups yet. Run a search and it will appear here — works fully offline.</p>}
+            {history.length === 0 && <p className="rounded-lg bg-slate-100 p-4 text-center text-sm font-medium text-slate-700 dark:bg-slate-700 dark:text-slate-100">No saved lookups yet. Run a search and it will appear here — works fully offline.</p>}
             {history.map((e) => (
               <button key={e.id} onClick={() => loadSaved(e)}
-                className={`flex w-full items-start justify-between gap-2 rounded-lg border p-2 text-left text-sm transition hover:border-brand-400 ${current?.id === e.id ? 'border-brand-500 bg-brand-50 dark:border-brand-500 dark:bg-brand-950/30' : 'border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-800'}`}>
+                className={`flex w-full items-start justify-between gap-2 rounded-lg border p-2 text-left text-sm transition hover:border-brand-400 ${current?.id === e.id ? 'border-brand-500 bg-brand-50 text-slate-900 dark:border-brand-500 dark:bg-brand-900/40 dark:text-slate-100' : 'border-slate-200 bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-100'}`}>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-1.5">
-                    <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">{SOURCE_META[e.source].label}</span>
-                    {e.favorite && <span className="rounded bg-amber-200 px-1 text-[9px] font-black uppercase text-amber-900 dark:bg-amber-800 dark:text-amber-100">Saved</span>}
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300">{SOURCE_META[e.source].label}</span>
+                    {e.favorite && <span className="rounded bg-amber-200 px-1 text-[9px] font-black uppercase text-amber-900 dark:bg-amber-700 dark:text-amber-100">Saved</span>}
                   </div>
                   <div className="truncate font-bold">{e.title}</div>
-                  <div className="mt-0.5 flex flex-wrap items-center gap-1 text-[10px] opacity-70">
+                  <div className="mt-0.5 flex flex-wrap items-center gap-1 text-[10px] opacity-80">
                     <span>{new Date(e.createdAt).toLocaleString()}</span>
-                    {e.tags.map((t) => <span key={t} className="rounded bg-slate-200 px-1 font-semibold dark:bg-slate-700">#{t}</span>)}
-                    {e.error && <span className="rounded bg-red-200 px-1 font-bold text-red-800 dark:bg-red-900/60 dark:text-red-200">error</span>}
+                    {e.tags.map((t) => <span key={t} className="rounded bg-slate-200 px-1 font-semibold text-slate-800 dark:bg-slate-600 dark:text-slate-100">#{t}</span>)}
+                    {e.error && <span className="rounded bg-red-200 px-1 font-bold text-red-900 dark:bg-red-900/60 dark:text-red-100">error</span>}
                   </div>
                 </div>
               </button>
@@ -351,67 +344,79 @@ function WebMdPanel() {
 
 /* ---------- Result card ---------- */
 function ResultCard(props: {
-  entry: HealthApiEntry; showRaw: boolean; onToggleRaw: () => void;
-  onToggleFav: () => void; onRemove: () => void;
+  entryId: string; showRaw: boolean; onToggleRaw: () => void;
+  onRemove: () => void;
   onLabelChange: (t: string) => void; onTagsChange: (t: string[]) => void; onNoteChange: (n: string) => void;
-  tagEditor: string | null; setTagEditor: (d: string | null) => void;
-  labelEditing: boolean; setLabelEditing: (editing: boolean, draft?: string) => void;
-  labelDraft: string; setLabelDraft: (d: string) => void;
+  toggleFavorite: () => void;
 }) {
-  const { entry, showRaw, onToggleRaw, onToggleFav, onRemove, onLabelChange, onTagsChange, onNoteChange,
-    tagEditor, setTagEditor, labelEditing, setLabelEditing, labelDraft, setLabelDraft } = props;
+  const { entryId, showRaw, onToggleRaw, onRemove, onLabelChange, onTagsChange, onNoteChange, toggleFavorite } = props;
 
-  function addTagFromEditor() {
-    const v = (tagEditor || '').trim().replace(/^#/, '');
-    if (v && !entry.tags.includes(v)) onTagsChange([...entry.tags, v]);
-    setTagEditor(null);
-  }
+  // Read the live entry from the store so tags/fav/note updates show instantly.
+  const entry = useHealthApiStore((s) => s.entries.find((e) => e.id === entryId));
+  const [tagDraft, setTagDraft] = useState('');
+  const [tagEditOpen, setTagEditOpen] = useState(false);
+  const [labelEditing, setLabelEditing] = useState(false);
+  const [labelDraft, setLabelDraft] = useState('');
+  const [noteDraft, setNoteDraft] = useState('');
+
+  useEffect(() => { setNoteDraft(entry?.note || ''); }, [entry?.id, entry?.note]);
+
+  if (!entry) return null;
+
+  const addTag = () => {
+    const v = tagDraft.trim().replace(/^#/, '');
+    const e = entry!;
+    if (v && !e.tags.includes(v)) onTagsChange([...e.tags, v]);
+    setTagDraft(''); setTagEditOpen(false);
+  };
 
   return (
     <div className="space-y-2">
-      <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-slate-100 p-2 dark:bg-slate-800">
+      <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-slate-100 p-2 dark:bg-slate-800 dark:text-slate-100">
         <div className="flex min-w-0 flex-1 items-center gap-2">
-          <button onClick={onToggleFav} title={entry.favorite ? 'Remove favourite' : 'Add to favourites'}
-            className={`rounded px-2 py-0.5 text-[10px] font-black uppercase tracking-widest ${entry.favorite ? 'bg-amber-500 text-white' : 'bg-slate-200 text-slate-700 hover:bg-slate-300 dark:bg-slate-700 dark:text-slate-200'}`}>
-            {entry.favorite ? 'Saved' : 'Save'}
+          <button onClick={toggleFavorite} title={entry.favorite ? 'Remove favourite' : 'Add to favourites'}
+            className={`rounded px-2 py-0.5 text-[10px] font-black uppercase tracking-widest ${entry.favorite ? 'bg-amber-500 text-white' : 'bg-slate-200 text-slate-800 hover:bg-slate-300 dark:bg-slate-700 dark:text-slate-100 dark:hover:bg-slate-600'}`}>
+            {entry.favorite ? 'Favourited' : 'Favourite'}
           </button>
           {labelEditing ? (
             <input autoFocus className="input flex-1 py-1 text-sm" value={labelDraft} onChange={(e) => setLabelDraft(e.target.value)}
-              onBlur={() => setLabelEditing(false)} onKeyDown={(e) => { if (e.key === 'Enter') setLabelEditing(false); if (e.key === 'Escape') setLabelEditing(false); }} />
+              onBlur={() => { if (labelDraft.trim()) onLabelChange(labelDraft.trim()); setLabelEditing(false); }}
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === 'Escape') { if (labelDraft.trim()) onLabelChange(labelDraft.trim()); setLabelEditing(false); } }} />
           ) : (
-            <button onClick={() => setLabelEditing(true, entry.title)} className="min-w-0 flex-1 truncate text-left text-sm font-bold hover:underline" title="Click to rename">
-              <span className="mr-1.5 rounded bg-slate-300 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-widest text-slate-800 dark:bg-slate-700 dark:text-slate-200">{SOURCE_META[entry.source].label}</span>
+            <button onClick={() => { setLabelDraft(entry.title); setLabelEditing(true); }} className="min-w-0 flex-1 truncate text-left text-sm font-bold hover:underline" title="Click to rename">
+              <span className="mr-1.5 rounded bg-slate-300 px-1.5 py-0.5 text-[10px] font-black uppercase tracking-widest text-slate-900 dark:bg-slate-600 dark:text-slate-100">{SOURCE_META[entry.source].label}</span>
               {entry.title}
             </button>
           )}
-          <span className="shrink-0 text-[10px] opacity-60">{new Date(entry.createdAt).toLocaleString()}</span>
+          <span className="shrink-0 text-[10px] opacity-70">{new Date(entry.createdAt).toLocaleString()}</span>
         </div>
         <div className="flex items-center gap-1.5">
-          {entry.url && <a className="rounded bg-slate-200 px-2 py-1 text-xs font-bold hover:bg-slate-300 dark:bg-slate-700 dark:text-slate-100 dark:hover:bg-slate-600" href={entry.url} target="_blank" rel="noreferrer">Raw JSON</a>}
-          <button onClick={onToggleRaw} className="rounded bg-slate-200 px-2 py-1 text-xs font-bold hover:bg-slate-300 dark:bg-slate-700 dark:text-slate-100 dark:hover:bg-slate-600">{showRaw ? 'Pretty view' : 'View raw'}</button>
-          <button onClick={onRemove} className="rounded bg-red-100 px-2 py-1 text-xs font-bold text-red-700 hover:bg-red-200 dark:bg-red-900/40 dark:text-red-300 dark:hover:bg-red-900/60">Delete</button>
+          {entry.url && <a className="rounded bg-slate-200 px-2 py-1 text-xs font-bold text-slate-800 hover:bg-slate-300 dark:bg-slate-700 dark:text-slate-100 dark:hover:bg-slate-600" href={entry.url} target="_blank" rel="noreferrer">Raw JSON</a>}
+          <button onClick={onToggleRaw} className="rounded bg-slate-200 px-2 py-1 text-xs font-bold text-slate-800 hover:bg-slate-300 dark:bg-slate-700 dark:text-slate-100 dark:hover:bg-slate-600">{showRaw ? 'Pretty view' : 'View raw'}</button>
+          <button onClick={onRemove} className="rounded bg-red-100 px-2 py-1 text-xs font-bold text-red-800 hover:bg-red-200 dark:bg-red-900/40 dark:text-red-200 dark:hover:bg-red-900/60">Delete</button>
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center gap-1.5 rounded-xl bg-slate-50 p-2 dark:bg-slate-900/40">
-        <span className="text-[11px] font-bold uppercase tracking-widest opacity-70">Tags</span>
+      <div className="flex flex-wrap items-center gap-1.5 rounded-xl bg-slate-50 p-2 text-slate-900 dark:bg-slate-900 dark:text-slate-100">
+        <span className="text-[11px] font-black uppercase tracking-widest text-slate-600 dark:text-slate-300">Tags</span>
         {entry.tags.map((t) => (
-          <span key={t} className="inline-flex items-center gap-1 rounded-full bg-brand-100 px-2 py-0.5 text-xs font-bold text-brand-800 dark:bg-brand-900/60 dark:text-brand-100">
+          <span key={t} className="inline-flex items-center gap-1 rounded-full bg-brand-100 px-2 py-0.5 text-xs font-bold text-brand-900 dark:bg-brand-900 dark:text-brand-100">
             #{t}
             <button onClick={() => onTagsChange(entry.tags.filter((x) => x !== t))} className="opacity-60 hover:opacity-100">×</button>
           </span>
         ))}
-        {tagEditor !== null ? (
-          <input autoFocus className="rounded-full border border-slate-300 bg-white px-2 py-0.5 text-xs dark:border-slate-600 dark:bg-slate-800" placeholder="tag…" value={tagEditor}
-            onChange={(e) => setTagEditor(e.target.value)} onBlur={addTagFromEditor}
-            onKeyDown={(e) => { if (e.key === 'Enter') addTagFromEditor(); if (e.key === 'Escape') setTagEditor(null); }} />
+        {tagEditOpen ? (
+          <input autoFocus className="w-28 rounded-full border border-slate-300 bg-white px-2 py-0.5 text-xs text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100" placeholder="tag…" value={tagDraft}
+            onChange={(e) => setTagDraft(e.target.value)}
+            onBlur={addTag}
+            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addTag(); } if (e.key === 'Escape') { setTagEditOpen(false); setTagDraft(''); } }} />
         ) : (
-          <button onClick={() => setTagEditor('')} className="rounded-full border border-dashed border-slate-300 px-2 py-0.5 text-xs font-bold opacity-70 hover:opacity-100 dark:border-slate-600">Add tag</button>
+          <button onClick={() => { setTagDraft(''); setTagEditOpen(true); }} className="rounded-full border border-dashed border-slate-300 px-2 py-0.5 text-xs font-bold text-slate-700 opacity-80 hover:opacity-100 dark:border-slate-600 dark:text-slate-200">+ Add tag</button>
         )}
       </div>
 
       {entry.error ? (
-        <div className="rounded-xl border-2 border-red-400 bg-red-50 p-3 text-sm font-semibold text-red-900 dark:border-red-700 dark:bg-red-950/60 dark:text-red-50">
+        <div className="rounded-xl border-2 border-red-400 bg-red-50 p-3 text-sm font-semibold text-red-900 dark:border-red-700 dark:bg-red-950 dark:text-red-100">
           {entry.error}
           {entry.url && <div className="mt-2"><a className="rounded bg-red-700 px-3 py-1 text-xs font-bold text-white hover:bg-red-800" href={entry.url} target="_blank" rel="noreferrer">Open URL</a></div>}
         </div>
@@ -421,10 +426,12 @@ function ResultCard(props: {
         <ResultBody data={entry.data} kind={entry.kind} />
       )}
 
-      <div className="rounded-xl border-2 border-dashed border-brand-300 bg-brand-50/60 p-2 dark:border-brand-800 dark:bg-brand-950/30">
+      <div className="rounded-xl border-2 border-dashed border-brand-300 bg-brand-50/60 p-2 text-slate-900 dark:border-brand-700 dark:bg-brand-950/40 dark:text-slate-100">
         <div className="mb-1 text-[11px] font-black uppercase tracking-widest text-brand-700 dark:text-brand-300">My study note</div>
         <textarea className="min-h-[60px] w-full rounded-lg border border-brand-200 bg-white p-2 text-sm text-slate-900 dark:border-brand-800 dark:bg-slate-900 dark:text-slate-100"
-          placeholder="What did you learn? Exam pearls?" defaultValue={entry.note || ''} onBlur={(e) => onNoteChange(e.target.value)} />
+          placeholder="What did you learn? Exam pearls?" value={noteDraft}
+          onChange={(e) => setNoteDraft(e.target.value)}
+          onBlur={() => onNoteChange(noteDraft)} />
       </div>
     </div>
   );
