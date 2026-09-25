@@ -329,8 +329,34 @@ export const useData = create<DataStore>((set, get) => ({
             try { return JSON.parse(i.data); } catch { return null; }
           })
           .filter(Boolean);
-      const profile = profiles.length ? parse(profiles)[0] : null;
-      const parsedSettings = settingsList.length ? parse(settingsList)[0] : null;
+      let profile: Profile | null = profiles.length ? (parse(profiles)[0] ?? null) : null;
+      let parsedSettings: any = settingsList.length ? (parse(settingsList)[0] ?? null) : null;
+
+      // PROFILE DURABILITY (§first-run-never): if the primary bucket has no
+      // parseable profile (corrupt record, browser quirk, partial write) try
+      // the rolling backup BEFORE we fall through to Onboarding. The user
+      // should only see the create-profile screen on a genuinely fresh
+      // install — never after an update, a crash, or closing & reopening.
+      const a = adapter as any;
+      if (!profile && typeof a.recoverFromBackup === 'function') {
+        try {
+          const recovered = a.recoverFromBackup();
+          if (recovered?.profile) {
+            profile = recovered.profile as Profile;
+            // Write the recovered record back to the primary bucket so the
+            // next boot is clean and the backup isn't our only copy.
+            a.put('profile', profile.id, profile, (profile as any).createdAt ?? Date.now(), (profile as any).updatedAt ?? Date.now()).catch(() => {});
+            console.info('[clinical-rx] Recovered profile from backup.');
+          }
+          if (!parsedSettings && recovered?.settings) {
+            parsedSettings = recovered.settings;
+            a.put('settings', parsedSettings.id, parsedSettings, parsedSettings.createdAt ?? Date.now(), parsedSettings.updatedAt ?? Date.now()).catch(() => {});
+          }
+        } catch {
+          /* backup is best-effort */
+        }
+      }
+
       // Auto-create default settings on first run, and ALWAYS migrate so new
       // AI modules added in later versions get an entry (with a placeholder
       // key) without the user having to touch Settings.
@@ -405,8 +431,15 @@ export const useData = create<DataStore>((set, get) => ({
 
   saveProfile: async (p) => {
     const adapter = get().adapter;
-    await adapter.put('profile', p.id, p, p.createdAt, p.updatedAt);
-    set({ profile: p });
+    // PROFILE IMMUTABILITY: once a profile is created its id + createdAt
+    // must never change on save, otherwise update migrations and backup
+    // recovery treat it as a new person. Defensive-clone to catch bugs.
+    const existing = get().profile;
+    const safe: Profile = existing?.id
+      ? { ...p, id: existing.id, createdAt: existing.createdAt, updatedAt: Date.now() }
+      : p;
+    await adapter.put('profile', safe.id, safe, safe.createdAt, safe.updatedAt);
+    set({ profile: safe });
   },
 
   saveSettings: async (s) => {

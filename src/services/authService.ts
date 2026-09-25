@@ -322,8 +322,11 @@ export async function getCurrentUser(): Promise<AuthUser | null> {
 
 /**
  * Validate the cached session when connectivity returns.
- * A failure here NEVER signs the user out on its own — it records the problem
- * so the UI can offer a graceful re-login (§45).
+ *
+ * A failure here NEVER signs the user out on its own — the local profile
+ * and all local data remain signed-in forever. We only record the problem
+ * so the UI can offer a graceful re-login to resume CLOUD SYNC (§45).
+ * An explicit button press in Sync Center is the ONLY way to sign out.
  */
 export async function refreshSession(): Promise<{ ok: boolean; needsReauth: boolean }> {
   const a = useData.getState().settings?.onlineAccount;
