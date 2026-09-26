@@ -2,29 +2,14 @@ name: Build & Release Desktop App
 
 # HOW TO USE
 # ----------
-# 1. Copy this file to:  .github/workflows/build-desktop.yml
-# 2. Commit + push. From then on, EVERY push to `main`:
-#      - builds Windows (NSIS .exe + latest.yml) and Linux (.deb + AppImage
-#        + latest-linux.yml)
-#      - builds an Android APK (Capacitor) and uploads it to the same release
-#        as clinical-rx-<version>.apk — download it straight from the release
-#        page and sideload on your phone.
-#      - publishes them to a real GitHub Release (not a draft/pre-release),
-#        which is what the in-app 🔄 Update button reads
-#    No tags, no manual steps.
-# 3. To make existing users see an update, bump "version" in package.json
-#    (e.g. 1.0.0 -> 1.0.1) and push. The release's latest.yml carries the new
-#    version, so the app shows "🔄 Update available".
-#
-# OPTIONAL (recommended): signed Android release APK
-# Add these repository secrets (Settings → Secrets and variables → Actions):
-#   ANDROID_KEYSTORE_BASE64     base64 of a PKCS12 keystore
-#   ANDROID_KEYSTORE_PASSWORD   keystore password
-#   ANDROID_KEY_ALIAS           key alias
-#   ANDROID_KEY_PASSWORD        key password
-# When set, the release APK is signed with that key (stable across versions →
-# in-place updates work). Without them, the APK is signed with the debug key
-# (installable, but updating means uninstall + reinstall).
+# Every push to `main`:
+#   - builds Windows (NSIS .exe + latest.yml) and Linux (.deb + AppImage
+#     + latest-linux.yml) Electron apps.
+#   - builds an Android APK via Capacitor and uploads it to the same
+#     GitHub Release as clinical-rx-<version>.apk (sideload on phone).
+#   - publishes assets to a real GitHub Release (not draft/prerelease),
+#     which is what the in-app "🔄 Update" button reads.
+# Bump "version" in package.json to make the in-app updater fire.
 
 on:
   push:
@@ -38,7 +23,7 @@ permissions:
 jobs:
   build:
     name: Build ${{ matrix.os }}
-    # PRs and non-main branches: build only, upload artifacts (no release).
+    # PRs / non-main branches: build only, upload artifacts (no release).
     if: github.ref != 'refs/heads/main'
     runs-on: ${{ matrix.os }}
     strategy:
@@ -53,11 +38,15 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
 
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --ignore-scripts
+
+      - name: Rebuild native modules
+        if: runner.os == 'Linux' || runner.os == 'Windows'
+        run: npm rebuild better-sqlite3 --build-from-source
 
       - name: Type-check
         run: npm run typecheck
@@ -74,24 +63,37 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       # ----- Android APK (ubuntu leg only) -----
-      # Capacitor CLI 8 requires Node >= 22 — switch to Node 22 for the
-      # Android steps only (the desktop pipeline stays on Node 20).
-      - name: Set up Node 22 (Capacitor)
-        if: matrix.os == 'ubuntu-latest'
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-
       - name: Set up JDK 17
         if: matrix.os == 'ubuntu-latest'
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
-          java-version: 21
+          java-version: 17
 
-      - name: Set up Android SDK
+      - name: Set up Android SDK cmdline-tools
         if: matrix.os == 'ubuntu-latest'
-        uses: android-actions/setup-android@v3
+        shell: bash
+        run: |
+          set -eux
+          ANDROID_HOME=${ANDROID_HOME:-$HOME/android-sdk}
+          mkdir -p "$ANDROID_HOME/cmdline-tools"
+          if [ ! -x "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" ]; then
+            CMDTOOLS_URL="https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip"
+            curl -fsSL "$CMDTOOLS_URL" -o /tmp/cmdtools.zip
+            unzip -q -o /tmp/cmdtools.zip -d "$ANDROID_HOME/cmdline-tools"
+            rm -rf "$ANDROID_HOME/cmdline-tools/latest"
+            mv "$ANDROID_HOME/cmdline-tools/cmdline-tools" "$ANDROID_HOME/cmdline-tools/latest"
+          fi
+          echo "ANDROID_HOME=$ANDROID_HOME" >> "$GITHUB_ENV"
+          echo "$ANDROID_HOME/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
+          echo "$ANDROID_HOME/platform-tools" >> "$GITHUB_PATH"
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null 2>&1 || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
+            "platform-tools" \
+            "platforms;android-34" \
+            "build-tools;34.0.0"
+          echo "--- installed packages ---"
+          sdkmanager --list_installed | grep -E 'platform-tools|platforms;android-34|build-tools;34.0.0'
 
       - name: Sync Capacitor web assets
         if: matrix.os == 'ubuntu-latest'
@@ -111,7 +113,7 @@ jobs:
           path: android/app/build/outputs/apk/**/*.apk
           if-no-files-found: warn
 
-      - name: Upload artifacts
+      - name: Upload Electron artifacts
         uses: actions/upload-artifact@v4
         with:
           name: clinical-rx-${{ matrix.os }}
@@ -125,7 +127,6 @@ jobs:
   release:
     name: Release ${{ matrix.os }}
     # Push to main: build AND publish a GitHub Release automatically.
-    # Bump "version" in package.json to make the in-app update button fire.
     if: github.ref == 'refs/heads/main'
     runs-on: ${{ matrix.os }}
     strategy:
@@ -140,11 +141,15 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
 
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --ignore-scripts
+
+      - name: Rebuild native modules
+        if: runner.os == 'Linux' || runner.os == 'Windows'
+        run: npm rebuild better-sqlite3 --build-from-source
 
       - name: Type-check
         run: npm run typecheck
@@ -159,29 +164,40 @@ jobs:
         run: npm run dist -- --publish always
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # Always (re)publish assets for this version, even if the release
-          # was created more than 2 hours ago by an earlier push.
           EP_GH_IGNORE_TIME: 'true'
 
       # ----- Android APK (ubuntu leg only) -----
-      # Capacitor CLI 8 requires Node >= 22 — switch to Node 22 for the
-      # Android steps only (the desktop pipeline stays on Node 20).
-      - name: Set up Node 22 (Capacitor)
-        if: matrix.os == 'ubuntu-latest'
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-
       - name: Set up JDK 17
         if: matrix.os == 'ubuntu-latest'
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
-          java-version: 21
+          java-version: 17
 
-      - name: Set up Android SDK
+      - name: Set up Android SDK cmdline-tools
         if: matrix.os == 'ubuntu-latest'
-        uses: android-actions/setup-android@v3
+        shell: bash
+        run: |
+          set -eux
+          ANDROID_HOME=${ANDROID_HOME:-$HOME/android-sdk}
+          mkdir -p "$ANDROID_HOME/cmdline-tools"
+          if [ ! -x "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" ]; then
+            CMDTOOLS_URL="https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip"
+            curl -fsSL "$CMDTOOLS_URL" -o /tmp/cmdtools.zip
+            unzip -q -o /tmp/cmdtools.zip -d "$ANDROID_HOME/cmdline-tools"
+            rm -rf "$ANDROID_HOME/cmdline-tools/latest"
+            mv "$ANDROID_HOME/cmdline-tools/cmdline-tools" "$ANDROID_HOME/cmdline-tools/latest"
+          fi
+          echo "ANDROID_HOME=$ANDROID_HOME" >> "$GITHUB_ENV"
+          echo "$ANDROID_HOME/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
+          echo "$ANDROID_HOME/platform-tools" >> "$GITHUB_PATH"
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null 2>&1 || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
+            "platform-tools" \
+            "platforms;android-34" \
+            "build-tools;34.0.0"
+          echo "--- installed packages ---"
+          sdkmanager --list_installed | grep -E 'platform-tools|platforms;android-34|build-tools;34.0.0'
 
       - name: Build Android APK
         if: matrix.os == 'ubuntu-latest'
@@ -193,15 +209,21 @@ jobs:
         run: |
           set -e
           npx cap sync android
-          # Inject the signing keystore when the secrets are configured.
           if [ -n "$ANDROID_KEYSTORE_BASE64" ]; then
             echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > android/app/release-keystore.p12
-            echo "Keystore injected — release APK will be signed with it."
+            echo "Keystore injected — release APK will be signed."
           else
-            echo "No keystore secret — release APK will use the debug key (installable)."
+            echo "No keystore secret — building debug APK (installable)."
           fi
           cd android
-          ./gradlew assembleRelease --no-daemon
+          if [ -n "$ANDROID_KEYSTORE_BASE64" ]; then
+            ./gradlew assembleRelease --no-daemon
+            APK_SRC=$(ls app/build/outputs/apk/release/app-release.apk 2>/dev/null || true)
+          else
+            ./gradlew assembleDebug --no-daemon
+            APK_SRC=$(ls app/build/outputs/apk/debug/app-debug.apk 2>/dev/null || true)
+          fi
+          echo "APK_SRC=$APK_SRC" >> "$GITHUB_ENV"
 
       - name: Upload Android APK to release
         if: matrix.os == 'ubuntu-latest'
@@ -211,13 +233,12 @@ jobs:
           set -e
           VERSION=$(node -p "require('./package.json').version")
           TAG="v$VERSION"
-          APK=$(ls android/app/build/outputs/apk/release/app-release.apk 2>/dev/null || true)
-          if [ -z "$APK" ]; then
-            echo "No release APK found."
+          if [ -z "${APK_SRC:-}" ] || [ ! -f "$APK_SRC" ]; then
+            echo "No APK built; skipping upload."
             exit 0
           fi
-          cp "$APK" "clinical-rx-$VERSION.apk"
+          cp "$APK_SRC" "clinical-rx-$VERSION.apk"
           echo "Uploading clinical-rx-$VERSION.apk to $TAG ..."
           gh release upload "$TAG" "clinical-rx-$VERSION.apk" --clobber 2>/dev/null \
             || gh release create "$TAG" "clinical-rx-$VERSION.apk" --title "ClinicalRx $VERSION" --notes "Android APK for $VERSION" \
-            || echo "Upload failed (release may be busy) — will be retried on next push."
+            || echo "Upload failed (release busy) — will retry on next push."
