@@ -75,7 +75,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: clinical-rx-android-debug-${{ github.sha }}
-          path: android/app/build/outputs/apk/debug/*.apk
+          path: android/app/build/outputs/apk/**/*.apk
           if-no-files-found: warn
       - name: Upload Electron artifacts
         uses: actions/upload-artifact@v4
@@ -152,11 +152,14 @@ jobs:
           echo "Keystore injected. Building signed release APK."
           echo "sdk.dir=${ANDROID_HOME:-$ANDROID_SDK_ROOT}" > local.properties
           ./gradlew assembleRelease --no-daemon --stacktrace
-          APK=app/build/outputs/apk/release/app-release.apk
-          if [ ! -f "$APK" ]; then
-            echo "::error::Expected release APK at $APK but it does not exist."
+          APK=$(ls app/build/outputs/apk/release/*.apk 2>/dev/null | head -n1 || true)
+          if [ -z "$APK" ] || [ ! -f "$APK" ]; then
+            echo "::error::No release APK found under app/build/outputs/apk/release/. Contents:"
+            find app/build/outputs/apk -type f -name '*.apk' 2>/dev/null || true
             exit 1
           fi
+          APK_DIR=$(dirname "$APK")
+          echo "Found APK at $APK (size: $(wc -c < "$APK") bytes)"
           # Verify the APK is NOT signed with the Android debug key.
           if jarsigner -verify -verbose -certs "$APK" 2>&1 | grep -qiE "CN=Android Debug"; then
             echo "::error::Release APK is signed with the Android DEBUG key — refusing to upload."
