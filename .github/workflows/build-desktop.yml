@@ -1,87 +1,86 @@
 name: Build & Release Desktop App
 
+# TRIGGER MODEL:
+#   - PR / branch push                    → CI build-only (artifacts, no release).
+#   - Push of version tag vX.Y.Z          → build + publish signed GitHub Release.
+#   - workflow_dispatch with release=true → manual release.
+# Pushing to main alone NEVER publishes a production release.
 on:
   push:
     branches: [main, arena/*]
+    tags:
+      - 'v*.*.*'
   pull_request:
   workflow_dispatch:
+    inputs:
+      release:
+        description: 'Publish artifacts to a GitHub Release'
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: write
 
 jobs:
-  build:
-    name: Build ${{ matrix.os }}
-    if: github.ref != 'refs/heads/main'
+  ci:
+    name: CI (${{ matrix.os }})
+    if: github.event_name == 'pull_request' || (github.event_name == 'push' && !startsWith(github.ref, 'refs/tags/')) || (github.event_name == 'workflow_dispatch' && inputs.release != true)
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-22.04, windows-latest]
-
     steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
-
-      - name: Install dependencies
-        run: npm ci
-
+      - run: npm ci
+      - name: Production readiness check
+        run: node scripts/production-check.mjs
       - name: Type-check
         run: npm run typecheck
-
-      - name: Build renderer (web build)
+      - name: Build web
         run: npm run build:web
-
-      - name: Build Electron main process
+      - name: Build Electron main
         run: npm run build:electron
-
-      - name: Package Electron app
+      - name: Package Electron (no publish)
         run: npm run dist -- --publish never
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      # ----- Android APK (ubuntu leg only) -----
-      - name: Set up JDK 17
+      - name: Setup JDK 21 (Android, linux)
         if: runner.os == 'Linux'
         uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: 21
-
-      - name: Set up Android SDK
+      - name: Setup Android SDK (linux)
         if: runner.os == 'Linux'
         uses: android-actions/setup-android@v4
         with:
           packages: platform-tools platforms;android-36 build-tools;36.0.0 platforms;android-34 build-tools;34.0.0
-
-      - name: Sync Capacitor web assets
-        if: runner.os == 'Linux'
-        run: npx cap sync android
-
-      - name: Build Android APK (debug)
+      - name: Build Android debug APK (linux)
         if: runner.os == 'Linux'
         run: |
+          set -e
+          npm run sync:android-version
+          npx cap sync android
           cd android
-          echo "sdk.dir=${ANDROID_HOME:-$ANDROID_SDK_ROOT}" > local.properties && cat local.properties && ./gradlew assembleDebug --no-daemon --stacktrace
-
-      - name: Upload Android APK artifact
+          echo "sdk.dir=${ANDROID_HOME:-$ANDROID_SDK_ROOT}" > local.properties
+          ./gradlew assembleDebug --no-daemon
+      - name: Upload Android debug APK (linux)
         if: runner.os == 'Linux'
         uses: actions/upload-artifact@v4
         with:
-          name: clinical-rx-android-apk
-          path: android/app/build/outputs/apk/**/*.apk
+          name: clinical-rx-android-debug-${{ github.sha }}
+          path: android/app/build/outputs/apk/debug/*.apk
           if-no-files-found: warn
-
       - name: Upload Electron artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: clinical-rx-${{ matrix.os }}
+          name: clinical-rx-${{ matrix.os }}-${{ github.sha }}
           path: |
             release/*.AppImage
             release/*.deb
@@ -90,57 +89,45 @@ jobs:
           if-no-files-found: warn
 
   release:
-    name: Release ${{ matrix.os }}
-    if: github.ref == 'refs/heads/main'
+    name: Release (${{ matrix.os }})
+    if: (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')) || (github.event_name == 'workflow_dispatch' && inputs.release == true)
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-22.04, windows-latest]
-
     steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
-
-      - name: Install dependencies
-        run: npm ci
-
+      - run: npm ci
+      - name: Production readiness check
+        run: node scripts/production-check.mjs
       - name: Type-check
         run: npm run typecheck
-
-      - name: Build renderer (web build)
+      - name: Build web
         run: npm run build:web
-
-      - name: Build Electron main process
+      - name: Build Electron main
         run: npm run build:electron
-
-      - name: Build & publish desktop app to GitHub Releases
+      - name: Publish Electron to GitHub Release
         run: npm run dist -- --publish always
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           EP_GH_IGNORE_TIME: 'true'
-
-      # ----- Android APK (ubuntu leg only) -----
-      - name: Set up JDK 17
+      - name: Setup JDK 21 (Android, linux)
         if: runner.os == 'Linux'
         uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: 21
-
-      - name: Set up Android SDK
+      - name: Setup Android SDK (linux)
         if: runner.os == 'Linux'
         uses: android-actions/setup-android@v4
         with:
           packages: platform-tools platforms;android-36 build-tools;36.0.0 platforms;android-34 build-tools;34.0.0
-
-      - name: Build Android APK
+      - name: Build SIGNED Android release APK (linux)
         if: runner.os == 'Linux'
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
@@ -148,22 +135,35 @@ jobs:
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
-          set -e
+          set -euo pipefail
+          npm run sync:android-version
           npx cap sync android
           cd android
-          if [ -n "$ANDROID_KEYSTORE_BASE64" ]; then
-            echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > app/release-keystore.p12
-            echo "Keystore injected — building release APK."
-            echo "sdk.dir=${ANDROID_HOME:-$ANDROID_SDK_ROOT}" > local.properties && cat local.properties && ./gradlew assembleRelease --no-daemon --stacktrace
-            APK_SRC=$(ls app/build/outputs/apk/release/app-release.apk 2>/dev/null || true)
-          else
-            echo "No keystore secret — building debug APK."
-            echo "sdk.dir=${ANDROID_HOME:-$ANDROID_SDK_ROOT}" > local.properties && cat local.properties && ./gradlew assembleDebug --no-daemon --stacktrace
-            APK_SRC=$(ls app/build/outputs/apk/debug/app-debug.apk 2>/dev/null || true)
+          # ---- PRODUCTION SIGNING GUARD ----
+          # A signed release APK is MANDATORY. Never publish a debug APK as a
+          # production release. If any signing secret is missing, hard-fail.
+          if [ -z "${ANDROID_KEYSTORE_BASE64:-}" ] || [ -z "${ANDROID_KEYSTORE_PASSWORD:-}" ] || [ -z "${ANDROID_KEY_ALIAS:-}" ] || [ -z "${ANDROID_KEY_PASSWORD:-}" ]; then
+            echo "::error::ANDROID_KEYSTORE_BASE64 / ANDROID_KEYSTORE_PASSWORD / ANDROID_KEY_ALIAS / ANDROID_KEY_PASSWORD must all be set as repository secrets for a production release."
+            echo "::error::Debug APKs are NEVER published as production releases."
+            exit 1
           fi
-          echo "APK_SRC=$APK_SRC" >> "$GITHUB_ENV"
-
-      - name: Upload Android APK to release
+          echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > app/release-keystore.p12
+          chmod 600 app/release-keystore.p12
+          echo "Keystore injected. Building signed release APK."
+          echo "sdk.dir=${ANDROID_HOME:-$ANDROID_SDK_ROOT}" > local.properties
+          ./gradlew assembleRelease --no-daemon --stacktrace
+          APK=app/build/outputs/apk/release/app-release.apk
+          if [ ! -f "$APK" ]; then
+            echo "::error::Expected release APK at $APK but it does not exist."
+            exit 1
+          fi
+          # Verify the APK is NOT signed with the Android debug key.
+          if jarsigner -verify -verbose -certs "$APK" 2>&1 | grep -qiE "CN=Android Debug"; then
+            echo "::error::Release APK is signed with the Android DEBUG key — refusing to upload."
+            exit 1
+          fi
+          echo "APK=$APK" >> "$GITHUB_ENV"
+      - name: Upload signed APK to GitHub Release
         if: runner.os == 'Linux'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -171,12 +171,10 @@ jobs:
           set -e
           VERSION=$(node -p "require('./package.json').version")
           TAG="v$VERSION"
-          if [ -z "${APK_SRC:-}" ] || [ ! -f "$APK_SRC" ]; then
-            echo "No APK built; skipping upload."
-            exit 0
+          if [ -z "${APK:-}" ] || [ ! -f "$APK" ]; then
+            echo "::error::No signed APK produced — aborting release upload."
+            exit 1
           fi
-          cp "$APK_SRC" "clinical-rx-$VERSION.apk"
+          cp "$APK" "clinical-rx-$VERSION.apk"
           echo "Uploading clinical-rx-$VERSION.apk to $TAG ..."
-          gh release upload "$TAG" "clinical-rx-$VERSION.apk" --clobber 2>/dev/null \
-            || gh release create "$TAG" "clinical-rx-$VERSION.apk" --title "ClinicalRx $VERSION" --notes "Android APK for $VERSION" \
-            || echo "Upload failed (release busy) — will retry on next push."
+          gh release upload "$TAG" "clinical-rx-$VERSION.apk" --clobber

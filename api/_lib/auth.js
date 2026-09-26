@@ -1,6 +1,11 @@
 const crypto = require('crypto');
+const { effectiveSessionSecret, assertProductionReady } = require('./env.js');
 
-const SESSION_SECRET = process.env.SESSION_SECRET || 'dev-secret-change-me';
+// Enforce production environment validation at module load. Cold-start fails
+// loudly if production secrets are missing instead of silently using a
+// hardcoded fallback.
+assertProductionReady();
+
 const TOKEN_TTL_SECONDS = 60 * 60 * 24 * 30;
 
 function uuid() {
@@ -15,46 +20,51 @@ function hashPassword(password) {
   return `${salt}:${hash}`;
 }
 
-function verifyPassword(password, stored) {
-  return verifyHash(password, stored);
-}
+function verifyPassword(password, stored) { return verifyHash(password, stored); }
 
 function verifyHash(value, stored) {
+  if (typeof stored !== 'string') return false;
   const parts = stored.split(':');
   if (parts.length !== 2) return false;
   const [salt, hash] = parts;
-  const test = crypto.scryptSync(value, salt, 32);
+  if (!salt || !hash) return false;
+  let test;
+  try { test = crypto.scryptSync(value, salt, 32); } catch { return false; }
   const expected = Buffer.from(hash, 'hex');
-  return test.length === expected.length && crypto.timingSafeEqual(test, expected);
+  if (test.length !== expected.length) return false;
+  return crypto.timingSafeEqual(test, expected);
 }
 
-function b64url(buf) {
-  return buf.toString('base64url');
-}
+function b64url(buf) { return buf.toString('base64url'); }
 
 function signToken(userId) {
+  const secret = effectiveSessionSecret();
   const header = b64url(Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })));
-  const payload = b64url(
-    Buffer.from(JSON.stringify({ sub: userId, exp: Math.floor(Date.now() / 1000) + TOKEN_TTL_SECONDS }))
-  );
-  const sig = b64url(crypto.createHmac('sha256', SESSION_SECRET).update(`${header}.${payload}`).digest());
+  const payload = b64url(Buffer.from(JSON.stringify({
+    sub: userId,
+    iat: Math.floor(Date.now() / 1000),
+    exp: Math.floor(Date.now() / 1000) + TOKEN_TTL_SECONDS,
+  })));
+  const sig = b64url(crypto.createHmac('sha256', secret).update(`${header}.${payload}`).digest());
   return `${header}.${payload}.${sig}`;
 }
 
 function verifyToken(token) {
+  if (typeof token !== 'string' || !token) return null;
   try {
     const [h, p, s] = token.split('.');
     if (!h || !p || !s) return null;
-    const expected = b64url(crypto.createHmac('sha256', SESSION_SECRET).update(`${h}.${p}`).digest());
+    const secret = effectiveSessionSecret();
+    const expected = b64url(crypto.createHmac('sha256', secret).update(`${h}.${p}`).digest());
     const a = Buffer.from(expected);
     const b = Buffer.from(s);
-    if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return null;
+    if (a.length !== b.length) return null;
+    if (!crypto.timingSafeEqual(a, b)) return null;
     const payload = JSON.parse(Buffer.from(p, 'base64url').toString());
     if (typeof payload.exp === 'number' && payload.exp < Date.now() / 1000) return null;
+    if (typeof payload.sub !== 'string' || !payload.sub) return null;
     return payload.sub;
-  } catch {
-    return null;
-  }
+  } catch { return null; }
 }
 
-module.exports = { uuid, hashPassword, verifyPassword, verifyHash, signToken, verifyToken };
+module.exports = { uuid, hashPassword, verifyPassword, verifyHash, signToken, verifyToken, TOKEN_TTL_SECONDS };

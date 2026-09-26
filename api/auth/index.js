@@ -9,6 +9,7 @@ const {
 } = require('../_lib/auth.js');
 const { guard, fail, ok } = require('../_lib/errors.js');
 const { rateLimit, consume } = require('../_lib/rateLimit.js');
+const { canSendResetEmail, allowDevResetTokenReturn, detectMode } = require('../_lib/env.js');
 
 function emailOf(req) { return String(req.body?.email || '').trim().toLowerCase(); }
 function tokenOf(req) {
@@ -145,30 +146,45 @@ async function handler(req, res) {
   }
 
   // ---- FORGOT ----
+  // Security properties (fail-closed in production):
+  //   * Always returns the same generic response (no account enumeration).
+  //   * Reset tokens are 32 random bytes, single-use, 30-minute TTL.
+  //   * Only a SHA-256 hash of the token is stored in Redis.
+  //   * Production: email via Resend is used; plaintext token NEVER returned.
+  //   * Development: token returned ONLY with explicit CRX_DEV_EXPOSE_RESET_TOKEN=1.
   if (action === 'forgot') {
     const { email } = req.body || {};
     if (!email) return fail(res, 400, 'Email is required.');
     const e = emailOf(req);
+    const GENERIC = 'If an account exists for that email, a reset link has been sent.';
     const user = await findUserByEmail(e);
-    if (!user) return ok(res, 200, { message: 'If an account exists for that email, a reset link has been sent.' });
-    const token = crypto.randomBytes(32).toString('hex');
-    const expires = Date.now() + 30 * 60 * 1000;
-    await redis.set(`reset:${token}`, JSON.stringify({ email: e, expires }));
-    const appUrl = process.env.APP_URL || 'https://clinicalrx30.vercel.app';
-    const resetUrl = `${appUrl}/#/reset?token=${encodeURIComponent(token)}&email=${encodeURIComponent(e)}`;
-    if (process.env.RESEND_API_KEY) {
-      try {
-        await fetch('https://api.resend.com/emails', {
+
+    if (user) {
+      const tokenPlain = crypto.randomBytes(32).toString('hex');
+      const tokenHash = crypto.createHash('sha256').update(tokenPlain).digest('hex');
+      const ttlMs = 30 * 60 * 1000;
+      await redis.set(`reset:${tokenHash}`, JSON.stringify({ email: e, expires: Date.now() + ttlMs, used: false }), 'PX', ttlMs);
+
+      const appUrl = process.env.APP_URL || '';
+      const resetUrl = appUrl
+        ? `${appUrl}/#/reset?token=${encodeURIComponent(tokenPlain)}&email=${encodeURIComponent(e)}`
+        : null;
+
+      if (process.env.RESEND_API_KEY && process.env.FROM_EMAIL && resetUrl) {
+        fetch('https://api.resend.com/emails', {
           method: 'POST',
           headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ from: process.env.FROM_EMAIL || 'noreply@clinicalrx.app', to: e, subject: 'CLINICAL Rx — Password reset', html: `<p>Click below to reset your password (expires in 30 min):</p><a href="${resetUrl}">Reset password</a>` }),
-        });
-        return ok(res, 200, { message: 'If an account exists for that email, a reset link has been sent.' });
-      } catch {
-        return fail(res, 502, 'Reset email could not be sent. Please try again shortly, or use the security-question reset.');
+          body: JSON.stringify({
+            from: process.env.FROM_EMAIL, to: e,
+            subject: 'CLINICAL Rx — Password reset',
+            html: `<p>Click below to reset your password (link expires in 30 minutes and can only be used once):</p><a href="${resetUrl}">Reset password</a><p>If you did not request this, ignore this email.</p>`,
+          }),
+        }).catch((err) => { console.error('[clinical-rx] Resend error:', err?.message); });
+      } else if (detectMode() !== 'production' && allowDevResetTokenReturn() && resetUrl) {
+        return ok(res, 200, { message: GENERIC + ' [dev — reset link not emailed]', resetUrl });
       }
     }
-    return ok(res, 200, { message: `Reset token (dev — no mail configured): ${token}`, resetUrl });
+    return ok(res, 200, { message: GENERIC });
   }
 
   // ---- SECURITY QUESTION (fetch) ----
@@ -185,8 +201,13 @@ async function handler(req, res) {
     const { method, email, password, token, securityAnswer, adminToken } = req.body || {};
 
     if (method === 'admin') {
-      if (adminToken !== process.env.ADMIN_RESET_TOKEN) return fail(res, 403, 'Invalid admin token.');
+      if (!process.env.ADMIN_RESET_TOKEN) return fail(res, 403, 'Admin reset is not configured on this server.');
+      const expected = process.env.ADMIN_RESET_TOKEN;
+      const a = Buffer.from(String(adminToken || ''));
+      const b = Buffer.from(expected);
+      if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return fail(res, 403, 'Invalid admin token.');
       if (!email || !password) return fail(res, 400, 'Email and password required.');
+      if (String(password).length < 6) return fail(res, 400, 'Password must be at least 6 characters.');
       const e = emailOf(req);
       const user = await findUserByEmail(e);
       if (!user) return fail(res, 404, 'User not found.');
@@ -196,18 +217,24 @@ async function handler(req, res) {
     }
 
     if (method === 'token') {
-      if (!token || !email || !password) return fail(res, 400, 'Token, email, and password required.');
-      const raw = await redis.get(`reset:${token}`);
+      if (!token || !email || !password) return fail(res, 400, 'Token, email, and new password required.');
+      if (String(password).length < 6) return fail(res, 400, 'Password must be at least 6 characters.');
+      if (String(token).length !== 64 || !/^[a-f0-9]{64}$/.test(token)) return fail(res, 400, 'Invalid or expired token.');
+      const tokenHash = crypto.createHash('sha256').update(String(token)).digest('hex');
+      const raw = await redis.get(`reset:${tokenHash}`);
       if (!raw) return fail(res, 400, 'Invalid or expired token.');
-      const data = JSON.parse(raw);
-      if (data.expires < Date.now()) return fail(res, 400, 'Token expired.');
+      let data;
+      try { data = JSON.parse(raw); } catch { return fail(res, 400, 'Invalid or expired token.'); }
+      if (!data || data.used) { await redis.del(`reset:${tokenHash}`); return fail(res, 400, 'Invalid or expired token.'); }
+      if (!data.expires || data.expires < Date.now()) { await redis.del(`reset:${tokenHash}`); return fail(res, 400, 'Token expired.'); }
       const e = emailOf(req);
       if (data.email !== e) return fail(res, 400, 'Email mismatch.');
       const user = await findUserByEmail(e);
       if (!user) return fail(res, 404, 'User not found.');
       user.password = hashPassword(password);
       await redis.hset('users', { [e]: JSON.stringify(user) });
-      await redis.del(`reset:${token}`);
+      // Single-use: invalidate immediately to prevent replay.
+      await redis.del(`reset:${tokenHash}`);
       return ok(res, 200, { message: 'Password reset successfully.' });
     }
 
