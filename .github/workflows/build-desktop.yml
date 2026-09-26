@@ -1,16 +1,5 @@
 name: Build & Release Desktop App
 
-# HOW TO USE
-# ----------
-# Every push to `main`:
-#   - builds Windows (NSIS .exe + latest.yml) and Linux (.deb + AppImage
-#     + latest-linux.yml) Electron apps.
-#   - builds an Android APK via Capacitor and uploads it to the same
-#     GitHub Release as clinical-rx-<version>.apk (sideload on phone).
-#   - publishes assets to a real GitHub Release (not draft/prerelease),
-#     which is what the in-app "🔄 Update" button reads.
-# Bump "version" in package.json to make the in-app updater fire.
-
 on:
   push:
     branches: [main, arena/*]
@@ -23,7 +12,6 @@ permissions:
 jobs:
   build:
     name: Build ${{ matrix.os }}
-    # PRs / non-main branches: build only, upload artifacts (no release).
     if: github.ref != 'refs/heads/main'
     runs-on: ${{ matrix.os }}
     strategy:
@@ -42,11 +30,7 @@ jobs:
           cache: npm
 
       - name: Install dependencies
-        run: npm ci --ignore-scripts
-
-      - name: Rebuild native modules
-        if: runner.os == 'Linux' || runner.os == 'Windows'
-        run: npm rebuild better-sqlite3 --build-from-source
+        run: npm ci
 
       - name: Type-check
         run: npm run typecheck
@@ -70,36 +54,17 @@ jobs:
           distribution: temurin
           java-version: 17
 
-      - name: Set up Android SDK cmdline-tools
+      - name: Set up Android SDK
         if: matrix.os == 'ubuntu-latest'
-        shell: bash
-        run: |
-          set -eux
-          ANDROID_HOME=${ANDROID_HOME:-$HOME/android-sdk}
-          mkdir -p "$ANDROID_HOME/cmdline-tools"
-          if [ ! -x "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" ]; then
-            CMDTOOLS_URL="https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip"
-            curl -fsSL "$CMDTOOLS_URL" -o /tmp/cmdtools.zip
-            unzip -q -o /tmp/cmdtools.zip -d "$ANDROID_HOME/cmdline-tools"
-            rm -rf "$ANDROID_HOME/cmdline-tools/latest"
-            mv "$ANDROID_HOME/cmdline-tools/cmdline-tools" "$ANDROID_HOME/cmdline-tools/latest"
-          fi
-          echo "ANDROID_HOME=$ANDROID_HOME" >> "$GITHUB_ENV"
-          echo "$ANDROID_HOME/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
-          echo "$ANDROID_HOME/platform-tools" >> "$GITHUB_PATH"
-          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null 2>&1 || true
-          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
-            "platform-tools" \
-            "platforms;android-34" \
-            "build-tools;34.0.0"
-          echo "--- installed packages ---"
-          sdkmanager --list_installed | grep -E 'platform-tools|platforms;android-34|build-tools;34.0.0'
+        uses: android-actions/setup-android@v4
+        with:
+          packages: platform-tools platforms;android-34 build-tools;34.0.0
 
       - name: Sync Capacitor web assets
         if: matrix.os == 'ubuntu-latest'
         run: npx cap sync android
 
-      - name: Build Android APK (debug, installable)
+      - name: Build Android APK (debug)
         if: matrix.os == 'ubuntu-latest'
         run: |
           cd android
@@ -126,7 +91,6 @@ jobs:
 
   release:
     name: Release ${{ matrix.os }}
-    # Push to main: build AND publish a GitHub Release automatically.
     if: github.ref == 'refs/heads/main'
     runs-on: ${{ matrix.os }}
     strategy:
@@ -145,11 +109,7 @@ jobs:
           cache: npm
 
       - name: Install dependencies
-        run: npm ci --ignore-scripts
-
-      - name: Rebuild native modules
-        if: runner.os == 'Linux' || runner.os == 'Windows'
-        run: npm rebuild better-sqlite3 --build-from-source
+        run: npm ci
 
       - name: Type-check
         run: npm run typecheck
@@ -174,30 +134,11 @@ jobs:
           distribution: temurin
           java-version: 17
 
-      - name: Set up Android SDK cmdline-tools
+      - name: Set up Android SDK
         if: matrix.os == 'ubuntu-latest'
-        shell: bash
-        run: |
-          set -eux
-          ANDROID_HOME=${ANDROID_HOME:-$HOME/android-sdk}
-          mkdir -p "$ANDROID_HOME/cmdline-tools"
-          if [ ! -x "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" ]; then
-            CMDTOOLS_URL="https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip"
-            curl -fsSL "$CMDTOOLS_URL" -o /tmp/cmdtools.zip
-            unzip -q -o /tmp/cmdtools.zip -d "$ANDROID_HOME/cmdline-tools"
-            rm -rf "$ANDROID_HOME/cmdline-tools/latest"
-            mv "$ANDROID_HOME/cmdline-tools/cmdline-tools" "$ANDROID_HOME/cmdline-tools/latest"
-          fi
-          echo "ANDROID_HOME=$ANDROID_HOME" >> "$GITHUB_ENV"
-          echo "$ANDROID_HOME/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
-          echo "$ANDROID_HOME/platform-tools" >> "$GITHUB_PATH"
-          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null 2>&1 || true
-          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
-            "platform-tools" \
-            "platforms;android-34" \
-            "build-tools;34.0.0"
-          echo "--- installed packages ---"
-          sdkmanager --list_installed | grep -E 'platform-tools|platforms;android-34|build-tools;34.0.0'
+        uses: android-actions/setup-android@v4
+        with:
+          packages: platform-tools platforms;android-34 build-tools;34.0.0
 
       - name: Build Android APK
         if: matrix.os == 'ubuntu-latest'
@@ -209,17 +150,14 @@ jobs:
         run: |
           set -e
           npx cap sync android
-          if [ -n "$ANDROID_KEYSTORE_BASE64" ]; then
-            echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > android/app/release-keystore.p12
-            echo "Keystore injected — release APK will be signed."
-          else
-            echo "No keystore secret — building debug APK (installable)."
-          fi
           cd android
           if [ -n "$ANDROID_KEYSTORE_BASE64" ]; then
+            echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > app/release-keystore.p12
+            echo "Keystore injected — building release APK."
             ./gradlew assembleRelease --no-daemon
             APK_SRC=$(ls app/build/outputs/apk/release/app-release.apk 2>/dev/null || true)
           else
+            echo "No keystore secret — building debug APK."
             ./gradlew assembleDebug --no-daemon
             APK_SRC=$(ls app/build/outputs/apk/debug/app-debug.apk 2>/dev/null || true)
           fi
