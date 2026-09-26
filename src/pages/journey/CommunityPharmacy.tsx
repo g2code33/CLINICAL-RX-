@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { PageHeader } from '../../components/ui';
+import { useConfirm } from '../../components/ui/primitives';
 import { JourneyAiButton } from '../../components/JourneyAiButton';
 import { useData } from '../../stores/data';
 import {
@@ -331,6 +332,7 @@ function EncounterCard({ encounter, onOpen }: { encounter: CPEncounter; onOpen: 
 }
 
 function EncounterEditor({ encounter, drugCards, onClose }: { encounter: CPEncounter; drugCards: CPDrugCard[]; onClose: () => void }) {
+  const { confirm } = useConfirm();
   const [e, setE] = useState<CPEncounter>({ ...encounter });
   const [symptomInput, setSymptomInput] = useState('');
   const [comorbInput, setComorbInput] = useState('');
@@ -359,7 +361,7 @@ function EncounterEditor({ encounter, drugCards, onClose }: { encounter: CPEncou
   }
 
   async function del() {
-    if (!confirm('Delete this encounter?')) return;
+    if (!(await confirm({ title: 'Delete encounter?', message: 'This cannot be undone.', confirmLabel: 'Delete', destructive: true }))) return;
     await deleteCareerRecord('cpEncounter', e.id);
     onClose();
   }
@@ -416,7 +418,7 @@ function EncounterEditor({ encounter, drugCards, onClose }: { encounter: CPEncou
         </div>
         <div className="flex flex-wrap gap-2">
           <JourneyAiButton mode="community" section={`cp-encounter-${e.id}`} prompt={aiPrompt} />
-          <button className="btn-secondary" onClick={del} title="Delete">
+          <button className="btn-secondary" onClick={del} title="Delete" aria-label="Delete">
             🗑
           </button>
           <button className="btn-primary" onClick={saveAndClose}>
@@ -753,6 +755,7 @@ function DrugCard({ card, encounters, onOpen }: { card: CPDrugCard; encounters: 
 }
 
 function DrugEditor({ card, onClose }: { card: CPDrugCard; onClose: () => void }) {
+  const { confirm } = useConfirm();
   const [d, setD] = useState<CPDrugCard>({ ...card });
   const [brand, setBrand] = useState('');
   const [ind, setInd] = useState('');
@@ -787,7 +790,7 @@ function DrugEditor({ card, onClose }: { card: CPDrugCard; onClose: () => void }
   }
   async function saveAndClose() { await save(); onClose(); }
   async function del() {
-    if (!confirm('Delete this drug card?')) return;
+    if (!(await confirm({ title: 'Delete drug card?', message: 'This cannot be undone.', confirmLabel: 'Delete', destructive: true }))) return;
     await deleteCareerRecord('cpDrugCard', d.id);
     onClose();
   }
@@ -944,6 +947,7 @@ function ScenarioCard({ scen, onOpen }: { scen: CPScenario; onOpen: () => void }
 }
 
 function ScenarioEditor({ scen, onClose }: { scen: CPScenario; onClose: () => void }) {
+  const { confirm } = useConfirm();
   const [s, setS] = useState<CPScenario>({ ...scen });
   const [rf, setRf] = useState('');
   const [ok, setOk] = useState('');
@@ -963,7 +967,7 @@ function ScenarioEditor({ scen, onClose }: { scen: CPScenario; onClose: () => vo
   async function save() { await saveCareerRecord('cpScenario', { ...s, updatedAt: Date.now() }); }
   async function saveClose() { await save(); onClose(); }
   async function del() {
-    if (!confirm('Delete this scenario?')) return;
+    if (!(await confirm({ title: 'Delete scenario?', message: 'This cannot be undone.', confirmLabel: 'Delete', destructive: true }))) return;
     await deleteCareerRecord('cpScenario', s.id); onClose();
   }
 
@@ -1158,7 +1162,7 @@ function ChipInput({
           {chips.map((c) => (
             <span key={c} className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-xs dark:bg-slate-800">
               {c}
-              <button type="button" onClick={() => onRemove(c)} className="opacity-50 hover:opacity-100">×</button>
+              <button type="button" onClick={() => onRemove(c)} className="opacity-50 hover:opacity-100" aria-label="Remove">×</button>
             </span>
           ))}
         </div>
@@ -1340,7 +1344,7 @@ Medium: ${med.join('; ') || '—'}`);
                     onClick={() => update(it.id, { mastered: !it.mastered })}>
                     {it.mastered ? '↩ Unmaster' : '✓ Mastered'}
                   </button>
-                  <button className="btn-ghost !px-2 !py-1 text-xs text-red-600" onClick={() => remove(it.id)}>×</button>
+                  <button className="btn-ghost !px-2 !py-1 text-xs text-red-600" onClick={() => remove(it.id)} aria-label="Remove item">×</button>
                 </div>
               );
             })}
@@ -1523,7 +1527,7 @@ function StartersManager({
             <h3 className="text-lg font-semibold">⚙️ Manage starter scenarios</h3>
             <p className="text-xs opacity-70">One scenario per line (plain text or JSON array). The AI can also generate more for you.</p>
           </div>
-          <button className="btn-ghost" onClick={onClose}>×</button>
+          <button className="btn-ghost" onClick={onClose} aria-label="Close">×</button>
         </div>
 
         <div className="flex flex-wrap items-center gap-2 rounded border border-slate-200 p-2 dark:border-slate-700">

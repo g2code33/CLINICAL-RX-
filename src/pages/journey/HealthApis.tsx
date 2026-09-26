@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { PageHeader } from '../../components/ui';
+import { useConfirm } from '../../components/ui/primitives';
 import { Modal } from '../../components/Modal';
 import { useNavigate } from 'react-router-dom';
 import { JourneyAiButton } from '../../components/JourneyAiButton';
@@ -18,6 +19,7 @@ const CAT_COLORS: Record<HealthApiCategory, { bar: string; tab: string; ring: st
 };
 
 export default function HealthApisPage() {
+  const { confirm } = useConfirm();
   const navigate = useNavigate();
   const settings = useData((s) => s.settings);
   const initStore = useHealthApiStore((s) => s._init);
@@ -135,7 +137,7 @@ export default function HealthApisPage() {
         <div className="space-y-3">
           <div className="flex flex-wrap items-center gap-2">
             <input className="input flex-1 min-w-40" placeholder="Search title, tag or query…" value={historySearch} onChange={(e) => setHistorySearch(e.target.value)} />
-            <button className="btn-secondary" onClick={() => { if (confirm('Clear all history?')) clearHistory(); }}>Clear all</button>
+            <button className="btn-secondary" onClick={async () => { if (await confirm({ title: 'Clear all history?', message: 'This removes saved searches and favourites.', confirmLabel: 'Clear', destructive: true })) clearHistory(); }}>Clear all</button>
           </div>
           <div className="flex flex-wrap gap-1.5">
             <button onClick={() => setHistoryScope('all')} className={`rounded-full border px-3 py-1 text-xs font-bold ${historyScope === 'all' ? 'border-brand-500 bg-brand-600 text-white' : 'border-slate-200 bg-white text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200'}`}>All ({entries.length})</button>
