@@ -152,7 +152,7 @@ jobs:
           echo "Keystore injected. Building signed release APK."
           echo "sdk.dir=${ANDROID_HOME:-$ANDROID_SDK_ROOT}" > local.properties
           ./gradlew assembleRelease --no-daemon --stacktrace
-          APK=$(ls app/build/outputs/apk/release/*.apk 2>/dev/null | head -n1 || true)
+          APK=$(find app/build/outputs/apk/release -type f -name '*.apk' ! -name '*-unaligned.apk' 2>/dev/null | head -n1 || true)
           if [ -z "$APK" ] || [ ! -f "$APK" ]; then
             echo "::error::No release APK found under app/build/outputs/apk/release/. Contents:"
             find app/build/outputs/apk -type f -name '*.apk' 2>/dev/null || true
@@ -165,7 +165,7 @@ jobs:
             echo "::error::Release APK is signed with the Android DEBUG key — refusing to upload."
             exit 1
           fi
-          echo "APK=$APK" >> "$GITHUB_ENV"
+          echo "APK=$PWD/$APK" >> "$GITHUB_ENV"
       - name: Upload signed APK to GitHub Release
         if: runner.os == 'Linux'
         env:
