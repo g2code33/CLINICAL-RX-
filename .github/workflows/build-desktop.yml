@@ -17,7 +17,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        os: [ubuntu-22.04, windows-latest]
 
     steps:
       - name: Check out repository
@@ -48,30 +48,30 @@ jobs:
 
       # ----- Android APK (ubuntu leg only) -----
       - name: Set up JDK 17
-        if: matrix.os == 'ubuntu-latest'
+        if: runner.os == 'Linux'
         uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: 17
 
       - name: Set up Android SDK
-        if: matrix.os == 'ubuntu-latest'
+        if: runner.os == 'Linux'
         uses: android-actions/setup-android@v4
         with:
-          packages: platform-tools platforms;android-34 build-tools;34.0.0
+          packages: platform-tools platforms;android-36 build-tools;36.0.0 platforms;android-34 build-tools;34.0.0
 
       - name: Sync Capacitor web assets
-        if: matrix.os == 'ubuntu-latest'
+        if: runner.os == 'Linux'
         run: npx cap sync android
 
       - name: Build Android APK (debug)
-        if: matrix.os == 'ubuntu-latest'
+        if: runner.os == 'Linux'
         run: |
           cd android
-          ./gradlew assembleDebug --no-daemon
+          echo "sdk.dir=${ANDROID_HOME:-$ANDROID_SDK_ROOT}" > local.properties && cat local.properties && ./gradlew assembleDebug --no-daemon --stacktrace
 
       - name: Upload Android APK artifact
-        if: matrix.os == 'ubuntu-latest'
+        if: runner.os == 'Linux'
         uses: actions/upload-artifact@v4
         with:
           name: clinical-rx-android-apk
@@ -96,7 +96,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        os: [ubuntu-22.04, windows-latest]
 
     steps:
       - name: Check out repository
@@ -128,20 +128,20 @@ jobs:
 
       # ----- Android APK (ubuntu leg only) -----
       - name: Set up JDK 17
-        if: matrix.os == 'ubuntu-latest'
+        if: runner.os == 'Linux'
         uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: 17
 
       - name: Set up Android SDK
-        if: matrix.os == 'ubuntu-latest'
+        if: runner.os == 'Linux'
         uses: android-actions/setup-android@v4
         with:
-          packages: platform-tools platforms;android-34 build-tools;34.0.0
+          packages: platform-tools platforms;android-36 build-tools;36.0.0 platforms;android-34 build-tools;34.0.0
 
       - name: Build Android APK
-        if: matrix.os == 'ubuntu-latest'
+        if: runner.os == 'Linux'
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
@@ -154,17 +154,17 @@ jobs:
           if [ -n "$ANDROID_KEYSTORE_BASE64" ]; then
             echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > app/release-keystore.p12
             echo "Keystore injected — building release APK."
-            ./gradlew assembleRelease --no-daemon
+            echo "sdk.dir=${ANDROID_HOME:-$ANDROID_SDK_ROOT}" > local.properties && cat local.properties && ./gradlew assembleRelease --no-daemon --stacktrace
             APK_SRC=$(ls app/build/outputs/apk/release/app-release.apk 2>/dev/null || true)
           else
             echo "No keystore secret — building debug APK."
-            ./gradlew assembleDebug --no-daemon
+            echo "sdk.dir=${ANDROID_HOME:-$ANDROID_SDK_ROOT}" > local.properties && cat local.properties && ./gradlew assembleDebug --no-daemon --stacktrace
             APK_SRC=$(ls app/build/outputs/apk/debug/app-debug.apk 2>/dev/null || true)
           fi
           echo "APK_SRC=$APK_SRC" >> "$GITHUB_ENV"
 
       - name: Upload Android APK to release
-        if: matrix.os == 'ubuntu-latest'
+        if: runner.os == 'Linux'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
