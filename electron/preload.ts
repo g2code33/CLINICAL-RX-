@@ -7,6 +7,10 @@ const api = {
   platform: () => ipcRenderer.invoke('app:platform') as Promise<string>,
   installType: () => ipcRenderer.invoke('app:installType') as Promise<string>,
   notify: (payload: { title?: string; body?: string }) => ipcRenderer.invoke('notify', payload),
+  // Diagnostic logger: renderer can forward logs to the main process so they
+  // appear in the terminal where electron was launched (critical for
+  // diagnosing init/bridge issues on user machines).
+  log: (level: string, ...args: unknown[]) => ipcRenderer.invoke('app:log', level, args),
   list: (module: string) => ipcRenderer.invoke('kv:list', module),
   get: (module: string, id: string) => ipcRenderer.invoke('kv:get', module, id),
   put: (module: string, id: string, data: unknown, createdAt: number, updatedAt: number) =>

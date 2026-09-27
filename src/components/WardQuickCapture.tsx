@@ -16,12 +16,14 @@ export function WardQuickCapture({
   open,
   roundId,
   initialType,
+  patientLabel,
   onClose,
   onSaved,
 }: {
   open: boolean;
   roundId: string;
   initialType?: WardEntryType | null;
+  patientLabel?: string;
   onClose: () => void;
   onSaved?: () => void;
 }) {
@@ -92,6 +94,7 @@ export function WardQuickCapture({
         {
           linkId: linkId ?? undefined,
           reasoning: isReasoning ? { ...reasoning } : undefined,
+          patientLabel: patientLabel?.trim() || undefined,
         }
       );
       setJustSaved(linkId ? `${meta?.icon} Saved · linked to ${linkName}` : `${meta?.icon} Saved`);
@@ -124,7 +127,7 @@ export function WardQuickCapture({
   async function keepOriginal() {
     const text = nlText.trim();
     if (!text) return;
-    await addEntry(roundId, 'note', '', text);
+    await addEntry(roundId, 'note', '', text, 'medium', { patientLabel: patientLabel?.trim() || undefined });
     setNlText('');
     setSuggestions(null);
     onSaved?.();
@@ -132,7 +135,7 @@ export function WardQuickCapture({
   }
 
   async function acceptSuggestion(s: WardSuggestion, index: number) {
-    await addEntry(roundId, s.type, s.title, s.content);
+    await addEntry(roundId, s.type, s.title, s.content, 'medium', { patientLabel: patientLabel?.trim() || undefined });
     setSuggestions((prev) => (prev ? prev.filter((_, i) => i !== index) : prev));
     onSaved?.();
     setJustSaved('✓ Added');
@@ -140,7 +143,7 @@ export function WardQuickCapture({
 
   async function acceptAll() {
     if (!suggestions) return;
-    for (const s of suggestions) await addEntry(roundId, s.type, s.title, s.content);
+    for (const s of suggestions) await addEntry(roundId, s.type, s.title, s.content, 'medium', { patientLabel: patientLabel?.trim() || undefined });
     setSuggestions(null);
     setNlText('');
     onSaved?.();
@@ -153,6 +156,11 @@ export function WardQuickCapture({
 
   return (
     <Modal open={open} onClose={onClose} title="⚡ Quick Capture" wide={nlOpen}>
+      {patientLabel && (
+        <div className="mb-3 rounded-lg bg-brand-50 px-3 py-2 text-sm font-medium text-brand-800 dark:bg-brand-950 dark:text-brand-200">
+          🧑‍⚕️ Capturing for: <strong>{patientLabel}</strong>
+        </div>
+      )}
       {justSaved && (
         <div className="mb-3 rounded-lg bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
           {justSaved} · keep going, the round is still open
@@ -271,7 +279,7 @@ export function WardQuickCapture({
               return (
                 <button
                   key={t}
-                  className="flex flex-col items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-4 text-center transition-colors hover:border-brand-500 hover:bg-brand-50 dark:border-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700"
+                  className="flex flex-col items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-4 text-center text-slate-900 transition-colors hover:border-brand-500 hover:bg-brand-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700"
                   onClick={() => setType(t)}
                 >
                   <span className="text-2xl leading-none">{m.icon}</span>

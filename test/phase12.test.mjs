@@ -55,7 +55,7 @@ try {
   console.log('\n1 — ADMIN SECTION IS BACK');
 
   const app = read('src/App.tsx');
-  check('the /admin route exists', app.includes('path="/admin"'));
+  check('the /admin route exists', app.includes("path: '/admin'") || app.includes('path="/admin"'));
   check('admin is in the clinical sidebar', layout.includes("{ to: '/admin'"));
   check('admin is in the PharmD sidebar too', layout.split("{ to: '/admin'").length - 1 >= 2);
   check('admin is a top-level Settings destination', settings.includes("navigate('/admin')") && settings.includes('Admin Panel →'));

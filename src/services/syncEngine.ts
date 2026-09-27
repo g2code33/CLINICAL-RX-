@@ -421,6 +421,8 @@ export interface SyncOutcome {
   pushed: number;
   pulled: number;
   message?: string;
+  /** HTTP status when the failure was a server response (0 = network/unknown). */
+  status?: number;
 }
 
 /** Push pending changes, then pull the canonical set and apply it locally. */
@@ -449,14 +451,14 @@ export async function syncNow(): Promise<SyncOutcome> {
     const lastSynced = useData.getState().settings?.onlineAccount?.lastSynced;
     const since = typeof lastSynced === 'number' ? lastSynced : undefined;
     const pull = await syncClient.pull(backendUrl(), token, since);
-    if (!pull.ok) return { ok: false, pushed: 0, pulled: 0, message: pull.error };
+    if (!pull.ok) return { ok: false, pushed: 0, pulled: 0, message: pull.error, status: pull.status ?? 0 };
     await applyServerRecords(pull.data.records);
     await touchLastSynced();
     return { ok: true, pushed: 0, pulled: pull.data.records.length };
   }
 
   const push = await syncClient.push(backendUrl(), token, toSend);
-  if (!push.ok) return { ok: false, pushed: 0, pulled: 0, message: push.error };
+  if (!push.ok) return { ok: false, pushed: 0, pulled: 0, message: push.error, status: push.status ?? 0 };
 
   // Merge FIRST (so conflict detection can still see what we sent), then
   // clear only what we actually sent — anything filtered out (e.g. AI chats
@@ -483,18 +485,18 @@ export async function syncNowFull(): Promise<SyncOutcome> {
   // Always do a full pull after pushing, to be certain all devices match.
   if (toSend.length === 0) {
     const pull = await syncClient.pull(backendUrl(), token);
-    if (!pull.ok) return { ok: false, pushed: 0, pulled: 0, message: pull.error };
+    if (!pull.ok) return { ok: false, pushed: 0, pulled: 0, message: pull.error, status: pull.status ?? 0 };
     await applyServerRecords(pull.data.records);
     await touchLastSynced();
     return { ok: true, pushed: 0, pulled: pull.data.records.length };
   }
 
   const push = await syncClient.push(backendUrl(), token, toSend);
-  if (!push.ok) return { ok: false, pushed: 0, pulled: 0, message: push.error };
+  if (!push.ok) return { ok: false, pushed: 0, pulled: 0, message: push.error, status: push.status ?? 0 };
   const sent = pending;
   savePending(loadPending().filter((p) => !allowed.has(p.module)));
   const pull = await syncClient.pull(backendUrl(), token);
-  if (!pull.ok) return { ok: false, pushed: toSend.length, pulled: 0, message: pull.error };
+  if (!pull.ok) return { ok: false, pushed: toSend.length, pulled: 0, message: pull.error, status: pull.status ?? 0 };
   await applyServerRecords(pull.data.records, sent);
   await touchLastSynced();
   return { ok: true, pushed: toSend.length, pulled: pull.data.records.length };

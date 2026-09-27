@@ -347,3 +347,212 @@ export function pendingWardAnalysisCount(): number {
 export function roundHasContent(roundId: string): boolean {
   return entriesFor(roundId).length > 0;
 }
+
+// ---- Ward Round AI Chat (dedicated section) -----------------------------
+
+/**
+ * Build a rich, detailed context about ONE ward round (and optionally one
+ * patient within it) to feed the Ward Round AI. This is deliberately much
+ * fuller than the whole-round analysis prompt so the AI can carry on a deep
+ * teaching conversation: full patient-by-patient grouping, linked records in
+ * the knowledge base, the round's reflection/focus, and connected clinical
+ * days/medicines/diseases from the rest of the app.
+ */
+export function buildRoundAiContext(roundId: string, patientLabel?: string | null): string {
+  const st = useData.getState();
+  const round = getRound(roundId);
+  if (!round) return '';
+  const allEntries = entriesFor(roundId);
+  // Optional: filter to one patient
+  const entries = patientLabel
+    ? allEntries.filter((e) => (e.patientLabel || '').trim() === patientLabel.trim())
+    : allEntries;
+
+  // Group entries by patient for readability
+  const byPatient: Record<string, WardEntry[]> = {};
+  const unassigned: WardEntry[] = [];
+  for (const e of entries) {
+    const p = (e.patientLabel || '').trim();
+    if (!p) { unassigned.push(e); continue; }
+    (byPatient[p] ||= []).push(e);
+  }
+
+  const fmtEntry = (e: WardEntry) => {
+    const meta = WARD_ENTRY_META[e.type];
+    const title = e.title ? ` [${meta.label}: ${e.title}]` : '';
+    const lines = [`  - ${meta.icon} ${meta.label}${title}`];
+    if (e.content) lines.push(`      ${e.content}`);
+    if (e.reasoning) {
+      const r = e.reasoning;
+      if (r.considered) lines.push(`      · Considered: ${r.considered}`);
+      if (r.relevantInfo) lines.push(`      · Relevant info: ${r.relevantInfo}`);
+      if (r.understood) lines.push(`      · Understood: ${r.understood}`);
+      if (r.confused) lines.push(`      · Confused about: ${r.confused}`);
+      if (r.investigateFurther) lines.push(`      · To investigate: ${r.investigateFurther}`);
+    }
+    if (e.aiSuggestion?.keyPoints?.length) {
+      lines.push(`      · Key points (accepted AI): ${e.aiSuggestion.keyPoints.join('; ')}`);
+    }
+    return lines.join('\n');
+  };
+
+  const out: string[] = [];
+  out.push('=== WARD ROUND FOCUS ===');
+  out.push(`Ward: ${round.ward}`);
+  out.push(`Date: ${round.date}`);
+  if (round.focus) out.push(`Focus: ${round.focus}`);
+  if (round.objective) out.push(`Objective: ${round.objective}`);
+  if (round.rotation) out.push(`Rotation: ${round.rotation}`);
+  out.push(`Status: ${round.status}${round.durationMinutes ? ` · ${round.durationMinutes} min` : ''}`);
+  const counts = countsFor(roundId);
+  out.push(`Captures: ${counts.total} total (${Object.entries(counts).filter(([k]) => k !== 'total').map(([k,v]) => `${k}:${v}`).join(', ')})`);
+
+  if (patientLabel) {
+    out.push('');
+    out.push(`=== PATIENT FOCUS: ${patientLabel} ===`);
+    out.push(`(Only discussing captures labelled "${patientLabel}". The student is de-identified, this is a learning case, not a patient record.)`);
+    const list = byPatient[patientLabel] || [];
+    if (!list.length) out.push('No captures yet for this patient.');
+    else list.forEach((e) => out.push(fmtEntry(e)));
+  } else {
+    out.push('');
+    out.push('=== CAPTURES BY PATIENT ===');
+    const patients = Object.keys(byPatient);
+    if (!patients.length && !unassigned.length) {
+      out.push('(No captures yet.)');
+    } else {
+      for (const p of patients) {
+        out.push(`\n🧑‍⚕️ ${p} (${byPatient[p].length} capture${byPatient[p].length === 1 ? '' : 's'})`);
+        byPatient[p].forEach((e) => out.push(fmtEntry(e)));
+      }
+      if (unassigned.length) {
+        out.push(`\n📝 Unassigned / general captures (${unassigned.length})`);
+        unassigned.forEach((e) => out.push(fmtEntry(e)));
+      }
+    }
+  }
+
+  if (round.reflection) {
+    out.push('');
+    out.push('=== END-OF-ROUND REFLECTION ===');
+    out.push(round.reflection);
+  }
+
+  const analysis = analysisFor(roundId);
+  if (analysis && analysis.status === 'completed') {
+    out.push('');
+    out.push('=== PREVIOUS AI ANALYSIS (for continuity) ===');
+    if (analysis.summary) out.push(`Summary: ${analysis.summary}`);
+    if (analysis.keyLearningPoints?.length) out.push('Key learning: ' + analysis.keyLearningPoints.join('; '));
+    if (analysis.knowledgeGaps?.length) out.push('Gaps: ' + analysis.knowledgeGaps.join('; '));
+    if (analysis.questions?.length) out.push('Open questions: ' + analysis.questions.join('; '));
+    if (analysis.revisionRecommendations?.length) out.push('Revision: ' + analysis.revisionRecommendations.join('; '));
+  }
+
+  return out.join('\n');
+}
+
+/**
+ * Open the Ward Round AI section preloaded for a specific round (and optional
+ * patient). Creates/reuses a chat session keyed by round+patient so continuing
+ * the conversation later resumes where the student left off.
+ *
+ * Because chats are saved to the 'wardRound' section, every conversation is
+ * automatically recorded and visible under the AI → Ward Round tab.
+ */
+export async function openRoundAi(roundId: string, patientLabel?: string | null, kickoffPrompt?: string): Promise<{ sessionId: string }> {
+  const st = useData.getState();
+  const round = getRound(roundId);
+  if (!round) throw new Error('Round not found');
+  const uid = (await import('../stores/data')).uid;
+  const now = Date.now();
+
+  // Session key: per-round, and per-patient if selected — so resuming the same
+  // patient's case continues that conversation, not a fresh one.
+  const sessionKey = patientLabel
+    ? `wr:${roundId}:${patientLabel.trim()}`
+    : `wr:${roundId}`;
+
+  // Find existing session tagged with this key (stored in the first line of
+  // title for easy lookup without schema change).
+  let session = st.chats.find((c) => c.section === 'wardRound' && c.title?.startsWith(`[${sessionKey}]`));
+
+  const patientSuffix = patientLabel ? ` · ${patientLabel}` : '';
+  const baseTitle = `[${sessionKey}] 🏥 ${round.ward} · ${round.date}${patientSuffix}`;
+
+  if (!session) {
+    session = {
+      id: uid(),
+      createdAt: now,
+      updatedAt: now,
+      section: 'wardRound',
+      title: baseTitle,
+      messages: [],
+      hidden: false,
+    };
+  }
+
+  // Seed the system+context as the FIRST user message if new, so the AI
+  // immediately has the full round loaded and the conversation starts live.
+  const isBrandNew = (session.messages?.length ?? 0) === 0;
+  if (isBrandNew) {
+    const ctx = buildRoundAiContext(roundId, patientLabel);
+    const seed = [
+      `I'm opening Ward Round AI for the round at ${round.ward} on ${round.date}${patientLabel ? `, focused on the patient labelled "${patientLabel}"` : ''}.`,
+      `Here is everything captured so far. Use it to teach me, quiz me, connect to pharmacology, and point out learning gaps. Always stay educational — no treatment decisions, remind me to verify with my supervisor/formulary when it matters.`,
+      '',
+      ctx,
+    ].join('\n');
+    // Seed message from user so the AI can respond with a welcome overview.
+    session.messages = [
+      ...(session.messages ?? []),
+      { id: uid(), role: 'user' as const, text: seed, ts: now },
+    ];
+    await st.save('chat', session);
+
+    // Run an opening AI response so the section opens already populated.
+    const opener = kickoffPrompt ||
+      (patientLabel
+        ? `Give me a focused walkthrough of ${patientLabel}'s case: summarise the medicines, conditions, key labs/investigations, likely reasoning, the most important learning points, common mistakes students make, and 3 follow-up questions I should be able to answer.`
+        : `Give me a concise overview of this ward round: top 5 learning points, the medications I should study more deeply, any clinical reasoning patterns worth noting, knowledge gaps I should close, and 3 quiz questions to test myself.`);
+    try {
+      const { aiChat: doChat } = await import('./ai');
+      const { getEffectiveAiConfig } = await import('./aiTools');
+      const cfg = getEffectiveAiConfig('wardRound');
+      if (cfg && cfg.enabled && cfg.apiKey) {
+        const systemPrompt = `CONTEXT FOR THIS CONVERSATION — the ward round data is in the first user message. Respond as a warm but rigorous clinical teacher. Speak to a pharmacy student at their recorded level. Use headings and bullet points for clarity. When referencing a medicine include class + 1-line mechanism + key counselling point. When referencing a condition include 1-line pathophys + typical first-line class (in general, not patient-specific advice). Point out drug-related problems, monitoring parameters, and counselling opportunities where relevant. End with a "Next to study" list of 3-5 concrete items. ${SAFETY}`;
+        const seedText = (session.messages ?? []).map(m => (m.role === 'ai' ? 'Assistant: ' : 'Student: ') + m.text).join('\n\n');
+        const combinedUser = `${seedText}\n\nStudent: ${opener}`;
+        const res = await doChat(cfg, systemPrompt, combinedUser);
+        if (res.ok) {
+          await st.save('chat', {
+            ...session,
+            messages: [
+              ...(session.messages ?? []),
+              { id: uid(), role: 'ai' as const, text: res.text, ts: Date.now() },
+            ],
+            updatedAt: Date.now(),
+          });
+        }
+      }
+    } catch (e) {
+      // AI not configured / key missing — session still exists, student types freely.
+    }
+  } else if (kickoffPrompt) {
+    // Continuing an existing session with a new question — append + run.
+    await st.save('chat', {
+      ...session,
+      messages: [...(session.messages ?? []), { id: uid(), role: 'user' as const, text: kickoffPrompt, ts: now }],
+      updatedAt: now,
+    });
+  }
+
+  return { sessionId: session.id };
+}
+
+/** Navigate to AI → Ward Round with a given session. Sets a transient
+ *  "openSessionId" in sessionStorage so AiChat can pick the right thread on load. */
+export function navigateToRoundAi(sessionId: string): void {
+  try { sessionStorage.setItem('crx:wardAiSession', sessionId); } catch { /* ignore */ }
+  window.location.hash = '#/ai';
+}

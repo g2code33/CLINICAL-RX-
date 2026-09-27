@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useData } from '../stores/data';
 import {
   currentStage as academicCurrentStage,
@@ -15,7 +15,7 @@ import {
 import { PageHeader, PasswordInput } from '../components/ui';
 import { Modal } from '../components/Modal';
 import { UpdatePanel } from '../components/UpdatePanel';
-import { AI_MODULES, newSettings } from '../services/defaults';
+import { AI_MODULES, HEALTH_APIS, HEALTH_API_CATEGORIES, newSettings } from '../services/defaults';
 import { loadSampleData, removeSampleData } from '../services/demo';
 import { syncClient, DEFAULT_BACKEND_URL } from '../services/syncClient';
 import { hasElectronBridge } from '../db/adapter';
@@ -30,6 +30,7 @@ const SECTIONS = [
   { key: 'general' as const, icon: '⚙️', label: 'General' },
   { key: 'appearance' as const, icon: '🎨', label: 'Appearance' },
   { key: 'ai' as const, icon: '🤖', label: 'AI' },
+  { key: 'healthApis' as const, icon: '🩺', label: 'Health APIs' },
   { key: 'account' as const, icon: '👤', label: 'Account' },
   { key: 'data' as const, icon: '🗂', label: 'Data' },
   { key: 'about' as const, icon: 'ℹ️', label: 'About' },
@@ -37,7 +38,16 @@ const SECTIONS = [
 type SectionKey = (typeof SECTIONS)[number]['key'];
 
 export function SettingsPage() {
-  const [section, setSection] = useState<SectionKey>('general');
+  const [sp, setSp] = useSearchParams();
+  const initial: SectionKey = (['general','appearance','ai','healthApis','account','data','about'] as SectionKey[]).includes(sp.get('section') as SectionKey)
+    ? (sp.get('section') as SectionKey)
+    : 'general';
+  const [section, setSection] = useState<SectionKey>(initial);
+  // Sync tab changes into the URL so deep links (e.g. /settings?section=healthApis) work.
+  const setSectionAndUrl = (s: SectionKey) => {
+    setSection(s);
+    setSp({ section: s }, { replace: true });
+  };
   const { confirm, confirmDialog } = useConfirm();
   const navigate = useNavigate();
   const settings = useData((s) => s.settings);
@@ -256,7 +266,7 @@ export function SettingsPage() {
                 ? 'bg-brand-600 text-white'
                 : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-slate-600'
             }`}
-            onClick={() => setSection(sec.key)}
+            onClick={() => setSectionAndUrl(sec.key)}
           >
             <span aria-hidden="true">{sec.icon}</span> {sec.label}
           </button>
@@ -436,6 +446,83 @@ export function SettingsPage() {
         </div>
       )}
 
+      {section === 'healthApis' && (
+        <div>
+          <div className="card">
+            <h2 className="mb-1 font-semibold">Health APIs (study data sources)</h2>
+            <p className="mb-3 text-xs text-slate-500 dark:text-slate-400">
+              Real pharmaceutical and medical data APIs for study — government references, commercial drug databases, clinical AI, EHR connectors and wearables.
+              Keys are stored <strong>only on this device</strong> and are <strong>never</strong> sent to an AI model.
+            </p>
+            {HEALTH_API_CATEGORIES.map((cat) => {
+              const apis = HEALTH_APIS.filter((a) => a.category === cat.id);
+              return (
+                <div key={cat.id} className="mb-4">
+                  <h3 className="mb-1 text-sm font-bold">{cat.label}</h3>
+                  <p className="mb-2 text-[11px] opacity-70">{cat.blurb}</p>
+                  <div className="grid gap-3 md:grid-cols-2">
+                    {apis.map((api) => {
+                      const cfg = (draft.healthApis?.[api.id]) ?? { name: api.name, key: '', enabled: false, baseUrl: '' };
+                      return (
+                        <div key={api.id} className="rounded-lg border border-slate-200 p-3 dark:border-slate-700">
+                          <div className="mb-1 flex items-center justify-between gap-2">
+                            <div className="text-sm font-semibold">{api.name}{!api.functional && <span className="ml-1 rounded bg-slate-200 px-1 text-[9px] font-bold uppercase dark:bg-slate-700">Setup</span>}</div>
+                            <a href={api.docs} target="_blank" rel="noreferrer" className="text-[11px] text-brand-600 underline-offset-2 hover:underline">Docs</a>
+                          </div>
+                          <div className="mb-1 text-[11px] opacity-80">{api.data}</div>
+                          <div className="mb-2 text-[10px] font-semibold text-slate-500 dark:text-slate-400">{api.access}</div>
+                          <div className="grid gap-2">
+                            <label className="flex items-center gap-2 text-xs">
+                              <input type="checkbox" className="h-4 w-4 accent-brand-600" checked={cfg.enabled}
+                                disabled={api.requiresKey && !cfg.key?.trim()}
+                                onChange={(e) => {
+                                  const apis = { ...(draft.healthApis ?? {}) };
+                                  apis[api.id] = { ...cfg, enabled: e.target.checked };
+                                  void persist({ ...draft, healthApis: apis });
+                                }} />
+                              Enable
+                            </label>
+                            {api.requiresKey && (
+                              <div>
+                                <label className="text-[11px] opacity-70">API key / token</label>
+                                <div className="flex gap-1">
+                                  <input type={showKeys['h:' + api.id] ? 'text' : 'password'} className="input !py-1.5 flex-1 text-xs"
+                                    placeholder={api.keyPlaceholder} value={cfg.key ?? ''}
+                                    onChange={(e) => { const apis = { ...(draft.healthApis ?? {}) }; apis[api.id] = { ...cfg, key: e.target.value }; void persist({ ...draft, healthApis: apis }); }} />
+                                  <button className="btn-secondary !py-1 text-[11px]" onClick={() => setShowKeys({ ...showKeys, ['h:' + api.id]: !showKeys['h:' + api.id] })}>{showKeys['h:' + api.id] ? 'Hide' : 'Show'}</button>
+                                </div>
+                              </div>
+                            )}
+                            {api.baseUrlPlaceholder && (
+                              <div>
+                                <label className="text-[11px] opacity-70">Base URL (optional)</label>
+                                <input className="input !py-1.5 w-full text-xs" placeholder={api.baseUrlPlaceholder} value={cfg.baseUrl ?? ''}
+                                  onChange={(e) => { const apis = { ...(draft.healthApis ?? {}) }; apis[api.id] = { ...cfg, baseUrl: e.target.value }; void persist({ ...draft, healthApis: apis }); }} />
+                              </div>
+                            )}
+                            <div className="flex gap-1">
+                              <a className="btn-secondary !py-1 text-[11px]" href={api.url} target="_blank" rel="noreferrer">Visit site</a>
+                            </div>
+                            <div>
+                              <label className="text-[11px] opacity-70">Notes</label>
+                              <input className="input !py-1.5 w-full text-xs" placeholder="e.g. Registered 2026-09-04" value={cfg.notes ?? ''}
+                                onChange={(e) => { const apis = { ...(draft.healthApis ?? {}) }; apis[api.id] = { ...cfg, notes: e.target.value }; void persist({ ...draft, healthApis: apis }); }} />
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+            <p className="mt-3 text-[11px] text-slate-400">
+              Locked: keys are stored only on this device. Browse the full <a className="underline" href="#/journey/health-apis">My Health APIs</a> workbench to query each API.
+            </p>
+          </div>
+        </div>
+      )}
+
       {section === 'account' && (
         <div className="grid gap-6 lg:grid-cols-2">
         {/* Online Account & Sync */}
@@ -527,6 +614,47 @@ export function SettingsPage() {
           </div>
           <p className="mt-3 text-[11px] text-slate-400">Data is stored locally (SQLite on desktop, browser storage on web). Backups are portable between the two.</p>
         </div>
+
+        {/* Web / PWA maintenance */}
+        {!hasElectronBridge() && (
+          <div className="card">
+            <h2 className="mb-3 font-semibold">🔄 App refresh (PWA / Web)</h2>
+            <p className="mb-3 text-xs text-slate-500 dark:text-slate-400">
+              When running as an installed app, the service worker can keep showing an older version. Use these if the UI looks stale or an update didn't apply.
+            </p>
+            <div className="space-y-2">
+              <button
+                className="btn-secondary w-full"
+                onClick={() => window.location.reload()}
+              >
+                🔃 Reload (soft)
+              </button>
+              <button
+                className="btn-primary w-full"
+                onClick={() => {
+                  import('../services/hardRefresh').then((m) => m.hardRefresh(true));
+                }}
+              >
+                ♻️ Hard refresh &amp; clear cache
+              </button>
+              <button
+                className="btn-secondary w-full"
+                onClick={() => navigate('/recycle-bin')}
+              >
+                🗑 Open Recycle Bin
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Recycle bin shortcut for desktop too */}
+        {hasElectronBridge() && (
+          <div className="card">
+            <h2 className="mb-3 font-semibold">🗑 Recycle Bin</h2>
+            <p className="mb-3 text-xs text-slate-500 dark:text-slate-400">Recover recently deleted items or permanently clear them.</p>
+            <button className="btn-secondary w-full" onClick={() => navigate('/recycle-bin')}>Open Recycle Bin →</button>
+          </div>
+        )}
         </div>
       )}
 
@@ -795,20 +923,28 @@ function AcademicSettings() {
                 key={st.id}
                 className={`flex flex-wrap items-center gap-2 rounded-lg border px-3 py-2 ${
                   isCurrent
-                    ? 'border-brand-400 bg-brand-50 dark:border-brand-600 dark:bg-brand-950'
-                    : 'border-slate-200 dark:border-slate-700'
+                    ? 'border-emerald-400 bg-emerald-50 text-emerald-950 shadow-sm dark:border-emerald-500 dark:bg-emerald-950/60 dark:text-emerald-50'
+                    : 'border-slate-200 text-slate-900 dark:border-slate-700 dark:text-slate-100'
                 }`}
               >
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-1.5">
                     <span className="text-sm font-semibold">{st.name}</span>
                     {/* Status in words + glyph, never colour alone. */}
-                    <span className="rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium dark:bg-slate-700">
+                    <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-medium ${
+                      isCurrent
+                        ? 'bg-emerald-600 text-white dark:bg-emerald-500'
+                        : 'bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-200'
+                    }`}>
                       {st.status === 'current' ? '● Current' : st.status === 'completed' ? '✓ Completed' : '○ Upcoming'}
                     </span>
                   </div>
                   <input
-                    className="mt-1 w-36 rounded border border-slate-300 bg-transparent px-2 py-0.5 text-xs dark:border-slate-600"
+                    className={`mt-1 w-36 rounded border px-2 py-0.5 text-xs ${
+                      isCurrent
+                        ? 'border-emerald-300 bg-white text-emerald-950 placeholder:text-emerald-700/60 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 dark:border-emerald-700 dark:bg-emerald-900/70 dark:text-emerald-50 dark:placeholder:text-emerald-300/50'
+                        : 'border-slate-300 bg-white text-slate-900 placeholder:text-slate-400 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100'
+                    }`}
                     value={st.academicYear}
                     aria-label={`Academic year for ${st.name}`}
                     onChange={(e) => void academicSaveStage({ ...st, academicYear: e.target.value })}

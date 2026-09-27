@@ -1,6 +1,6 @@
 const { redis } = require('./_lib/redis.js');
 const { verifyToken } = require('./_lib/auth.js');
-const { guard, fail, ok } = require('./_lib/errors.js');
+const { guard, fail, okWithToken } = require('./_lib/errors.js');
 const { rateLimit } = require('./_lib/rateLimit.js');
 
 const MAX_RECORDS_PER_PUSH = 5000;
@@ -24,7 +24,7 @@ async function handler(req, res) {
         if (rec && typeof rec.updatedAt === 'number' && rec.updatedAt >= since) records.push(rec);
       }
     }
-    return ok(res, 200, { records });
+    return okWithToken(res, 200, { records }, userId);
   }
 
   if (req.method === 'POST') {
@@ -76,7 +76,7 @@ async function handler(req, res) {
     }
     const all = await redis.hgetall(`sync:${userId}`);
     const result = all ? Object.values(all).map((v) => { try { return JSON.parse(v); } catch { return null; } }).filter(Boolean) : [];
-    return ok(res, 200, { records: result });
+    return okWithToken(res, 200, { records: result }, userId);
   }
 
   return fail(res, 405, 'Method not allowed');

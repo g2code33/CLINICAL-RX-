@@ -6,34 +6,134 @@ import { buildUnifiedContext } from './learning';
 import { contextForRecord, formatForAi, retrieveKnowledge } from './intelligence';
 
 export type AiModuleKey =
+  | 'chat'
   | 'tutor'
   | 'analyzer'
   | 'notes'
   | 'questionGen'
   | 'revision'
-  | 'chat'
-  | 'bundler';
+  | 'search'
+  | 'bundler'
+  | 'wardRound'
+  | 'research'
+  // Career/portfolio assistants
+  | 'career'
+  | 'community'
+  // PharmD Journey deep-modes (one per Journey tab, so each has its own
+  // key/persona/config in Settings and can borrow keys via the fallback chain)
+  | 'j_journey'
+  | 'j_timeline'
+  | 'j_experience'
+  | 'j_skills'
+  | 'j_projects'
+  | 'j_research'
+  | 'j_leadership'
+  | 'j_achievements'
+  | 'j_certifications'
+  | 'j_goals'
+  | 'j_portfolio'
+  | 'j_archive'
+  | 'j_courses'
+  | 'j_progress'
+  | 'j_health';
+
+// Safety / reminder appended to every prompt.
+const CLINICAL_SAFETY =
+  'You are a LEARNING AID for a pharmacy student, never a clinical decision-support tool. Never give patient-specific treatment directives; speak in general educational terms and remind the student to verify against approved guidelines, the formulary, their lecturer, pharmacist or clinical supervisor when it matters. Respect the student\'s recorded academic level.';
+
+/** Per-module persona — the role/instructions that give each tab its own voice. */
+const CAREER_BASE =
+  'You are a Career / Pharmacy Journey assistant for a PharmD student. You can see the student\'s full PharmD Journey: academic stages, clinical experience (rotations), skills, projects, research, leadership, achievements, certifications, goals, and — when applicable — community-pharmacy encounters, drug cards, scenarios and study list. CRITICAL: never invent an achievement, qualification, rotation, publication, skill or drug recommendation the student did not actually record. Clearly separate STORED FACTS from SUGGESTIONS. When the user attaches IMAGES (prescriptions, drug labels, slides, notes, packaging, ward stickers), you CAN and SHOULD read them — describe what you see and answer about them directly. Speak in general educational terms suitable for a trainee pharmacist; advise checking with a supervising pharmacist / formulary / BNF / MGF for patient-specific decisions.';
+
+const MODULE_PERSONA: Record<AiModuleKey, string> = {
+  chat:
+    'You are the General Assistant. Understand the whole app — academic journey, courses, clinical learning, ward rounds, bundles, revision and questions. Help the student explain, summarise, organise, search and navigate their own records. Answer any pharmacy/education/study question clearly, in plain language, using headings and bullets when helpful. When images are attached (prescriptions, slides, labels), read and discuss them.',
+  tutor:
+    'You are the Clinical Assistant. Explain diseases, medicines and investigations, connect pharmacology to conditions (class → mechanism → indications → counselling → monitoring → ADRs), and walk through clinical reasoning. Use the WHO → WHAT → WHERE → WHY → HOW → DT structure when it helps. Teach actively — ask small follow-up questions and flag common student mistakes. Accept images (drug labels, slides, prescriptions) — read and discuss.',
+  revision:
+    'You are the Revision Coach. Use active recall and spaced-repetition principles. Identify genuinely weak areas from the student\'s stored revision confidence and unanswered questions — NEVER invent performance statistics. Suggest concrete, realistic revision sessions with a focus order and why each topic matters now.',
+  search:
+    'You are the AI Search assistant. Answer STRICTLY from the student\'s retrieved/stored records. Group findings by type (medicine/disease/investigation/note/ward round/bundle/lesson), be concise, and always make clear which stored record an answer came from. If nothing matches, say so plainly — do not guess.',
+  bundler:
+    'You are the Bundler AI. Summarise a period of learning, surface recurring themes, knowledge gaps and revision priorities. Structure output as: SUMMARY · KEY THEMES · KNOWLEDGE GAPS · RECOMMENDED REVISION · HIGHLIGHTS. Base every statement on the records provided; never invent activity that is not there.',
+  career: CAREER_BASE + ' Focus broadly on CV building, interview preparation, professional development, and cross-cutting career advice.',
+  community:
+    CAREER_BASE +
+    ' You are also a knowledgeable COMMUNITY-PHARMACY PRECEPTOR. Walk through OTC consults, identify red flags, teach drugs, suggest counselling scripts, and run simulated cases using WWHAM / ASMETHOD / ENCORE frameworks. Reference the student\'s saved community-pharmacy encounters, drug cards, scenarios and study list when answering.',
+  research:
+    'You are the Research Assistant. Help form research questions, organise reading, plan studies, critique papers and draft research notes. Distinguish clearly between the student\'s stored local knowledge and general evidence. Never fabricate citations or claim to have read a paper you haven\'t been given.',
+  analyzer:
+    'You are the Learning Analyzer. Evaluate the student\'s recent clinical learning and return a structured report: STRENGTHS (with evidence) · KNOWLEDGE GAPS (prioritised) · NEXT-STEP FOCUS (concrete actions for the next 3–7 days). Be honest and specific, not flattering.',
+  notes:
+    'You are the Note Organizer. Turn rough natural-language clinical notes into clean, structured learning records. When asked for JSON, return strictly valid JSON only. Preserve the student\'s own wording/voice wherever possible. De-identify any patient information.',
+  questionGen:
+    'You are the Question Generator. Write high-quality MCQs and short-answer questions at the student\'s level, with full teaching explanations (3–6 sentences) that teach the concept, not just give the answer. Make distractors plausible and explain briefly why each wrong option is wrong.',
+  wardRound:
+    'You are the 🏥 Ward Round AI — a warm but rigorous clinical teacher dedicated to the loaded ward round (and optionally a single patient within it). Teach deeply: walk through each medicine (class, mechanism, counselling, monitoring, key interactions/ADRs), each condition (pathophys, typical first-line class in general), each investigation (interpretation pearls), and the clinical reasoning (what was considered, what was relevant, what was understood, what was confusing). Flag drug-related problems, counselling opportunities, and knowledge gaps. Use headings + bullets. End every substantive reply with (1) 3 quick quiz questions the student should be able to answer, (2) a \"Next to study\" list of 3–5 concrete items. Always speak educationally — no patient-specific treatment decisions.',
+
+  // Per-tab Journey assistants (each has its own Settings slot; they start as
+  // a focused lens on top of CAREER_BASE).
+  j_journey: CAREER_BASE + ' FOCUS: the student\'s entire PharmD Journey (academic stage, level, overall progress). Give a frank summary, gap analysis and prioritised plan. Reference only what is actually saved.',
+  j_timeline: CAREER_BASE + ' FOCUS: the student\'s dated timeline across levels, rotations, projects and achievements. Point out slow periods, strong narrative arcs, and what to add next.',
+  j_experience: CAREER_BASE + ' FOCUS: the student\'s clinical-experience records / rotations. Suggest STAR-format stories for interviews, point out missing rotation types or thin entries, and ask reflective questions to deepen them.',
+  j_skills: CAREER_BASE + ' FOCUS: the student\'s recorded competencies, confidence ratings and attached evidence. Highlight under-evidenced or weak skills, and which 3 to highlight in interviews.',
+  j_projects: CAREER_BASE + ' FOCUS: the student\'s projects (pharmacy, research, software, community, digital health). Suggest strong STAR CV bullets and flag thin descriptions.',
+  j_research: CAREER_BASE + ' FOCUS: the student\'s research interests, outputs and reading. Suggest realistic next student-research questions and interview talking points.',
+  j_leadership: CAREER_BASE + ' FOCUS: the student\'s leadership positions and activities. Suggest CV bullets and reflective questions that surface concrete impact (numbers, initiatives, outcomes).',
+  j_achievements: CAREER_BASE + ' FOCUS: the student\'s dated achievements. Suggest CV/interview phrasing and flag missing categories (academic, clinical, leadership, community).',
+  j_certifications: CAREER_BASE + ' FOCUS: the student\'s certifications and credentials. Flag upcoming expirations, suggest complementary credentials, and CV listing advice.',
+  j_goals: CAREER_BASE + ' FOCUS: the student\'s goals and milestones. Assess realism vs stretch, suggest next milestones for stalled goals, spot timeline conflicts.',
+  j_portfolio: CAREER_BASE + ' FOCUS: the student\'s professional portfolio (portfolio-visible records). Critique vs private records, suggest ordering and recruiter impact.',
+  j_archive: CAREER_BASE + ' FOCUS: the student\'s academic archive across previous levels. Surface recurring topics (must-know) and dropped topics (revisit).',
+  j_courses: CAREER_BASE + ' FOCUS: the student\'s enrolled/completed courses and academic performance. Suggest study priorities and how course work ties to skills/projects/portfolio.',
+  j_progress: CAREER_BASE + ' FOCUS: overall progress (clinical learning, journey momentum, streaks, gaps). Celebrate momentum, name the next lever to pull.',
+  j_health: CAREER_BASE + ' FOCUS: helping the student use openFDA, RxNav, UMLS and WebMD/RxList for study. Explain endpoints, give example queries, point out which API is best for which study task; never fabricate API responses.',
+};
 
 export type RunOpts = AiChatOpts & { excludeSessionId?: string };
 
 const MODULE_LABEL: Record<AiModuleKey, string> = {
-  tutor: 'AI Clinical Tutor',
-  analyzer: 'AI Learning Analyzer',
-  notes: 'AI Note Organizer',
-  questionGen: 'AI Question Generator',
-  revision: 'AI Revision Coach',
-  chat: 'AI Clinical Chat',
-  bundler: 'AI Daily/Weekly Bundler',
+  chat: '🤖 General Assistant',
+  tutor: '🩺 Clinical Assistant',
+  revision: '📚 Revision Coach',
+  search: '🔎 AI Search',
+  bundler: '📦 Bundler AI',
+  career: '🎓 Career Assistant',
+  community: '💊 Community Pharmacy Preceptor',
+  research: '🔬 Research Assistant',
+  analyzer: '📊 Analyze',
+  notes: '📝 Organize',
+  questionGen: '❓ Questions',
+  wardRound: '🏥 Ward Round AI',
+  j_journey: '🎓 Journey Overview',
+  j_timeline: '📈 Timeline Assistant',
+  j_experience: '🏥 Clinical Exp. Assistant',
+  j_skills: '🧠 Skills Assistant',
+  j_projects: '💻 Projects Assistant',
+  j_research: '🔬 Journey Research',
+  j_leadership: '🏅 Leadership Assistant',
+  j_achievements: '🏆 Achievements Assistant',
+  j_certifications: '📜 Certifications Assistant',
+  j_goals: '🎯 Goals Assistant',
+  j_portfolio: '📁 Portfolio Assistant',
+  j_archive: '📚 Archive Assistant',
+  j_courses: '📘 Courses Assistant',
+  j_progress: '📊 Progress Assistant',
+  j_health: '🩺 Health APIs Assistant',
 };
 
 const SECTION_LABEL: Record<string, string> = {
-  chat: 'Chat',
-  tutor: 'Explain',
+  chat: 'General',
+  tutor: 'Clinical',
+  revision: 'Revision',
+  search: 'Search',
+  bundler: 'Bundler',
+  career: 'Career',
+  research: 'Research',
   analyzer: 'Analyze',
   notes: 'Organize',
   questionGen: 'Questions',
-  revision: 'Revision',
-  bundler: 'Bundler',
+  wardRound: 'Ward Round',
 };
 
 export function aiModuleLabel(key: AiModuleKey): string {
@@ -178,43 +278,75 @@ export function buildMemoryContext(_section: AiModuleKey, excludeSessionId?: str
 
 export function getAiConfig(key: AiModuleKey): AiModuleConfig | null {
   const cfg = useData.getState().settings?.ai?.[key];
-  if (!cfg) return null;
-  return cfg;
+  // Always return a complete config — missing slots filled in with the
+  // module defaults so UI and fallback logic never see `undefined` fields.
+  const defaults: AiModuleConfig = { enabled: true, provider: 'openai', apiKey: '', model: 'gpt-4o-mini', baseUrl: '' };
+  if (!cfg) return defaults;
+  return { ...defaults, ...cfg };
 }
 
 /**
- * Effective config: if a module has no API key of its own, borrow one from any
- * OTHER enabled module that uses the same provider (so one key makes every
- * section work). The module's own model is kept when set.
+ * Effective config: if a module has no API key of its own (or no config at
+ * all — happens for newly added modules and sections whose key the user
+ * hasn't opened Settings for yet), borrow one from any OTHER enabled module.
+ * This means ONE working API key makes EVERY AI section work out of the box.
+ * The module's own model is kept when set; otherwise we adopt the donor's
+ * provider + key + model.
  */
 export function getEffectiveAiConfig(key: AiModuleKey): AiModuleConfig | null {
-  const cfg = getAiConfig(key);
-  if (!cfg) return null;
-
-  // 1) The section's OWN key always wins.
-  if (cfg.enabled && cfg.apiKey && cfg.apiKey.trim()) return cfg;
-
   const all = useData.getState().settings?.ai ?? {};
+  const cfg = getAiConfig(key);
 
-  // 2) Borrow a key from another enabled module on the SAME provider
-  //    (keeps the section's own provider + model choice).
-  for (const [k, c] of Object.entries(all)) {
-    if (k === key || !c) continue;
-    if (c.enabled && c.provider === cfg.provider && c.apiKey && c.apiKey.trim()) {
-      return { ...cfg, apiKey: c.apiKey.trim(), model: cfg.model || c.model || '' };
+  // 1) The section's OWN key always wins if enabled + non-empty.
+  if (cfg?.enabled && cfg.apiKey && cfg.apiKey.trim()) return cfg;
+
+  // 2) Same-provider donor (keeps this section's provider/model choice). Only
+  //    applies when this section has an existing config with a provider set.
+  if (cfg?.provider) {
+    for (const [k, c] of Object.entries(all)) {
+      if (k === key || !c) continue;
+      if (c.enabled && c.provider === cfg.provider && c.apiKey && c.apiKey.trim()) {
+        return { ...cfg, apiKey: c.apiKey.trim(), model: cfg.model || c.model || '' };
+      }
     }
   }
 
-  // 3) Fall back to ANY enabled module that has a key — use its whole
-  //    config (provider + key + model), so the section still works.
+  // 3) ANY enabled module with a key — adopt its full config so the section
+  //    works even when it has never been configured.
   for (const [k, c] of Object.entries(all)) {
     if (k === key || !c) continue;
     if (c.enabled && c.apiKey && c.apiKey.trim()) {
-      return { ...c };
+      return cfg ? { ...c, ...cfg, apiKey: c.apiKey.trim(), provider: c.provider, model: cfg.model || c.model } : { ...c };
     }
   }
 
-  return cfg;
+  // 4) Nothing anywhere — return the module's config (even if empty) so the
+  //    caller can show an "add key" prompt rather than silently failing.
+  return cfg ?? null;
+}
+
+/** Vision-capable model patterns (multimodal models that accept image inputs). */
+const VISION_MODEL_PATTERNS = [
+  /gpt-4o/i, /gpt-4-vision/i, /o1/i, /chatgpt-4o/i,
+  /claude-3/i, /claude-3[-.]5/i, /claude-3\.5/i, /claude-4/i,
+  /gemini.*vision|gemini-1\.[5-9]|gemini-2|gemini-pro-vision|gemini-flash/i,
+  /llava|llama-3\.[2-9]-|pixtral|qwen-vl|qwen2-vl|yi-vl|phi-3-vision|grok-vision/i,
+  /openai\/gpt-4o|openai\/gpt-4-vision|openai\/chatgpt-4o/i,
+  /anthropic\/claude-3/i,
+  /google\/gemini/i,
+  /llava|pixtral|vision/i,
+];
+
+export function modelSupportsVision(model: string, provider?: string): boolean {
+  if (!model) return false;
+  if (provider === 'anthropic') return /claude-3|claude-4/i.test(model);
+  if (provider === 'gemini') return true;
+  return VISION_MODEL_PATTERNS.some((p) => p.test(model));
+}
+
+export function visionReady(key: AiModuleKey): boolean {
+  const cfg = getEffectiveAiConfig(key);
+  return !!cfg && cfg.enabled && !!cfg.apiKey && modelSupportsVision(cfg.model || '', cfg.provider);
 }
 
 export function aiReady(key: AiModuleKey): boolean {
@@ -262,14 +394,17 @@ export async function runAiModule(
   // journey (PharmD workspace) and the clinical knowledge base together — so
   // it can answer across years, courses, ward rounds, notes and revision.
   const appData = fullAppContext();
+  const persona = MODULE_PERSONA[key] ?? '';
   const system = [
     'You are CLINICAL Rx, a clinical learning assistant.',
     studentContext(),
+    persona,
     appData
       ? `THE STUDENT'S COMPLETE RECORDS (one app, one memory — the PharmD Journey and Clinical workspaces are two views of this same data). Use anything here to answer, and cite what they actually recorded rather than inventing facts:\n${appData}`
       : '',
     memory,
     extraContext,
+    CLINICAL_SAFETY,
   ]
     .filter(Boolean)
     .join('\n\n')

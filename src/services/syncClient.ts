@@ -17,23 +17,48 @@ function baseUrl(backendUrl?: string): string {
   return b.replace(/\/$/, '');
 }
 
+/**
+ * Persist a freshly-rotated session token into local settings without touching
+ * any other field. Lazy import avoids a circular dependency with the store.
+ */
+async function persistRotatedToken(newToken: string): Promise<void> {
+  const { useData } = await import('../stores/data');
+  const st = useData.getState();
+  const settings = st.settings;
+  if (!settings) return;
+  const acct = settings.onlineAccount;
+  if (!acct?.connected) return;
+  if (acct.token === newToken) return;
+  await st.saveSettings({
+    ...settings,
+    updatedAt: Date.now(),
+    onlineAccount: { ...acct, token: newToken, lastError: undefined },
+  });
+}
+
 async function request(backendUrl: string | undefined, path: string, method: 'GET' | 'POST' | 'DELETE', token: string | undefined, body?: unknown): Promise<ApiResult<any>> {
   return requestWithHeaders(backendUrl, path, method, token ? { Authorization: `Bearer ${token}` } : {}, body);
 }
 
 async function requestWithHeaders(backendUrl: string | undefined, path: string, method: 'GET' | 'POST' | 'DELETE', headers: Record<string, string>, body?: unknown): Promise<ApiResult<any>> {
+  return requestWithTokenRotation(backendUrl, path, method, { 'Content-Type': 'application/json', ...headers }, body);
+}
+
+/**
+ * Reads X-New-Token on any successful response and swaps the cached session
+ * token for the fresh one. Sliding session: server issues 1-year tokens and
+ * rotates on every successful call, so the user stays signed in forever until
+ * they explicitly sign out.
+ */
+async function requestWithTokenRotation(backendUrl: string | undefined, path: string, method: 'GET' | 'POST' | 'DELETE', headers: Record<string, string>, body?: unknown): Promise<ApiResult<any>> {
   const root = baseUrl(backendUrl);
   const url = `${root}${path}`;
   let res: Response;
   try {
-    res = await fetch(url, { method, headers: { 'Content-Type': 'application/json', ...headers }, body: body ? JSON.stringify(body) : undefined });
+    res = await fetch(url, { method, headers, body: body ? JSON.stringify(body) : undefined });
   } catch (e: any) {
     const detail = e?.message || 'network error';
     const offline = typeof navigator !== 'undefined' && navigator.onLine === false;
-
-    // Being offline, or the server being briefly down, is a NORMAL state for
-    // an offline-first app — not a misconfiguration. Say something reassuring
-    // and true rather than sending the user to change settings that are fine.
     if (offline) {
       return { ok: false, error: 'You are offline. Your changes are saved locally and will sync when you reconnect.' };
     }
@@ -51,6 +76,16 @@ async function requestWithHeaders(backendUrl: string | undefined, path: string, 
   let json: any = null;
   const contentType = res.headers.get('content-type') || '';
   try { if (contentType.includes('application/json')) json = await res.json(); } catch { json = null; }
+
+  // ---- SLIDING SESSION TOKEN ROTATION ----
+  // Any successful authenticated response may carry X-New-Token. Persist it
+  // silently so the user stays signed in as long as they open the app — the
+  // only way out is an explicit Sign out.
+  const newToken = res.headers.get('X-New-Token');
+  if (newToken && newToken.length > 20 && (res.ok || res.status < 400)) {
+    try { await persistRotatedToken(newToken); } catch { /* never let persistence errors kill the response */ }
+  }
+
   if (!res.ok) {
     if (json?.error) return { ok: false, status: res.status, error: json.error };
     const bodyText = json === null ? await res.text().catch(() => '') : '';

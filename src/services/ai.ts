@@ -118,7 +118,28 @@ export async function aiChat(cfg: AiModuleConfig, system: string, user: string, 
   const apiKey = cfg.apiKey.trim();
   if (!apiKey) return { ok: false, error: 'API key looks empty — add one in Settings → AI.' };
 
-  const model = (cfg.model || defaultModelFor(cfg)).trim() || defaultModelFor(cfg);
+  // Vision auto-upgrade: if the user attached images but the chosen model is
+  // text-only, silently swap to a vision-capable model for THIS call (don't
+  // overwrite the saved setting), so students get image answers regardless
+  // of which model they originally picked.
+  let model = (cfg.model || defaultModelFor(cfg)).trim() || defaultModelFor(cfg);
+  const hasImages = !!(opts.images && opts.images.length);
+  if (hasImages) {
+    // Detect vision-capable models by name. Anthropic Claude 3+ are vision.
+    // For custom/openai-compatible endpoints, many model families support
+    // vision (gpt-4o, Claude-via-openrouter, gemini-via-openai, qwen-vl, etc.)
+    const isVision = /gpt-4o|gpt-4-vision|o1|chatgpt-4o|claude-3|claude-3[-.]5|claude-4|gemini|llava|pixtral|qwen-vl|vision/i.test(model)
+      || (cfg.provider === 'anthropic' && /claude-3|claude-4/i.test(model));
+    if (!isVision) {
+      // Choose a vision-capable model on the same provider; fall back to
+      // gpt-4o-mini (works on OpenAI + OpenRouter). Anthropic falls back to
+      // Claude 3.5 Sonnet; custom/gemini-style endpoints get gpt-4o-mini which
+      // most compatible proxies accept.
+      if (cfg.provider === 'anthropic') model = 'claude-3-5-sonnet-latest';
+      else model = 'gpt-4o-mini';
+    }
+  }
+
   const maxTokens = opts.maxTokens ?? 1100;
   const temperature = opts.temperature ?? 0.7;
   const timeoutMs = opts.timeoutMs ?? 120000;
