@@ -15,13 +15,17 @@ export function UpdateBadge() {
   useEffect(() => {
     if (!isElectron) return;
     if (installType === 'deb') return; // .deb can't auto-update — skip check
-    if (phase.state !== 'idle' && phase.state !== 'up-to-date') return;
-    window.clinicalRx!.update.check().then((res: any) => {
-      if (res?.ok) setStatus('✓ Update check complete');
-      else if (res?.reason === 'dev') setStatus('Dev mode — updates available in packaged builds');
-    });
+    if (phase.state === 'available' || phase.state === 'downloaded' || phase.state === 'downloading') return;
+    if (!meta?.appVersion) return; // wait for meta to load
+    const t = setTimeout(() => {
+      window.clinicalRx!.update.check().then((res: any) => {
+        if (res?.ok) setStatus('✓ Update check complete');
+        else if (res?.reason === 'dev') setStatus('Dev mode — updates available in packaged builds');
+      }).catch(() => {});
+    }, 2500);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isElectron, installType]);
+    return () => clearTimeout(t);
+  }, [isElectron, installType, meta?.appVersion]);
 
   useEffect(() => {
     if (!open) return;

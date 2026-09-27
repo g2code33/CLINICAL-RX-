@@ -22,18 +22,24 @@ export function useUpdateState() {
 
   useEffect(() => {
     if (!isElectron) return;
-    window.clinicalRx!.update.getVersion().then(setMeta);
-    window.clinicalRx!.installType?.().then((t) => setInstallType(t || 'nsis')).catch(() => {});
-    // After a restart, confirm the installed version is current.
-    window.clinicalRx!.update.getState().then((st) => {
-      if (st?.appVersion && meta?.appVersion && st.appVersion === meta.appVersion) {
-        setPhase({ state: 'up-to-date', version: st.appVersion });
+    let cancelled = false;
+    Promise.all([
+      window.clinicalRx!.update.getVersion(),
+      (window.clinicalRx!.installType?.().catch(() => 'nsis') as Promise<string>),
+      window.clinicalRx!.update.getState(),
+    ]).then(([ver, inst, st]) => {
+      if (cancelled) return;
+      setMeta(ver);
+      setInstallType(inst || 'nsis');
+      if (st?.appVersion && ver?.appVersion && st.appVersion === ver.appVersion) {
+        setPhase({ state: 'up-to-date', version: ver.appVersion });
       }
     }).catch(() => {});
     const off = window.clinicalRx!.update.onStatus((s: any) => {
+      if (cancelled) return;
       if (s?.state) setPhase(s);
     });
-    return off;
+    return () => { cancelled = true; off(); };
   }, [isElectron]);
 
   return { meta, phase, isElectron, installType, setPhase };
