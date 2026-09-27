@@ -48,7 +48,7 @@ export interface TrashItem {
 }
 import { LocalStorageAdapter } from '../db/localStorageAdapter';
 import { ElectronAdapter } from '../db/electronAdapter';
-import { hasElectronBridge } from '../db/adapter';
+import { hasElectronBridge, resolveAdapter } from '../db/adapter';
 import { enqueue, backendConfigured, addTombstone } from '../services/syncEngine';
 import { defaultAiConfig, defaultHealthApis, AI_MODULES } from '../services/defaults';
 
@@ -246,7 +246,10 @@ function listKeyFor(module: ModuleType, state: Record<string, unknown>): keyof D
 
 export const useData = create<DataStore>((set, get) => ({
   ready: false,
-  adapter: hasElectronBridge() ? new ElectronAdapter() : new LocalStorageAdapter(),
+  // Adapter is resolved lazily in init() so we never pick the wrong backend
+  // because of a top-level import racing the Electron preload. It is set as
+  // a non-null property right at the start of init().
+  adapter: null as unknown as StorageAdapter,
   platform: 'web',
   profile: null,
   settings: null,
@@ -283,8 +286,13 @@ export const useData = create<DataStore>((set, get) => ({
   status: 'Initializing…',
 
   init: async () => {
-    const adapter = get().adapter;
-    set({ status: 'Loading local data…' });
+    // Resolve the adapter HERE, at init() time — NOT at module import time.
+    // The preload script sets window.clinicalRx only after the DOM is ready,
+    // so resolving earlier can incorrectly pick the LocalStorageAdapter even
+    // inside Electron (where data should go to SQLite, NOT localStorage, since
+    // localStorage is partitioned per session and wipes on restart).
+    const adapter = resolveAdapter();
+    set({ adapter, status: 'Loading local data…' });
     try {
       // Wait for adapter backend probe (localStorage/sessionStorage/memory
       // detection + IndexedDB probe) before reading so the first list() call
