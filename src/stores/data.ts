@@ -237,11 +237,12 @@ const LIST_KEY: Partial<Record<ModuleType, keyof DataStore>> = {
   cpScenario: 'cpScenarios',
 };
 
-function listKeyFor(module: ModuleType, state: Record<string, unknown>): keyof DataStore {
+function listKeyFor(module: ModuleType): keyof DataStore {
   const explicit = LIST_KEY[module];
   if (explicit) return explicit;
-  const plural = module + 's';
-  return (plural in state ? plural : module) as keyof DataStore;
+  // Plural by default. The singular form is almost never a list key on the
+  // store (research/leadership are the only uncountable ones, handled above).
+  return (module + 's') as keyof DataStore;
 }
 
 export const useData = create<DataStore>((set, get) => ({
@@ -286,26 +287,19 @@ export const useData = create<DataStore>((set, get) => ({
   status: 'Initializing…',
 
   init: async () => {
-    // Resolve the adapter HERE, at init() time — and note that resolveAdapter()
-    // self-corrects: if the bridge wasn't ready when this was first called
-    // (an admittedly rare edge on Linux/.deb), every subsequent adapter method
-    // call checks again and hot-swaps to ElectronAdapter the moment the bridge
-    // appears. Then we re-list the real SQLite backend.
-    let adapter = resolveAdapter();
+    // With the DualAdapter (v1.11.18), resolveAdapter() is safe to call at
+    // ANY time (module-load, init, save, whatever). It always keeps a
+    // localStorage backend alive and dual-writes to SQLite whenever the
+    // Electron bridge is present — so data cannot be lost to a startup
+    // race, period.
+    const adapter = resolveAdapter();
     set({ adapter, status: 'Loading local data…' });
     try {
       // Wait for adapter backend probe (localStorage/sessionStorage/memory
       // detection + IndexedDB probe) before reading so the first list() call
       // uses the correctly-selected storage.
-      const waitForAdapter = async () => {
-        if (typeof (adapter as any).waitReady === 'function') await (adapter as any).waitReady();
-      };
-      await waitForAdapter();
-
-      // Re-resolve AFTER waiting, in case the bridge appeared during the wait.
-      adapter = resolveAdapter();
-      set({ adapter });
       const a0 = adapter as any;
+      if (typeof a0.waitReady === 'function') await a0.waitReady();
       const platform = await adapter.platform();
 
       const loadAll = async () =>
@@ -346,83 +340,6 @@ export const useData = create<DataStore>((set, get) => ({
       // Initial load from whatever adapter we resolved first.
       let [profiles, settingsList, days, diseases, medicines, investigations, questions, lessons, revisions, bundles, chats, quizzes, reminders, wardRounds, wardEntries, wardAnalyses, academicStages, academicPeriods, courses, activities, clinicalExperiences, skills, achievements, certifications, projects, research, leadership, goals, cpEncounters, cpDrugCards, cpScenarios] =
         await loadAll();
-
-      // If the bridge has appeared during the load (hot-swap), re-resolve
-      // and re-read everything from the REAL SQLite backend. This is the
-      // belt-and-braces guarantee that profile data never stays stuck in
-      // localStorage.
-      const finalAdapter = resolveAdapter();
-      if (finalAdapter !== adapter) {
-        // MIGRATE: if we initially loaded from localStorage because the
-        // bridge wasn't ready, and now SQLite is available but EMPTY, copy
-        // what we read from localStorage into SQLite so the profile the
-        // user just created survives the next restart. We only do this the
-        // first time (SQLite must be empty) so we never overwrite the
-        // canonical SQLite DB with stale localStorage data.
-        try {
-          const sqlHasData = async (): Promise<boolean> => {
-            const l = await finalAdapter.list('profile');
-            return l.length > 0;
-          };
-          const sqliteAlreadyHasProfile = await sqlHasData();
-          const migrateBucket = async (module: ModuleType, rows: any[]) => {
-            for (const r of rows) {
-              try {
-                const parsed = typeof r.data === 'string' ? JSON.parse(r.data) : r.data;
-                if (parsed && parsed.id) {
-                  await finalAdapter.put(module, parsed.id, parsed, r.createdAt ?? parsed.createdAt ?? Date.now(), r.updatedAt ?? parsed.updatedAt ?? Date.now());
-                }
-              } catch { /* ignore per-row errors */ }
-            }
-          };
-          if (!sqliteAlreadyHasProfile) {
-            console.info('[clinical-rx] Hot-swap to SQLite — migrating localStorage → SQLite');
-            await migrateBucket('profile', profiles);
-            await migrateBucket('settings', settingsList);
-            await migrateBucket('day', days);
-            await migrateBucket('disease', diseases);
-            await migrateBucket('medicine', medicines);
-            await migrateBucket('investigation', investigations);
-            await migrateBucket('question', questions);
-            await migrateBucket('lesson', lessons);
-            await migrateBucket('revision', revisions);
-            await migrateBucket('bundle', bundles);
-            await migrateBucket('chat', chats);
-            await migrateBucket('quiz', quizzes);
-            await migrateBucket('reminder', reminders);
-            await migrateBucket('wardRound', wardRounds);
-            await migrateBucket('wardEntry', wardEntries);
-            await migrateBucket('wardAnalysis', wardAnalyses);
-            await migrateBucket('academicStage', academicStages);
-            await migrateBucket('academicPeriod', academicPeriods);
-            await migrateBucket('course', courses);
-            await migrateBucket('activity', activities);
-            await migrateBucket('clinicalExperience', clinicalExperiences);
-            await migrateBucket('skill', skills);
-            await migrateBucket('achievement', achievements);
-            await migrateBucket('certification', certifications);
-            await migrateBucket('project', projects);
-            await migrateBucket('research', research);
-            await migrateBucket('leadership', leadership);
-            await migrateBucket('goal', goals);
-            await migrateBucket('cpEncounter', cpEncounters);
-            await migrateBucket('cpDrugCard', cpDrugCards);
-            await migrateBucket('cpScenario', cpScenarios);
-          }
-        } catch (mErr) {
-          console.warn('[clinical-rx] LocalStorage→SQLite migration failed:', mErr);
-        }
-
-        adapter = finalAdapter;
-        set({ adapter });
-        try {
-          [profiles, settingsList, days, diseases, medicines, investigations, questions, lessons, revisions, bundles, chats, quizzes, reminders, wardRounds, wardEntries, wardAnalyses, academicStages, academicPeriods, courses, activities, clinicalExperiences, skills, achievements, certifications, projects, research, leadership, goals, cpEncounters, cpDrugCards, cpScenarios] =
-            await loadAll();
-          console.info('[clinical-rx] Re-loaded data after hot-swap to', adapter.isElectron ? 'Electron/SQLite' : 'web');
-        } catch (hotErr) {
-          console.warn('[clinical-rx] Hot-swap reload failed:', hotErr);
-        }
-      }
 
       // Defensive parse: skip any corrupt record instead of throwing, so the
       // app can never be locked on the splash screen by bad stored data.
@@ -558,10 +475,7 @@ export const useData = create<DataStore>((set, get) => ({
   getProfile: async () => get().profile,
 
   saveProfile: async (p) => {
-    // Re-resolve every call: if the bridge appeared between init() and now
-    // (hot-swap), we must write to SQLite, not to the stale localStorage ref.
-    const adapter = resolveAdapter();
-    set({ adapter });
+    const adapter = get().adapter;
     // PROFILE IMMUTABILITY: once a profile is created its id + createdAt
     // must never change on save, otherwise update migrations and backup
     // recovery treat it as a new person. Defensive-clone to catch bugs.
@@ -574,8 +488,7 @@ export const useData = create<DataStore>((set, get) => ({
   },
 
   saveSettings: async (s) => {
-    const adapter = resolveAdapter();
-    set({ adapter });
+    const adapter = get().adapter;
     const migrated = migrateSettings(s);
     await adapter.put('settings', migrated.id, migrated, migrated.createdAt, migrated.updatedAt);
     set({ settings: migrated });
@@ -625,16 +538,23 @@ export const useData = create<DataStore>((set, get) => ({
   },
 
   save: async (module, record, opts) => {
-    // Always go through resolveAdapter() so a newly-attached Electron bridge
-    // is picked up immediately (hot-swap); never hold a stale localStorage ref.
-    const adapter = resolveAdapter();
-    set({ adapter });
+    const adapter = get().adapter;
     const fromSync = opts?.fromSync === true;
     const now = Date.now();
     // Records applied from a sync must keep the server's updatedAt and must
     // NOT be re-enqueued, otherwise every pull pushes everything back up and
-    // the sync never converges.
-    let rec: any = fromSync ? { ...record } : { ...record, updatedAt: now };
+    // the sync never converges. For locally-written records, always ensure
+    // id + createdAt exist (AI tools sometimes write bare objects without
+    // ids; without this guard they collide on `undefined` and overwrite the
+    // first array entry instead of appending).
+    const baseRec: any = { ...record };
+    if (!fromSync) {
+      if (!baseRec.id) baseRec.id = uid();
+      if (!baseRec.createdAt) baseRec.createdAt = now;
+      if (!baseRec.updatedAt) baseRec.updatedAt = now;
+      else baseRec.updatedAt = now;
+    }
+    let rec: any = baseRec;
     // ONE LINKED DATASET: stamp the academic context (level / year / semester)
     // onto every learning record as it is written, from wherever it was
     // created — UI, quick add, ward rounds, importers or automation. Existing
@@ -651,7 +571,7 @@ export const useData = create<DataStore>((set, get) => ({
       import('../services/syncScheduler').then((m) => m.notifyLocalChange()).catch(() => {});
     }
     set((s) => {
-      const listKey = listKeyFor(module, s as unknown as Record<string, unknown>);
+      const listKey = listKeyFor(module);
       const existing = (s[listKey] as BaseRecord[]) || [];
       const next = existing.some((r) => r.id === rec.id)
         ? existing.map((r) => (r.id === rec.id ? rec : r))
@@ -676,8 +596,7 @@ export const useData = create<DataStore>((set, get) => ({
   },
 
   remove: async (module, id, opts) => {
-    const adapter = resolveAdapter();
-    set({ adapter });
+    const adapter = get().adapter;
     const fromSync = opts?.fromSync === true;
     // Keep the record for undo / recycle bin (unless this came from a sync apply).
     let snapshot: any = null;
@@ -691,7 +610,7 @@ export const useData = create<DataStore>((set, get) => ({
     // in later, and a pull must not resurrect what they deleted offline (§24).
     if (!fromSync) addTombstone(module, id);
     set((s) => {
-      const listKey = listKeyFor(module, s as unknown as Record<string, unknown>);
+      const listKey = listKeyFor(module);
       const existing = (s[listKey] as BaseRecord[]) || [];
       let nextRemoved = s.removed;
       if (snapshot) {
