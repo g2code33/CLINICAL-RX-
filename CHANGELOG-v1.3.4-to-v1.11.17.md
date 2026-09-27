@@ -1,10 +1,28 @@
-# Clinical Rx — Changelog: v1.3.4 → v1.11.16
+# Clinical Rx — Changelog: v1.3.4 → v1.11.17
 
-**Versions covered:** `v1.3.4` (2026-08-06) → `v1.11.16` (2026-09-27)
-**Releases:** 41 tagged versions over ~7 weeks
-**Current production version:** [v1.11.16](https://github.com/g2code33/CLINICAL-RX-/releases/tag/v1.11.16)
+**Versions covered:** `v1.3.4` (2026-08-06) → `v1.11.17` (2026-09-27)
+**Releases:** 42 tagged versions over ~7 weeks
+**Current production version:** [v1.11.17](https://github.com/g2code33/CLINICAL-RX-/releases/tag/v1.11.17)
 
 > Releases without authored notes (v1.3.5–v1.8.17) are summarized from their commit messages and feature milestones in this document. v1.11.1+ release notes are reproduced verbatim from GitHub where they exist.
+
+---
+
+## 🔥 v1.11.17 — BULLETPROOF Electron persistence (Windows + Linux .deb) (2026-09-27)
+
+Supersedes v1.11.16. v1.11.16 fixed the module-import race for fresh starts, but on Linux/.deb (and some Windows cold starts) Chromium's preload → main-world bridge handoff can lag by 50–200 ms after `init()`. The bridge check could still return false, the app still picked localStorage, and the profile still didn't survive restart.
+
+v1.11.17 makes the adapter **self-correcting at runtime**:
+- `resolveAdapter()` hot-swaps to `ElectronAdapter` the instant `window.clinicalRx` appears, even mid-session.
+- **Auto-migration**: on hot-swap, every bucket (profile, settings, days, quizzes, chats, achievements, …) that was buffered in localStorage is written into SQLite before the next render.
+- All save/remove calls (`saveProfile`, `saveSettings`, `save`, `remove`) re-resolve the adapter before writing — never hold a stale localStorage reference.
+- Polls for the bridge for 5 seconds after init to catch late attachment.
+- Added `app:log` IPC channel so renderer warnings appear in the main-process terminal for future diagnostics.
+- Initial data load is re-run after hot-swap so UI reflects SQLite, not the temporary bucket.
+
+Users must reinstall (bug is baked into installed bundle). After install: create profile → File → Quit → reopen → profile is there forever.
+
+Version **1.11.17**; SW cache `clinical-rx-v25`; Android 11117. All 15 tests pass.
 
 ---
 
@@ -335,3 +353,4 @@ THE real fix for the desktop-app "back to Get Started every restart" bug.
 - Tightened `hasElectronBridge()` to require `isElectron === true` flag explicitly set by the preload script.
 - **Action required**: re-install `ClinicalRx-Setup-1.11.16.exe`; the bug was baked into the previously installed renderer bundle.
 - Version **1.11.16**; SW cache `clinical-rx-v24`; Android 11116. All 15 tests pass.
+- _Superseded by v1.11.17_: v1.11.16 resolved the adapter at init() but did not re-check if the bridge appeared *after* init() — which is what happens on Linux/.deb cold starts. v1.11.17 adds runtime hot-swap and localStorage→SQLite migration.
