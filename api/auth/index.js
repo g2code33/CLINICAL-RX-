@@ -7,7 +7,7 @@ const { redis } = require('../_lib/redis.js');
 const {
   hashPassword, verifyPassword, verifyHash, signToken, verifyToken, uuid,
 } = require('../_lib/auth.js');
-const { guard, fail, ok } = require('../_lib/errors.js');
+const { guard, fail, ok, okWithToken } = require('../_lib/errors.js');
 const { rateLimit, consume } = require('../_lib/rateLimit.js');
 const { canSendResetEmail, allowDevResetTokenReturn, detectMode } = require('../_lib/env.js');
 
@@ -91,7 +91,7 @@ async function handler(req, res) {
     if (!userId) return fail(res, 401, 'Invalid token');
     const found = await findUserByToken(userId);
     if (!found) return fail(res, 404, 'User not found');
-    return ok(res, 200, { user: { id: found.user.id, name: found.user.name, email: found.email } });
+    return okWithToken(res, 200, { user: { id: found.user.id, name: found.user.name, email: found.email } }, userId);
   }
 
   // ---- UPDATE PROFILE ----
@@ -112,7 +112,7 @@ async function handler(req, res) {
       }
     }
     await redis.hset('users', { [found.email]: JSON.stringify(found.user) });
-    return ok(res, 200, { user: { id: found.user.id, name: found.user.name, email: found.email } });
+    return okWithToken(res, 200, { user: { id: found.user.id, name: found.user.name, email: found.email } }, userId);
   }
 
   // ---- CHANGE PASSWORD ----
@@ -127,7 +127,7 @@ async function handler(req, res) {
     if (!verifyPassword(currentPassword, found.user.password)) return fail(res, 401, 'Current password is incorrect.');
     found.user.password = hashPassword(newPassword);
     await redis.hset('users', { [found.email]: JSON.stringify(found.user) });
-    return ok(res, 200, { message: 'Password changed successfully.' });
+    return okWithToken(res, 200, { message: 'Password changed successfully.' }, userId);
   }
 
   // ---- DELETE ACCOUNT ----

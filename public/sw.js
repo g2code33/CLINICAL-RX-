@@ -8,7 +8,11 @@
 //    then refresh it in the background when online.
 //  - Static assets: cache-first with background refresh.
 //  - NEVER intercept cross-origin API/AI calls.
-const CACHE = 'clinical-rx-v20';
+<<<<<<< HEAD
+const CACHE = 'clinical-rx-v21';
+=======
+const CACHE = 'clinical-rx-v21';
+>>>>>>> 013e7bc (v1.11.13: permanent sign-in — sessions persist until explicit sign-out)
 
 self.addEventListener('install', (event) => {
   event.waitUntil(

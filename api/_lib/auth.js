@@ -6,7 +6,13 @@ const { effectiveSessionSecret, assertProductionReady } = require('./env.js');
 // hardcoded fallback.
 assertProductionReady();
 
-const TOKEN_TTL_SECONDS = 60 * 60 * 24 * 30;
+// Sessions are effectively permanent — tokens are long-lived (1 year) AND
+// every successful authenticated response rotates to a fresh token (sliding
+// session). The only way a session ends is: (a) explicit sign-out via the
+// client, (b) the account is deleted, or (c) the password is changed (admin
+// or self) after which old tokens stop verifying because the user record
+// version increments.
+const TOKEN_TTL_SECONDS = 60 * 60 * 24 * 365; // 1 year
 
 function uuid() {
   if (typeof crypto.randomUUID === 'function') return crypto.randomUUID();

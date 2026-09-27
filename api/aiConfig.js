@@ -1,6 +1,6 @@
 const { redis } = require('./_lib/redis.js');
 const { verifyToken } = require('./_lib/auth.js');
-const { guard, fail, ok } = require('./_lib/errors.js');
+const { guard, fail, okWithToken } = require('./_lib/errors.js');
 const { rateLimit } = require('./_lib/rateLimit.js');
 
 async function handler(req, res) {
@@ -14,7 +14,7 @@ async function handler(req, res) {
     const config = await redis.get(`aiConfig:${userId}`);
     let parsed = null;
     if (config) { try { parsed = JSON.parse(config); } catch { parsed = null; } }
-    return ok(res, 200, { aiConfig: parsed });
+    return okWithToken(res, 200, { aiConfig: parsed }, userId);
   }
 
   if (req.method === 'POST') {
@@ -46,7 +46,7 @@ async function handler(req, res) {
     const payload = JSON.stringify(sanitized);
     if (payload.length > 128 * 1024) return fail(res, 413, 'AI config is too large.');
     await redis.set(`aiConfig:${userId}`, payload);
-    return ok(res, 200, { message: 'AI config saved' });
+    return okWithToken(res, 200, { message: 'AI config saved' }, userId);
   }
 
   return fail(res, 405, 'Method not allowed');

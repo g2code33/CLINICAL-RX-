@@ -116,13 +116,15 @@ export async function runSync(manual = false): Promise<{ ok: boolean; message: s
       return { ok: true, message: `Synced — ${res.pushed} sent, ${res.pulled} received.` };
     }
 
-    // A 401 means the cached session died; ask for a graceful re-login
-    // rather than silently failing forever (§45).
-    if (/401|unauth|invalid token|expired/i.test(res.message ?? '')) {
+    // A 401 / 403 genuinely means the session token is invalid; ask for a
+    // graceful re-login rather than silently failing forever. Anything else
+    // (network error, 5xx, offline) is treated as transient and the session
+    // stays intact so the user never sees a false "signed out" state.
+    if (res.status === 401 || res.status === 403 || /invalid token|expired token|unauthor/i.test(res.message ?? '')) {
       const check = await refreshSession();
       if (check.needsReauth) {
-        await patchAccount({ lastError: 'Your session expired. Sign in again to resume syncing.' });
-        return { ok: false, message: 'Your session expired. Sign in again to resume syncing.' };
+        await patchAccount({ lastError: 'Please sign in again to resume cloud sync.' });
+        return { ok: false, message: 'Please sign in again to resume cloud sync.' };
       }
     }
     await noteFailure(res.message);
