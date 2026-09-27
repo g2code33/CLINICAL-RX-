@@ -286,6 +286,11 @@ export const useData = create<DataStore>((set, get) => ({
     const adapter = get().adapter;
     set({ status: 'Loading local data…' });
     try {
+      // Wait for adapter backend probe (localStorage/sessionStorage/memory
+      // detection + IndexedDB probe) before reading so the first list() call
+      // uses the correctly-selected storage.
+      const a0 = adapter as any;
+      if (typeof a0.waitReady === 'function') await a0.waitReady();
       const platform = await adapter.platform();
       const [profiles, settingsList, days, diseases, medicines, investigations, questions, lessons, revisions, bundles, chats, quizzes, reminders, wardRounds, wardEntries, wardAnalyses, academicStages, academicPeriods, courses, activities, clinicalExperiences, skills, achievements, certifications, projects, research, leadership, goals, cpEncounters, cpDrugCards, cpScenarios] =
         await Promise.all([
@@ -427,7 +432,14 @@ export const useData = create<DataStore>((set, get) => ({
         cpDrugCards: sortByUpdated(parse(cpDrugCards)),
         cpScenarios: sortByUpdated(parse(cpScenarios)),
         ready: true,
-        status: 'Ready · ' + (hasElectronBridge() ? 'SQLite (offline)' : 'Web storage'),
+        // Reflect degraded storage in the status line so the user knows if
+        // their data won't survive a reload (e.g. sandboxed preview iframe).
+        status: (() => {
+          const base = hasElectronBridge() ? 'Ready · SQLite (offline)' : 'Ready · Web storage';
+          const info = a0.storageInfo?.();
+          if (info && !info.persistent) return '⚠️ ' + (info.reason || 'Storage is not persistent — data will not survive reload.');
+          return base;
+        })(),
       });
     } catch (e: any) {
       // Never hard-lock the app: surface the error but still boot.
