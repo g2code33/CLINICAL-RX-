@@ -334,19 +334,19 @@ export const useData = create<DataStore>((set, get) => ({
 
       // PROFILE DURABILITY (§first-run-never): if the primary bucket has no
       // parseable profile (corrupt record, browser quirk, partial write) try
-      // the rolling backup BEFORE we fall through to Onboarding. The user
-      // should only see the create-profile screen on a genuinely fresh
-      // install — never after an update, a crash, or closing & reopening.
+      // the rolling backup BEFORE we fall through to Onboarding, then fall
+      // back to the IndexedDB durable mirror. The user should only see the
+      // create-profile screen on a genuinely fresh install — never after an
+      // update, a crash, a hard refresh, or closing & reopening.
       const a = adapter as any;
+      let recovered: any = null;
       if (!profile && typeof a.recoverFromBackup === 'function') {
         try {
-          const recovered = a.recoverFromBackup();
+          recovered = a.recoverFromBackup();
           if (recovered?.profile) {
             profile = recovered.profile as Profile;
-            // Write the recovered record back to the primary bucket so the
-            // next boot is clean and the backup isn't our only copy.
             a.put('profile', profile.id, profile, (profile as any).createdAt ?? Date.now(), (profile as any).updatedAt ?? Date.now()).catch(() => {});
-            console.info('[clinical-rx] Recovered profile from backup.');
+            console.info('[clinical-rx] Recovered profile from rolling backup.');
           }
           if (!parsedSettings && recovered?.settings) {
             parsedSettings = recovered.settings;
@@ -354,6 +354,24 @@ export const useData = create<DataStore>((set, get) => ({
           }
         } catch {
           /* backup is best-effort */
+        }
+      }
+
+      // Last resort: IndexedDB durable mirror (covers localStorage wipes,
+      // corrupted buckets, iOS Safari eviction, etc.). Only invoked if the
+      // rolling backup also failed to find a profile.
+      if (!profile && typeof a.restoreFromDurableMirror === 'function') {
+        try {
+          const restored = await a.restoreFromDurableMirror();
+          if (restored) {
+            // Re-read profile/settings after the mirror repopulated items.
+            const [rp, rs] = await Promise.all([adapter.list('profile'), adapter.list('settings')]);
+            profile = rp.length ? (parse(rp)[0] ?? null) : null;
+            parsedSettings = rs.length ? (parse(rs)[0] ?? null) : null;
+            console.info('[clinical-rx] Restored data from IndexedDB durable mirror.');
+          }
+        } catch {
+          /* mirror is best-effort */
         }
       }
 

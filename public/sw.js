@@ -9,9 +9,9 @@
 //  - Static assets: cache-first with background refresh.
 //  - NEVER intercept cross-origin API/AI calls.
 <<<<<<< HEAD
-const CACHE = 'clinical-rx-v21';
+const CACHE = 'clinical-rx-v22';
 =======
-const CACHE = 'clinical-rx-v21';
+const CACHE = 'clinical-rx-v22';
 >>>>>>> 013e7bc (v1.11.13: permanent sign-in — sessions persist until explicit sign-out)
 
 self.addEventListener('install', (event) => {
