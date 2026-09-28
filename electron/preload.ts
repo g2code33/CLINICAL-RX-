@@ -27,6 +27,7 @@ const api = {
       ipcRenderer.invoke('secret:status', account) as Promise<{ present: boolean; hint?: string; length?: number }>,
     remove: (account: string) => ipcRenderer.invoke('secret:delete', account),
     list: () => ipcRenderer.invoke('secret:list') as Promise<string[]>,
+    get: (account: string) => ipcRenderer.invoke('secret:get', account) as Promise<string | null>,
     aiFetch: (account: string, url: string, init: unknown) => ipcRenderer.invoke('secret:aiFetch', account, url, init),
   },
   update: {

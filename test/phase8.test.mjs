@@ -323,7 +323,10 @@ try {
   const preloadSrc = fs.readFileSync('electron/preload.ts', 'utf8');
   check('preload exposes no require', !/\brequire\b\s*:/.test(preloadSrc));
   check('preload exposes no fs/child_process', !/child_process|readFile|writeFile|exec\(/.test(preloadSrc));
-  check('preload has no secret getter', !/\bget\s*:\s*\(account/.test(preloadSrc) || !/secret:get\b/.test(preloadSrc));
+  // secret:get is allowed but must be restricted to ai:* accounts only
+  // (enforced server-side in main.ts with account.startsWith('ai:')).
+  check('secret:get restricted to ai: accounts',
+    /account\.startsWith\('ai:'\)/.test(fs.readFileSync('electron/main.ts', 'utf8')));
 
   // =====================================================================
   console.log('\n§8/§11/§30/§36 — SERVER HARDENING (source assertions)');

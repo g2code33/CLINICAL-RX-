@@ -233,16 +233,23 @@ function hasKey(configKey: string, cfg?: AiModuleConfig | null): boolean {
   return vaultKeys.has(configKey) || !!cfg?.apiKey?.trim() || !!getKeyForRequest(configKey);
 }
 
-/** Per-module config, falling back to a shared key from any enabled module. */
+/** Per-module config, falling back to a shared key from any enabled module.
+ *  Synchronous — returns apiKey from the in-memory session cache (populated
+ *  by refreshKeyCache at boot). For an authoritative key, callers should also
+ *  await resolveKey(configKey) at request time; the cloud provider already
+ *  does this. */
 export function personaConfig(persona: AiPersona): AiModuleConfig | null {
   const all = useData.getState().settings?.ai ?? {};
   const def = PERSONAS[persona];
   const own = all[def.configKey];
 
+  const pickKey = (k: string, c: any) =>
+    (c?.apiKey || '').trim() || getKeyForRequest(k) || '';
+
   // A module's own settings always win — changing Clinical AI must never leak
   // into the other modules.
   if (own?.enabled && hasKey(def.configKey, own)) {
-    return { ...own, apiKey: own.apiKey || getKeyForRequest(def.configKey) || '' };
+    return { ...own, apiKey: pickKey(def.configKey, own) };
   }
 
   // If this module has no key of its own, borrow another module's credential
@@ -254,7 +261,7 @@ export function personaConfig(persona: AiPersona): AiModuleConfig | null {
       return {
         ...(own ?? c),
         enabled: own?.enabled ?? true,
-        apiKey: c.apiKey || getKeyForRequest(k) || '',
+        apiKey: pickKey(k, c),
         provider: own?.provider ?? c.provider,
         model: own?.model || c.model,
         baseUrl: own?.baseUrl || c.baseUrl,
@@ -554,6 +561,7 @@ export async function askAi(opts: AskOptions): Promise<AskResult> {
     maxTokens: opts.maxTokens ?? 1200,
     temperature: opts.temperature ?? cfg?.temperature ?? 0.7,
     onToken: opts.onToken,
+    configKey: personaConfigKey(persona),
   };
 
   // --- 4. Execute, with AUTO fallback ---

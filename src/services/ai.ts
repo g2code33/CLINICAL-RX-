@@ -1,4 +1,6 @@
 import type { AiModuleConfig } from '../types';
+import { resolveKey } from './aiSecrets';
+import { personaConfigKey } from './aiOrchestrator';
 
 export type AiResult = { ok: true; text: string } | { ok: false; error: string };
 
@@ -111,12 +113,20 @@ function historyContent(item: AiHistoryItem, anthropic: boolean): string | any[]
  * Supports streaming (opts.onToken) for a much faster perceived response.
  * If a provider rejects "stream": true, retries once without streaming.
  */
-export async function aiChat(cfg: AiModuleConfig, system: string, user: string, opts: AiChatOpts = {}): Promise<AiResult> {
+export async function aiChat(cfg: AiModuleConfig, system: string, user: string, opts: AiChatOpts & { moduleKey?: string } = {}): Promise<AiResult> {
   if (!cfg.enabled) return { ok: false, error: 'This AI module is disabled in Settings.' };
-  if (!cfg.apiKey) return { ok: false, error: 'No API key configured for this AI module. Add one in Settings → AI.' };
 
-  const apiKey = cfg.apiKey.trim();
-  if (!apiKey) return { ok: false, error: 'API key looks empty — add one in Settings → AI.' };
+  // Resolve the actual key. Prior to v1.11.20 the desktop app stored keys ONLY
+  // in the OS keychain, never in settings.ai.apiKey, so cfg.apiKey may be
+  // blank even though a perfectly good key exists in safeStorage. After
+  // v1.11.20, cloud-synced keys also land in settings.ai.apiKey. resolveKey()
+  // checks both (plus web session memory) and returns the first it finds.
+  let apiKey = (cfg.apiKey || '').trim();
+  if (!apiKey && opts.moduleKey) {
+    const resolved = await resolveKey(opts.moduleKey);
+    if (resolved) apiKey = resolved.trim();
+  }
+  if (!apiKey) return { ok: false, error: 'No API key configured for this AI module. Add one in Settings → AI.' };
 
   // Vision auto-upgrade: if the user attached images but the chosen model is
   // text-only, silently swap to a vision-capable model for THIS call (don't

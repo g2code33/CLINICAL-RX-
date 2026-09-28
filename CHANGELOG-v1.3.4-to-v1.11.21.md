@@ -1,4 +1,27 @@
-# CLINICAL Rx — Changelog (v1.3.4 → v1.11.21)
+# CLINICAL Rx — Changelog (v1.3.4 → v1.11.22)
+
+## v1.11.22 — Hotfix: AI works with pre-existing desktop keys (2026-09-28)
+- **Regression fix for desktop users:** v1.11.20 stopped reading API keys from
+  the OS keychain on desktop, so users who saved their keys before v1.11.20
+  (when keys lived ONLY in safeStorage, never in `settings.ai.apiKey`) saw
+  "GENERAL ASSISTANT STATUS: STILL NOT READY" — the orchestrator thought a
+  key existed but `aiChat()` saw an empty `cfg.apiKey` and bailed.
+  - Added `secret:get` IPC (restricted to `ai:*` accounts only) so the
+    renderer can pull plaintext from safeStorage when needed.
+  - New `resolveKey(moduleKey)` helper checks, in order: session memory →
+    `settings.ai.<k>.apiKey` (cloud / new saves) → OS keychain via the new
+    IPC (legacy desktop keys). All outbound AI calls now go through it.
+  - `getKeyStatus()` now rehydrates the plaintext into `sessionKeys` so the
+    synchronous `getKeyForRequest()` and `vaultKeys` cache stay in sync.
+  - `cloudProvider.generate()`, `runAiModule()`, Bundles ask-AI and
+    Community Pharmacy AI flows all resolve a real key before building the
+    HTTP request, so desktop installs never send an empty Authorization
+    header again.
+- `AiGenerateRequest` now carries `configKey` so the provider knows which
+  vault slot to open when borrowing a key across modules.
+- Service worker cache bumped to `clinical-rx-v30`.
+
+---
 
 ## v1.11.21 — Hotfix: Community Pharmacy modules + quiet console (2026-09-28)
 - **Desktop data loss fix:** the Electron main-process module allowlist was

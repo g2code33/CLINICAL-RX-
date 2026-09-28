@@ -95,7 +95,19 @@ export async function getKeyStatus(moduleKey: string): Promise<KeyStatus> {
   if (b?.secrets) {
     try {
       const s = await b.secrets.status(account(moduleKey));
-      if (s?.present) return { present: true, hint: s.hint, storage: 'os' };
+      if (s?.present) {
+        // OS keychain has the key — pull the plaintext back over the bridge
+        // (secret:get is restricted to ai:* accounts) so sync callers like
+        // getKeyForRequest() can read it. This is what lets pre-v1.11.20
+        // desktop installs keep working without the user retyping keys.
+        if (b.secrets.get && !sessionKeys.has(moduleKey)) {
+          try {
+            const plain = await b.secrets.get(account(moduleKey));
+            if (typeof plain === 'string' && plain.trim()) sessionKeys.set(moduleKey, plain.trim());
+          } catch { /* ignore */ }
+        }
+        return { present: true, hint: s.hint, storage: 'os' };
+      }
     } catch { /* fall through */ }
   }
   const mem = sessionKeys.get(moduleKey);
@@ -141,29 +153,56 @@ export async function removeApiKey(moduleKey: string): Promise<void> {
 }
 
 /**
- * Retrieve a key for an outbound request (web build only).
+ * Retrieve a key for an outbound request. Looks in (priority order):
+ *   1. In-memory sessionKeys (web + post-rehydrate desktop)
+ *   2. settings.ai.<module>.apiKey (cloud-synced / newly-saved keys)
+ *   3. On desktop: OS keychain via secret:get IPC (legacy keys saved
+ *      pre-v1.11.20, when apiKey was NOT written to settings).
  *
- * On desktop this returns null — the key stays in the main process and
- * requests are proxied via `aiFetchWithKey()`. In the web build it returns
- * the session-only value, or (after a cloud sync) the value from settings.ai.
+ * Returned value (if any) is suitable for use directly in Authorization /
+ * x-api-key headers. Callers should await this BEFORE building the request.
  */
-export async function getKeyForRequestAsync(moduleKey: string): Promise<string | null> {
+export async function resolveKey(moduleKey: string): Promise<string | null> {
   const mem = sessionKeys.get(moduleKey);
   if (mem) return mem;
+  // settings.ai
   try {
     const { useData } = await import('../stores/data');
     const cfg = (useData.getState().settings?.ai as any)?.[moduleKey];
-    if (typeof cfg?.apiKey === 'string' && cfg.apiKey.trim()) {
-      // Promote into sessionKeys so subsequent synchronous reads work.
-      sessionKeys.set(moduleKey, cfg.apiKey);
-      return cfg.apiKey;
+    const fromSettings = typeof cfg?.apiKey === 'string' ? cfg.apiKey.trim() : '';
+    if (fromSettings) {
+      sessionKeys.set(moduleKey, fromSettings);
+      return fromSettings;
     }
   } catch { /* ignore */ }
+  // Desktop OS keychain (legacy keys saved before v1.11.20).
+  const b = bridge();
+  if (b?.secrets?.get) {
+    try {
+      const v = await b.secrets.get(account(moduleKey));
+      if (typeof v === 'string' && v.trim()) {
+        sessionKeys.set(moduleKey, v);
+        return v;
+      }
+    } catch { /* ignore */ }
+  }
   return null;
 }
 
+/**
+ * Retrieve a key for an outbound request (web build only).
+ *
+ * On desktop this returns null synchronously — callers must await
+ * resolveKey() instead. In the web build it returns the session-only
+ * value, or (after a cloud sync) the value from settings.ai.
+ */
+export async function getKeyForRequestAsync(moduleKey: string): Promise<string | null> {
+  return resolveKey(moduleKey);
+}
+
 /** Synchronous version — returns only session-held keys (used by callers that
- *  cannot await; they will miss cloud-restored keys until the next tick). */
+ *  cannot await; they will miss OS-keychain / cloud-restored keys until the
+ *  next async tick). Prefer resolveKey() at actual request time. */
 export function getKeyForRequest(moduleKey: string): string | null {
   return sessionKeys.get(moduleKey) ?? null;
 }

@@ -156,7 +156,7 @@ async function enrichWithAi(bundle: Bundle, _ctx: Context): Promise<EnrichResult
     JSON.stringify(bundle.body),
   ].join('\n');
 
-  const res = await aiChat(cfg, 'You write concise clinical learning summaries for pharmacy students.', prompt);
+  const res = await aiChat(cfg, 'You write concise clinical learning summaries for pharmacy students.', prompt, { moduleKey: 'bundler' });
   if (!res.ok) {
     return { bundle, succeeded: false, reason: 'offline-or-error' };
   }

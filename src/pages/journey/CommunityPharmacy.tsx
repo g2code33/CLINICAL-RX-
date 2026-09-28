@@ -1399,7 +1399,7 @@ function CPBundlerTab() {
     const prompt = `Stats: ${statsLine}\n\n${body}\n\nProduce the bundle now.`;
     try {
       const cfg = getEffectiveAiConfig('career');
-      const res = await aiChat(cfg!, system, prompt, { timeoutMs: 180000 });
+      const res = await aiChat(cfg!, system, prompt, { timeoutMs: 180000, moduleKey: 'career' });
       if (res.ok) setResult(res.text);
       else setErr(res.error || 'Something went wrong.');
     } catch (e: any) {
@@ -1505,7 +1505,7 @@ function StartersManager({
       const res = await aiChat(cfg!,
         'You generate realistic community-pharmacy counter scenarios for a pharmacy student. Return ONLY a numbered list, no other commentary.',
         generateStartersPrompt(currentList, genCount),
-        { temperature: 0.9, timeoutMs: 180000 });
+        { temperature: 0.9, timeoutMs: 180000, moduleKey: 'career' });
       if (res.ok) {
         const newOnes = parseStartersFromAi(res.text).filter((s) => !currentList.includes(s));
         setText([...currentList, ...newOnes].join('\n'));

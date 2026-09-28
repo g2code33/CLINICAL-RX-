@@ -529,16 +529,19 @@ function BundleDetail({ bundle, onClose, onOpenBundle }: { bundle: Bundle; onClo
     setStatus('✓ Bundle copied — paste it anywhere to share');
   }
   async function askAI() {
-    if (!chatCfg?.apiKey) {
+    const { resolveKey } = await import('../services/aiSecrets');
+    const k = (chatCfg?.apiKey || '').trim() || (await resolveKey('chat'));
+    if (!k) {
       setStatus('⚠️ Add an API key in Settings → AI → Clinical Chat first.');
       return;
     }
     setThinking(true);
     setStatus('🤖 Clinical AI is thinking…');
     const res = await aiChat(
-      chatCfg,
+      { ...chatCfg!, apiKey: k },
       'You are a clinical learning tutor for a Level 200 pharmacy student. Explain the bundle concisely, identify knowledge gaps and recommend revision.',
-      bundleToMarkdown(bundle)
+      bundleToMarkdown(bundle),
+      { moduleKey: 'chat' }
     );
     setThinking(false);
     // Log this AI task to the Chat section so it's viewable in AI → Chat.

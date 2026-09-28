@@ -408,6 +408,21 @@ function initSecretsIpc() {
   ipcMain.handle('secret:list', () => Object.keys(readSecrets()));
 
   /**
+   * Read a stored secret back to the renderer. Only `ai:*` accounts are
+   * permitted (key material for other subsystems never crosses the bridge).
+   * Used by the AI request path so a key saved in safeStorage before v1.11.20
+   * (when apiKey was NOT persisted to settings) can still be used for
+   * outbound requests. Cloud-synced keys that land in settings.ai are also
+   * promoted into safeStorage by the renderer on sync; this IPC is how the
+   * renderer can later read them back to build Authorization headers.
+   */
+  ipcMain.handle('secret:get', (_e, account: string) => {
+    if (!isValidAccount(account) || !account.startsWith('ai:')) return null;
+    const map = readSecrets();
+    return typeof map[account] === 'string' ? map[account] : null;
+  });
+
+  /**
    * Send an AI request using a stored key. The key is decrypted here, used for
    * the outbound HTTPS call, and discarded — the renderer only ever sees the
    * model's reply.

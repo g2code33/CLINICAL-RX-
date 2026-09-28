@@ -28,6 +28,9 @@ export interface AiGenerateRequest {
   temperature?: number;
   timeoutMs?: number;
   onToken?: (token: string) => void;
+  /** Which AI module key this is for (chat/tutor/analyzer/notes/...) so the
+   *  provider can resolve an apiKey from the OS keychain when one exists. */
+  configKey?: string;
 }
 
 export type AiGenerateResult = { ok: true; text: string } | { ok: false; error: string };
@@ -54,14 +57,39 @@ export const cloudProvider: AiProvider = {
   },
   async generate(req, config) {
     if (!config) return { ok: false, error: 'No AI configuration provided.' };
+    // Resolve a real apiKey from any store (OS keychain / session / settings).
+    // Pre-v1.11.20 desktop installs only had the key in safeStorage, not in
+    // config.apiKey, so we always look it up.
+    const { resolveKey } = await import('./aiSecrets');
+    let { configKey } = req as any;
+    if (!configKey) {
+      // Best-effort match by iterating settings.ai and finding the entry whose
+      // model/baseUrl/enabled matches config.
+      try {
+        const { useData } = await import('../stores/data');
+        const ai = useData.getState().settings?.ai ?? {};
+        for (const [k, c] of Object.entries(ai)) {
+          if (c && (c as any).model === config.model && (c as any).provider === config.provider) {
+            configKey = k; break;
+          }
+        }
+      } catch { /* ignore */ }
+    }
+    let key = (config.apiKey || '').trim();
+    if (!key && configKey) {
+      const resolved = await resolveKey(configKey);
+      if (resolved) key = resolved.trim();
+    }
+    const effective = { ...config, apiKey: key };
     const { aiChat } = await import('./ai');
-    return aiChat(config, req.system, req.prompt, {
+    return aiChat(effective, req.system, req.prompt, {
       history: req.history,
       images: req.images,
       maxTokens: req.maxTokens,
       temperature: req.temperature,
       timeoutMs: req.timeoutMs,
       onToken: req.onToken,
+      moduleKey: configKey,
     });
   },
 };

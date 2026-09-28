@@ -4,6 +4,7 @@ import { type TaskKind } from '../stores/tasks';
 import type { AiModuleConfig } from '../types';
 import { buildUnifiedContext } from './learning';
 import { contextForRecord, formatForAi, retrieveKnowledge } from './intelligence';
+import { getKeyForRequest, resolveKey } from './aiSecrets';
 
 export type AiModuleKey =
   | 'chat'
@@ -349,9 +350,16 @@ export function visionReady(key: AiModuleKey): boolean {
   return !!cfg && cfg.enabled && !!cfg.apiKey && modelSupportsVision(cfg.model || '', cfg.provider);
 }
 
+/** Synchronous readiness check — returns true only if a key is visible
+ *  synchronously (in-memory session cache or cfg.apiKey). Callers that can
+ *  await should use resolveKey() directly for an authoritative answer. */
 export function aiReady(key: AiModuleKey): boolean {
   const cfg = getEffectiveAiConfig(key);
-  return !!cfg && cfg.enabled && !!cfg.apiKey;
+  if (!cfg || !cfg.enabled) return false;
+  if (!!(cfg as any).apiKey?.trim()) return true;
+  // Check sessionKeys (populated by refreshKeyCache on boot if an OS-keychain
+  // key exists).
+  return !!getKeyForRequest(key);
 }
 
 /**
@@ -385,7 +393,10 @@ export async function runAiModule(
   const cfg = getEffectiveAiConfig(key);
   if (!cfg) return { ok: false, error: `Enable "${MODULE_LABEL[key]}" in Settings → AI to use this.` };
   if (!cfg.enabled) return { ok: false, error: `"${MODULE_LABEL[key]}" is disabled in Settings.` };
-  if (!cfg.apiKey) return { ok: false, error: `No API key set for "${MODULE_LABEL[key]}". Add one in Settings → AI (or set one for any module on the same provider and it will be shared).` };
+  // Resolve a real key from any store (OS keychain / session / settings).
+  const realKey = (cfg.apiKey || '').trim() || (await resolveKey(key)) || '';
+  if (!realKey) return { ok: false, error: `No API key set for "${MODULE_LABEL[key]}". Add one in Settings → AI (or set one for any module on the same provider and it will be shared).` };
+  const effectiveCfg = { ...cfg, apiKey: realKey };
   // Cross-section memory: other sessions (across all AI sections). The current
   // session's own thread is provided via opts.history, so exclude it here to
   // avoid duplication.
@@ -413,8 +424,9 @@ export async function runAiModule(
   // and exposes live progress for the Arena-style indicator.
   const label = MODULE_LABEL[key] || key;
   return runTaskInBackground(key as TaskKind, key, label, (onToken) =>
-    aiChat(cfg, system, userPrompt, {
+    aiChat(effectiveCfg, system, userPrompt, {
       ...opts,
+      moduleKey: key,
       // Chain tokens to BOTH the global task (so the indicator stays live
       // even after the page unmounts) AND the caller's own stream callback.
       onToken: (t) => {
