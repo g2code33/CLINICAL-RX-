@@ -11,6 +11,8 @@ const NAV_SHORTCUTS: Array<[string, string]> = [
   ['b', 'Bundles'],
   ['p', 'Progress'],
   ['a', 'AI'],
+  ['y', 'My Health APIs'],
+  ['j', 'PharmD Journey'],
   ['s', 'Settings'],
 ];
 
@@ -26,6 +28,7 @@ export function ShortcutHelp() {
           <ShortcutRow keys={['Ctrl/⌘+K']} desc="Command bar — navigate, search records, ask AI" />
           <ShortcutRow keys={['Ctrl/⌘+Shift+F']} desc="Global search" />
           <ShortcutRow keys={['Ctrl/⌘+N']} desc="Quick capture (today's log)" />
+          <ShortcutRow keys={['Ctrl/⌘+Shift+H']} desc="🩺 My Health APIs workbench" />
           <ShortcutRow keys={['Ctrl/⌘+,']} desc="Settings" />
           <ShortcutRow keys={['?']} desc="Show this help" />
         </div>

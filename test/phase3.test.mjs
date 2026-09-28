@@ -160,8 +160,7 @@ try {
   const scoped = intel.retrieveKnowledge({ stageId: level200.id, limit: 200 });
   check('scoped retrieval returns records', scoped.total > 0);
   check('every record is Level 200', scoped.records.every((r) => r.academic?.stageId === level200.id));
-  const otherStage = academic.allStages().find((s) => s.level === '300');
-  check('Level 300 scope is empty', intel.retrieveKnowledge({ stageId: otherStage.id, limit: 200 }).total === 0);
+  check('Unknown stage id scope is empty', intel.retrieveKnowledge({ stageId: 'non-existent-stage', limit: 200 }).total === 0);
 
   console.log('\nTEST 8 — promotion preserves ward round academic context');
   await academic.promote();

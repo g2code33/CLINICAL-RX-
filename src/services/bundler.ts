@@ -2,7 +2,7 @@ import { useData } from '../stores/data';
 import type { Bundle, BundleCreateInput, ClinicalDay, Disease, Medicine, Investigation, Question, WardRound } from '../types';
 import { emptyBundle, todayIso } from './defaults';
 import { aiChat } from './ai';
-import { getEffectiveAiConfig } from './aiTools';
+import { getEffectiveAiConfig, logAiTask } from './aiTools';
 import { digestRound, roundsInRange, type WardRoundDigest } from './wardRounds';
 
 interface Context {
@@ -167,7 +167,12 @@ async function enrichWithAi(bundle: Bundle, _ctx: Context): Promise<EnrichResult
   const enriched = { ...bundle, summary: t, aiModel: cfg.model, aiPending: false };
   const gaps = pick('KNOWLEDGE GAPS').length ? pick('KNOWLEDGE GAPS') : bundle.knowledgeGaps;
   const rev = pick('RECOMMENDED REVISION').length ? pick('RECOMMENDED REVISION') : bundle.recommendedRevision;
-  return { bundle: { ...enriched, knowledgeGaps: gaps, recommendedRevision: rev }, succeeded: true };
+  const finalBundle = { ...enriched, knowledgeGaps: gaps, recommendedRevision: rev };
+  // Log to bundler section history so every AI run is retrievable in the AI tab.
+  logAiTask('bundler',
+    `Generate bundle summary for ${bundle.type} bundle (${bundle.title}) covering ${bundle.periodStart} → ${bundle.periodEnd}`,
+    t, bundle.title).catch(() => {});
+  return { bundle: finalBundle, succeeded: true };
 }
 
 /** Mark a bundle as awaiting AI enrichment (used when created offline). */

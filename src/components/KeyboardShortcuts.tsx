@@ -16,6 +16,8 @@ const LEADER_ROUTES: Record<string, string> = {
   b: '/bundles',
   p: '/progress',
   a: '/ai',
+  y: '/journey/health-apis',
+  j: '/journey',
   s: '/settings',
 };
 
@@ -43,6 +45,13 @@ export function KeyboardShortcuts() {
       if (mod && e.shiftKey && e.key.toLowerCase() === 'f') {
         e.preventDefault();
         useUi.getState().setSearchOpen(true);
+        return;
+      }
+
+      // Ctrl/Cmd+Shift+H -> My Health APIs workbench
+      if (mod && e.shiftKey && e.key.toLowerCase() === 'h') {
+        e.preventDefault();
+        navigate('/journey/health-apis');
         return;
       }
 

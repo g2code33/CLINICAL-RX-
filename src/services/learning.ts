@@ -684,6 +684,29 @@ export function buildUnifiedContext(opts: { scope?: LearningFilter; limit?: numb
     }
   }
 
+  // --- Community pharmacy workstation ---
+  if (s.cpEncounters.length || s.cpDrugCards.length || s.cpScenarios.length) {
+    lines.push('');
+    lines.push(`=== COMMUNITY PHARMACY ===`);
+    lines.push(`Encounters: ${s.cpEncounters.length} · Drug cards: ${s.cpDrugCards.length} · Scenarios: ${s.cpScenarios.length}`);
+    if (s.cpEncounters.length) {
+      const recent = [...s.cpEncounters].sort((a, b) => (b.date || '').localeCompare(a.date || '')).slice(0, 8);
+      for (const e of recent) {
+        const bits = [
+          e.encounterType,
+          e.symptoms?.length ? `symptoms: ${e.symptoms.join(', ')}` : '',
+          e.recommendedProduct ? `product: ${e.recommendedProduct}` : '',
+          `action: ${e.actionTaken}`,
+          e.redFlags?.length ? `RED FLAGS: ${e.redFlags.join(', ')}` : '',
+        ].filter(Boolean);
+        lines.push(`- ${e.date} "${e.title}": ${bits.join('; ')}`);
+      }
+    }
+    if (s.cpDrugCards.length) {
+      lines.push(`Drugs studied: ${s.cpDrugCards.slice(0, 20).map((d) => `${d.genericName}(${d.confidence ?? '?'}/5)`).join('; ')}`);
+    }
+  }
+
   // --- Tags & favourites ---
   const tags = allTags().slice(0, 20);
   if (tags.length) {

@@ -8,6 +8,9 @@ import type {
   Certification,
   ClinicalExperience,
   Course,
+  CPDrugCard,
+  CPEncounter,
+  CPScenario,
   Goal,
   LeadershipRole,
   Project,
@@ -32,10 +35,44 @@ import type {
   WardEntry,
   WardRound,
 } from '../types';
+
+/** One item in the Recycle Bin — wraps the original record with metadata. */
+export interface TrashItem {
+  /** Synthetic id for the trash entry itself (not the record's original id). */
+  trashId: string;
+  module: ModuleType;
+  record: BaseRecord & Record<string, any>;
+  deletedAt: number;
+  /** Snapshot of the record's title/label at delete time, so we don't have to dig later. */
+  label: string;
+}
 import { LocalStorageAdapter } from '../db/localStorageAdapter';
 import { ElectronAdapter } from '../db/electronAdapter';
-import { hasElectronBridge } from '../db/adapter';
+import { hasElectronBridge, resolveAdapter } from '../db/adapter';
 import { enqueue, backendConfigured, addTombstone } from '../services/syncEngine';
+import { defaultAiConfig, defaultHealthApis, AI_MODULES } from '../services/defaults';
+
+/**
+ * Ensure every known AI module and health-API slot has a config entry, even
+ * for modules added in later versions (so users who upgrade don't see empty
+ * "no API key" warnings for newly-introduced sections). Existing keys/provider/
+ * model choices are preserved; only missing slots are filled with defaults.
+ */
+function migrateSettings(s: any): any {
+  if (!s) return s;
+  const aiDefaults = defaultAiConfig();
+  const haDefaults = defaultHealthApis();
+  const ai = { ...(s.ai ?? {}) };
+  for (const m of AI_MODULES) {
+    if (!ai[m.key]) ai[m.key] = { ...aiDefaults[m.key] };
+    else ai[m.key] = { ...aiDefaults[m.key], ...ai[m.key] };
+  }
+  const healthApis = { ...(s.healthApis ?? {}) };
+  for (const k of Object.keys(haDefaults)) {
+    if (!healthApis[k]) healthApis[k] = { ...haDefaults[k] };
+  }
+  return { ...s, ai, healthApis };
+}
 
 export interface DataStore {
   ready: boolean;
@@ -70,8 +107,12 @@ export interface DataStore {
   research: ResearchItem[];
   leadership: LeadershipRole[];
   goals: Goal[];
+  // Community pharmacy workstation
+  cpEncounters: CPEncounter[];
+  cpDrugCards: CPDrugCard[];
+  cpScenarios: CPScenario[];
   status: string;
-  removed: Array<{ module: ModuleType; record: any }>;
+  removed: TrashItem[];
 
   init: () => Promise<void>;
   platformName: () => Promise<string>;
@@ -79,6 +120,9 @@ export interface DataStore {
   saveProfile: (p: Profile) => Promise<void>;
   saveSettings: (s: Settings) => Promise<void>;
   undoRemoved: () => Promise<number>;
+  restoreFromTrash: (trashId: string) => Promise<boolean>;
+  purgeFromTrash: (trashId: string) => Promise<void>;
+  emptyTrash: () => Promise<void>;
 
   all: (module: ModuleType) => Array<BaseRecord & Record<string, any>>;
   getById: (module: ModuleType, id: string) => any | null;
@@ -96,6 +140,44 @@ function uid(): string {
 
 function sortByUpdated<T extends { updatedAt: number }>(arr: T[]): T[] {
   return [...arr].sort((a, b) => b.updatedAt - a.updatedAt);
+}
+
+// ---- Recycle Bin persistence (separate from the main data bucket so deleted
+// items survive reinstalls of the main schema and never accidentally come back)
+const TRASH_KEY = 'clinical-rx:trash:v1';
+
+function loadTrash(): TrashItem[] {
+  try {
+    const raw = localStorage.getItem(TRASH_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveTrash(items: TrashItem[]) {
+  try { localStorage.setItem(TRASH_KEY, JSON.stringify(items)); } catch { /* storage full — ignore */ }
+}
+
+/** Best-effort human label for a record, used in the recycle bin list. */
+function labelFor(module: ModuleType, rec: Record<string, any>): string {
+  if (!rec) return '(unknown item)';
+  if (typeof rec.title === 'string' && rec.title.trim()) return rec.title;
+  if (typeof rec.name === 'string' && rec.name.trim()) return rec.name;
+  if (typeof rec.topic === 'string' && rec.topic.trim()) return rec.topic;
+  if (typeof rec.text === 'string' && rec.text.trim()) return rec.text.slice(0, 80);
+  if (typeof rec.content === 'string' && rec.content.trim()) return rec.content.slice(0, 80);
+  if (typeof rec.ward === 'string' && rec.ward.trim()) {
+    const d = rec.date ? ` · ${rec.date}` : '';
+    return `${rec.ward}${d}`;
+  }
+  if (typeof rec.date === 'string') return `${module} · ${rec.date}`;
+  if (typeof rec.organization === 'string') return `${rec.position || ''} @ ${rec.organization}`.trim();
+  if (typeof rec.genericName === 'string' && rec.genericName.trim()) return rec.genericName;
+  if (typeof rec.scenario === 'string' && rec.scenario.trim()) return rec.scenario.slice(0, 80);
+  return `${module} · ${(rec.id || '').slice(0, 8)}`;
 }
 
 // Maps a module to its array key on the store. Most are simply `module + 's'`,
@@ -131,6 +213,7 @@ const STAMPED_MODULES: ModuleType[] = [
   // so promotion can never rewrite their history.
   'clinicalExperience', 'skill', 'achievement', 'project', 'research',
   'leadership', 'goal',
+  'cpEncounter', 'cpDrugCard', 'cpScenario',
 ];
 
 const LIST_KEY: Partial<Record<ModuleType, keyof DataStore>> = {
@@ -148,18 +231,26 @@ const LIST_KEY: Partial<Record<ModuleType, keyof DataStore>> = {
   // store keys, so without these the arrays would silently never update.
   research: 'research',
   leadership: 'leadership',
+  // Community pharmacy modules use explicit keys (camelCase plurals).
+  cpEncounter: 'cpEncounters',
+  cpDrugCard: 'cpDrugCards',
+  cpScenario: 'cpScenarios',
 };
 
-function listKeyFor(module: ModuleType, state: Record<string, unknown>): keyof DataStore {
+function listKeyFor(module: ModuleType): keyof DataStore {
   const explicit = LIST_KEY[module];
   if (explicit) return explicit;
-  const plural = module + 's';
-  return (plural in state ? plural : module) as keyof DataStore;
+  // Plural by default. The singular form is almost never a list key on the
+  // store (research/leadership are the only uncountable ones, handled above).
+  return (module + 's') as keyof DataStore;
 }
 
 export const useData = create<DataStore>((set, get) => ({
   ready: false,
-  adapter: hasElectronBridge() ? new ElectronAdapter() : new LocalStorageAdapter(),
+  // Adapter is resolved lazily in init() so we never pick the wrong backend
+  // because of a top-level import racing the Electron preload. It is set as
+  // a non-null property right at the start of init().
+  adapter: null as unknown as StorageAdapter,
   platform: 'web',
   profile: null,
   settings: null,
@@ -189,16 +280,30 @@ export const useData = create<DataStore>((set, get) => ({
   research: [],
   leadership: [],
   goals: [],
-  removed: [],
+  cpEncounters: [],
+  cpDrugCards: [],
+  cpScenarios: [],
+  removed: loadTrash(),
   status: 'Initializing…',
 
   init: async () => {
-    const adapter = get().adapter;
-    set({ status: 'Loading local data…' });
+    // With the DualAdapter (v1.11.18), resolveAdapter() is safe to call at
+    // ANY time (module-load, init, save, whatever). It always keeps a
+    // localStorage backend alive and dual-writes to SQLite whenever the
+    // Electron bridge is present — so data cannot be lost to a startup
+    // race, period.
+    const adapter = resolveAdapter();
+    set({ adapter, status: 'Loading local data…' });
     try {
+      // Wait for adapter backend probe (localStorage/sessionStorage/memory
+      // detection + IndexedDB probe) before reading so the first list() call
+      // uses the correctly-selected storage.
+      const a0 = adapter as any;
+      if (typeof a0.waitReady === 'function') await a0.waitReady();
       const platform = await adapter.platform();
-      const [profiles, settingsList, days, diseases, medicines, investigations, questions, lessons, revisions, bundles, chats, quizzes, reminders, wardRounds, wardEntries, wardAnalyses, academicStages, academicPeriods, courses, activities, clinicalExperiences, skills, achievements, certifications, projects, research, leadership, goals] =
-        await Promise.all([
+
+      const loadAll = async () =>
+        Promise.all([
           adapter.list('profile'),
           adapter.list('settings'),
           adapter.list('day'),
@@ -227,7 +332,15 @@ export const useData = create<DataStore>((set, get) => ({
           adapter.list('research'),
           adapter.list('leadership'),
           adapter.list('goal'),
+          adapter.list('cpEncounter'),
+          adapter.list('cpDrugCard'),
+          adapter.list('cpScenario'),
         ]);
+
+      // Initial load from whatever adapter we resolved first.
+      let [profiles, settingsList, days, diseases, medicines, investigations, questions, lessons, revisions, bundles, chats, quizzes, reminders, wardRounds, wardEntries, wardAnalyses, academicStages, academicPeriods, courses, activities, clinicalExperiences, skills, achievements, certifications, projects, research, leadership, goals, cpEncounters, cpDrugCards, cpScenarios] =
+        await loadAll();
+
       // Defensive parse: skip any corrupt record instead of throwing, so the
       // app can never be locked on the splash screen by bad stored data.
       const parse = (items: any[]) =>
@@ -236,8 +349,70 @@ export const useData = create<DataStore>((set, get) => ({
             try { return JSON.parse(i.data); } catch { return null; }
           })
           .filter(Boolean);
-      const profile = profiles.length ? parse(profiles)[0] : null;
-      const settings = settingsList.length ? parse(settingsList)[0] : null;
+      let profile: Profile | null = profiles.length ? (parse(profiles)[0] ?? null) : null;
+      let parsedSettings: any = settingsList.length ? (parse(settingsList)[0] ?? null) : null;
+
+      // PROFILE DURABILITY (§first-run-never): if the primary bucket has no
+      // parseable profile (corrupt record, browser quirk, partial write) try
+      // the rolling backup BEFORE we fall through to Onboarding, then fall
+      // back to the IndexedDB durable mirror. The user should only see the
+      // create-profile screen on a genuinely fresh install — never after an
+      // update, a crash, a hard refresh, or closing & reopening.
+      const a = adapter as any;
+      let recovered: any = null;
+      if (!profile && typeof a.recoverFromBackup === 'function') {
+        try {
+          recovered = a.recoverFromBackup();
+          if (recovered?.profile) {
+            profile = recovered.profile as Profile;
+            a.put('profile', profile.id, profile, (profile as any).createdAt ?? Date.now(), (profile as any).updatedAt ?? Date.now()).catch(() => {});
+            console.info('[clinical-rx] Recovered profile from rolling backup.');
+          }
+          if (!parsedSettings && recovered?.settings) {
+            parsedSettings = recovered.settings;
+            a.put('settings', parsedSettings.id, parsedSettings, parsedSettings.createdAt ?? Date.now(), parsedSettings.updatedAt ?? Date.now()).catch(() => {});
+          }
+        } catch {
+          /* backup is best-effort */
+        }
+      }
+
+      // Last resort: IndexedDB durable mirror (covers localStorage wipes,
+      // corrupted buckets, iOS Safari eviction, etc.). Only invoked if the
+      // rolling backup also failed to find a profile.
+      if (!profile && typeof a.restoreFromDurableMirror === 'function') {
+        try {
+          const restored = await a.restoreFromDurableMirror();
+          if (restored) {
+            // Re-read profile/settings after the mirror repopulated items.
+            const [rp, rs] = await Promise.all([adapter.list('profile'), adapter.list('settings')]);
+            profile = rp.length ? (parse(rp)[0] ?? null) : null;
+            parsedSettings = rs.length ? (parse(rs)[0] ?? null) : null;
+            console.info('[clinical-rx] Restored data from IndexedDB durable mirror.');
+          }
+        } catch {
+          /* mirror is best-effort */
+        }
+      }
+
+      // Auto-create default settings on first run, and ALWAYS migrate so new
+      // AI modules added in later versions get an entry (with a placeholder
+      // key) without the user having to touch Settings.
+      const settings = migrateSettings(parsedSettings ?? {
+        id: uid(), createdAt: Date.now(), updatedAt: Date.now(),
+        appearance: 'system', clinicalSite: '', course: 'Pharmacy',
+        autoDailyBundle: true, autoWeeklyBundle: true,
+        ai: defaultAiConfig(), healthApis: defaultHealthApis(),
+        learningProfile: { preferredExplanation: [] },
+        onlineAccount: { connected: false }, aiPendingBundles: [], autoBackup: 'off',
+      });
+      // Persist any backfilled entries so that the next boot is clean and
+      // Settings UI shows all modules immediately.
+      if (parsedSettings) {
+        adapter.put('settings', settings.id, settings, settings.createdAt, settings.updatedAt).catch(() => {});
+      } else {
+        adapter.put('settings', settings.id, settings, settings.createdAt, settings.updatedAt).catch(() => {});
+      }
       set({
         platform,
         profile,
@@ -268,8 +443,18 @@ export const useData = create<DataStore>((set, get) => ({
         research: sortByUpdated(parse(research)),
         leadership: sortByUpdated(parse(leadership)),
         goals: sortByUpdated(parse(goals)),
+        cpEncounters: sortByUpdated(parse(cpEncounters)),
+        cpDrugCards: sortByUpdated(parse(cpDrugCards)),
+        cpScenarios: sortByUpdated(parse(cpScenarios)),
         ready: true,
-        status: 'Ready · ' + (hasElectronBridge() ? 'SQLite (offline)' : 'Web storage'),
+        // Reflect degraded storage in the status line so the user knows if
+        // their data won't survive a reload (e.g. sandboxed preview iframe).
+        status: (() => {
+          const base = hasElectronBridge() ? 'Ready · SQLite (offline)' : 'Ready · Web storage';
+          const info = a0.storageInfo?.();
+          if (info && !info.persistent) return '⚠️ ' + (info.reason || 'Storage is not persistent — data will not survive reload.');
+          return base;
+        })(),
       });
     } catch (e: any) {
       // Never hard-lock the app: surface the error but still boot.
@@ -291,14 +476,22 @@ export const useData = create<DataStore>((set, get) => ({
 
   saveProfile: async (p) => {
     const adapter = get().adapter;
-    await adapter.put('profile', p.id, p, p.createdAt, p.updatedAt);
-    set({ profile: p });
+    // PROFILE IMMUTABILITY: once a profile is created its id + createdAt
+    // must never change on save, otherwise update migrations and backup
+    // recovery treat it as a new person. Defensive-clone to catch bugs.
+    const existing = get().profile;
+    const safe: Profile = existing?.id
+      ? { ...p, id: existing.id, createdAt: existing.createdAt, updatedAt: Date.now() }
+      : p;
+    await adapter.put('profile', safe.id, safe, safe.createdAt, safe.updatedAt);
+    set({ profile: safe });
   },
 
   saveSettings: async (s) => {
     const adapter = get().adapter;
-    await adapter.put('settings', s.id, s, s.createdAt, s.updatedAt);
-    set({ settings: s });
+    const migrated = migrateSettings(s);
+    await adapter.put('settings', migrated.id, migrated, migrated.createdAt, migrated.updatedAt);
+    set({ settings: migrated });
   },
 
   all: (module) => {
@@ -329,6 +522,9 @@ export const useData = create<DataStore>((set, get) => ({
       research: get().research,
       leadership: get().leadership,
       goal: get().goals,
+      cpEncounter: get().cpEncounters,
+      cpDrugCard: get().cpDrugCards,
+      cpScenario: get().cpScenarios,
       academicStage: get().academicStages,
       academicPeriod: get().academicPeriods,
       course: get().courses,
@@ -347,8 +543,18 @@ export const useData = create<DataStore>((set, get) => ({
     const now = Date.now();
     // Records applied from a sync must keep the server's updatedAt and must
     // NOT be re-enqueued, otherwise every pull pushes everything back up and
-    // the sync never converges.
-    let rec: any = fromSync ? { ...record } : { ...record, updatedAt: now };
+    // the sync never converges. For locally-written records, always ensure
+    // id + createdAt exist (AI tools sometimes write bare objects without
+    // ids; without this guard they collide on `undefined` and overwrite the
+    // first array entry instead of appending).
+    const baseRec: any = { ...record };
+    if (!fromSync) {
+      if (!baseRec.id) baseRec.id = uid();
+      if (!baseRec.createdAt) baseRec.createdAt = now;
+      if (!baseRec.updatedAt) baseRec.updatedAt = now;
+      else baseRec.updatedAt = now;
+    }
+    let rec: any = baseRec;
     // ONE LINKED DATASET: stamp the academic context (level / year / semester)
     // onto every learning record as it is written, from wherever it was
     // created — UI, quick add, ward rounds, importers or automation. Existing
@@ -365,7 +571,7 @@ export const useData = create<DataStore>((set, get) => ({
       import('../services/syncScheduler').then((m) => m.notifyLocalChange()).catch(() => {});
     }
     set((s) => {
-      const listKey = listKeyFor(module, s as unknown as Record<string, unknown>);
+      const listKey = listKeyFor(module);
       const existing = (s[listKey] as BaseRecord[]) || [];
       const next = existing.some((r) => r.id === rec.id)
         ? existing.map((r) => (r.id === rec.id ? rec : r))
@@ -392,7 +598,7 @@ export const useData = create<DataStore>((set, get) => ({
   remove: async (module, id, opts) => {
     const adapter = get().adapter;
     const fromSync = opts?.fromSync === true;
-    // Keep the record for undo (unless this came from a sync apply).
+    // Keep the record for undo / recycle bin (unless this came from a sync apply).
     let snapshot: any = null;
     if (!fromSync) snapshot = get().all(module).find((r) => r.id === id) ?? null;
     await adapter.remove(module, id);
@@ -404,23 +610,71 @@ export const useData = create<DataStore>((set, get) => ({
     // in later, and a pull must not resurrect what they deleted offline (§24).
     if (!fromSync) addTombstone(module, id);
     set((s) => {
-      const listKey = listKeyFor(module, s as unknown as Record<string, unknown>);
+      const listKey = listKeyFor(module);
       const existing = (s[listKey] as BaseRecord[]) || [];
-      const removed = snapshot ? [...s.removed, { module, record: snapshot }].slice(-10) : s.removed;
-      return { [listKey]: existing.filter((r) => r.id !== id), removed, status: fromSync ? '✓ Synced' : '✓ Deleted' } as any;
+      let nextRemoved = s.removed;
+      if (snapshot) {
+        const trashItem: TrashItem = {
+          trashId: 'trash_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 6),
+          module,
+          record: snapshot,
+          deletedAt: Date.now(),
+          label: labelFor(module, snapshot),
+        };
+        nextRemoved = [trashItem, ...s.removed];
+        saveTrash(nextRemoved);
+      }
+      return { [listKey]: existing.filter((r) => r.id !== id), removed: nextRemoved, status: fromSync ? '✓ Synced' : '✓ Deleted' } as any;
     });
   },
 
   undoRemoved: async () => {
     const st = get();
     if (!st.removed.length) return 0;
-    const last = st.removed[st.removed.length - 1];
+    const last = st.removed[0];
     const rec = last.record;
     if (rec && rec.id) {
       await st.save(last.module, rec, { fromSync: true });
     }
-    set({ removed: st.removed.slice(0, -1), status: '↩ Undid deletion' });
+    const next = st.removed.slice(1);
+    saveTrash(next);
+    set({ removed: next, status: '↩ Undid deletion' });
     return 1;
+  },
+
+  restoreFromTrash: async (trashId) => {
+    const st = get();
+    const idx = st.removed.findIndex((t) => t.trashId === trashId);
+    if (idx < 0) return false;
+    const item = st.removed[idx];
+    // Skip if a record with the same id already exists (user recreated it).
+    if (st.getById(item.module, item.record.id)) {
+      // Just remove from trash; data is already present.
+      const next = st.removed.filter((t) => t.trashId !== trashId);
+      saveTrash(next);
+      set({ removed: next, status: 'Item already exists — removed from bin' });
+      return true;
+    }
+    await st.save(item.module, item.record, { fromSync: true });
+    const next = st.removed.filter((t) => t.trashId !== trashId);
+    saveTrash(next);
+    set({ removed: next, status: `↩ Restored "${item.label}"` });
+    return true;
+  },
+
+  purgeFromTrash: async (trashId) => {
+    set((s) => {
+      const next = s.removed.filter((t) => t.trashId !== trashId);
+      saveTrash(next);
+      return { removed: next, status: 'Permanently deleted' };
+    });
+    // Also remove tombstone so a future sync of the same id is clean — but for
+    // now we leave the tombstone in place (safer: prevents cloud resurrect).
+  },
+
+  emptyTrash: async () => {
+    saveTrash([]);
+    set({ removed: [], status: '🗑 Recycle bin emptied' });
   },
 
   setStatus: (s) => set({ status: s }),

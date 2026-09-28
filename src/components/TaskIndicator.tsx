@@ -17,7 +17,7 @@ export function TaskIndicator() {
   return (
     <div className="fixed bottom-20 left-3 z-40 w-72 max-w-[92vw] space-y-2 lg:bottom-4">
       {tasks.map((t) => (
-        <div key={t.id} className="rounded-xl border border-brand-200 bg-white/95 p-3 shadow-xl backdrop-blur dark:border-brand-800 dark:bg-slate-800/95">
+        <div key={t.id} className="rounded-xl border border-brand-200 bg-white/95 p-3 text-slate-900 shadow-xl backdrop-blur dark:border-brand-800 dark:bg-slate-800/95 dark:text-slate-100">
           <div className="flex items-center gap-2 text-sm font-semibold text-brand-700 dark:text-brand-300">
             <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-brand-500 border-t-transparent" />
             {t.label}

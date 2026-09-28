@@ -67,6 +67,11 @@ try {
   p.currentPeriodId = boot.period?.id;
   await st().saveProfile(p);
   const level200 = boot.stage;
+  // Add a completed (Level 100) and upcoming (Level 300) stage so the test
+  // exercises multi-stage context even though bootstrap now only creates the
+  // student's current level on first launch.
+  await academic.addStage({ level: '100', academicYear: '2025/2026', status: 'completed', programme: 'Pharmacy' });
+  await academic.addStage({ level: '300', academicYear: '2027/2028', status: 'upcoming', programme: 'Pharmacy' });
   await academic.saveCourse(academic.buildCourse(level200.id, 'Clinical Pharmacy', boot.period.id));
 
   console.log('\nAUTOMATIC LINKING — the store stamps every writer, not just the UI');

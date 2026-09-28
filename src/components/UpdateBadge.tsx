@@ -15,13 +15,17 @@ export function UpdateBadge() {
   useEffect(() => {
     if (!isElectron) return;
     if (installType === 'deb') return; // .deb can't auto-update — skip check
-    if (phase.state !== 'idle' && phase.state !== 'up-to-date') return;
-    window.clinicalRx!.update.check().then((res: any) => {
-      if (res?.ok) setStatus('✓ Update check complete');
-      else if (res?.reason === 'dev') setStatus('Dev mode — updates available in packaged builds');
-    });
+    if (phase.state === 'available' || phase.state === 'downloaded' || phase.state === 'downloading') return;
+    if (!meta?.appVersion) return; // wait for meta to load
+    const t = setTimeout(() => {
+      window.clinicalRx!.update.check().then((res: any) => {
+        if (res?.ok) setStatus('✓ Update check complete');
+        else if (res?.reason === 'dev') setStatus('Dev mode — updates available in packaged builds');
+      }).catch(() => {});
+    }, 2500);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isElectron, installType]);
+    return () => clearTimeout(t);
+  }, [isElectron, installType, meta?.appVersion]);
 
   useEffect(() => {
     if (!open) return;
@@ -73,7 +77,7 @@ export function UpdateBadge() {
       </button>
 
       {open && (
-        <div className="absolute right-0 top-full z-50 mt-2 w-72 rounded-xl border border-slate-200 bg-white p-4 shadow-xl dark:border-slate-700 dark:bg-slate-800">
+        <div className="absolute right-0 top-full z-50 mt-2 w-72 rounded-xl border border-slate-200 bg-white p-4 text-slate-900 shadow-xl dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100">
           <div className="mb-2 text-sm font-semibold">🔄 Updates</div>
 
           {!isElectron ? (

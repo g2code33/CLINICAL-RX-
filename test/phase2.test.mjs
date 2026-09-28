@@ -131,8 +131,9 @@ try {
   const l200 = learning.filterAll({ stageId: level200.id });
   const total200 = Object.values(l200).reduce((n, l) => n + l.length, 0);
   check('all five records are Level 200', total200 === 5, String(total200));
-  const otherStage = academic.allStages().find((s) => s.level === '300');
-  const l300 = learning.filterAll({ stageId: otherStage.id });
+  // A non-existent stage id must return zero records (filter should not throw).
+  const fakeId = 'non-existent-stage-id';
+  const l300 = learning.filterAll({ stageId: fakeId });
   check('Level 300 has nothing yet', Object.values(l300).reduce((n, l) => n + l.length, 0) === 0);
   check('stats respect the filter', learning.learningStats({ stageId: level200.id }).medicines === 1);
 
