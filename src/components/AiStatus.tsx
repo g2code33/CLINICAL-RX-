@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { availability, refreshKeyCache, type AiPersona } from '../services/aiOrchestrator';
 import { detectLocalAi, installLocalProvider, localModels, localRuntime } from '../services/localAi';
+import { useData } from '../stores/data';
 
 /**
  * 🟢🟡🔴 AI CONNECTIVITY INDICATOR
@@ -31,8 +32,18 @@ export function useAiStatus(persona: AiPersona = 'general'): AiStatusSnapshot {
   useEffect(() => {
     let alive = true;
 
+    const hasLocalModule = () => {
+      const ai = useData.getState().settings?.ai ?? {};
+      return Object.values(ai).some((c: any) => c?.mode === 'local');
+    };
+
     const refresh = async (probe = false) => {
-      if (probe) {
+      // Only hit localhost if the user has actually enabled local mode for
+      // some AI module. Otherwise probing 127.0.0.1:11434/1234/8080 just
+      // produces scary ERR_CONNECTION_REFUSED lines in DevTools on every
+      // boot (when the user is 99% likely not running a local LLM).
+      const shouldProbe = probe && hasLocalModule();
+      if (shouldProbe) {
         installLocalProvider();
         await detectLocalAi(true);
         await refreshKeyCache();

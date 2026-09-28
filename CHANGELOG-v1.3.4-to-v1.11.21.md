@@ -1,4 +1,22 @@
-# CLINICAL Rx — Changelog (v1.3.4 → v1.11.20)
+# CLINICAL Rx — Changelog (v1.3.4 → v1.11.21)
+
+## v1.11.21 — Hotfix: Community Pharmacy modules + quiet console (2026-09-28)
+- **Desktop data loss fix:** the Electron main-process module allowlist was
+  missing the Community Pharmacy workstation tables (`cpEncounter`,
+  `cpDrugCard`, `cpScenario`). Any save to those modules on desktop threw
+  `Invalid module` at the IPC layer, meaning CP encounters, drug cards and
+  scenarios never made it to SQLite. Added them to `ALLOWED_MODULES`.
+- **Quieter DevTools console:** the local-AI runtime probe no longer
+  fires on boot (which caused `ERR_CONNECTION_REFUSED` lines for
+  127.0.0.1:11434/1234/8080 when the user didn't have Ollama/LM Studio
+  running). Probing now only happens when (a) the user has at least one
+  AI module actually set to "local" mode, or (b) they tap "Rescan local
+  runtimes" in AI Settings.
+- Bumped `clinical-rx-v29` service worker cache.
+
+---
+
+## v1.11.20 — Cloud sign-in persistence + API-key cloud sync (2026-09-28)
 
 ## v1.11.20 — Cloud sign-in persistence + API-key cloud sync (2026-09-28)
 

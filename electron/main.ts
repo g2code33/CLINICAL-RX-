@@ -192,7 +192,9 @@ function createWindow(): BrowserWindow {
 // the database or the network.
 // ===========================================================================
 
-/** Modules the renderer may touch. Anything else is rejected outright. */
+/** Modules the renderer may touch. Anything else is rejected outright.
+ *  Keep this in sync with src/types/index.ts ModuleType and with any module
+ *  the data store iterates at startup. */
 const ALLOWED_MODULES = new Set([
   'profile', 'settings', 'day', 'disease', 'medicine', 'investigation',
   'question', 'lesson', 'revision', 'bundle', 'chat', 'quiz', 'reminder',
@@ -200,6 +202,8 @@ const ALLOWED_MODULES = new Set([
   'course', 'activity',
   'clinicalExperience', 'skill', 'achievement', 'certification',
   'project', 'research', 'leadership', 'goal',
+  // Community Pharmacy workstation (Phase 12).
+  'cpEncounter', 'cpDrugCard', 'cpScenario',
   'backup', 'auditLog',
 ]);
 
