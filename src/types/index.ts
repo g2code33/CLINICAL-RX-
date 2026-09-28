@@ -27,7 +27,11 @@ export type ModuleType =
   | 'project'
   | 'research'
   | 'leadership'
-  | 'goal';
+  | 'goal'
+  // --- Community Pharmacy workstation ---
+  | 'cpEncounter'
+  | 'cpDrugCard'
+  | 'cpScenario';
 
 export interface BaseRecord {
   id: string;
@@ -67,6 +71,27 @@ export interface AiModuleConfig {
   localModel?: string;
 }
 
+/**
+ * 🩺 HEALTH API KEYS — separate from the AI LLM keys.
+ *
+ * These keys are for real pharmaceutical/clinical data APIs the student uses
+ * for study (openFDA, RxNav, UMLS, WebMD/RxList). They live in Settings under
+ * their own "My Health APIs" card so they are never accidentally sent to an
+ * LLM or confused with AI provider keys.
+ */
+export interface HealthApiKey {
+  /** Display name, e.g. "openFDA API key". */
+  name: string;
+  /** The key / token itself. '' means not configured. */
+  key: string;
+  /** Optional base URL override (for proxies / self-hosted mirrors). */
+  baseUrl?: string;
+  /** Enabled = the app will try to use this API when studying. */
+  enabled: boolean;
+  /** Notes the student adds (e.g. "UMLS requires a free UTS account"). */
+  notes?: string;
+}
+
 /** One entry in the AI activity log. Never contains API keys. */
 export interface AiLogEntry {
   id: string;
@@ -90,6 +115,9 @@ export interface Settings extends BaseRecord {
   autoDailyBundle: boolean;
   autoWeeklyBundle: boolean;
   ai: Record<string, AiModuleConfig>; // keyed by module name
+  /** Study health-APIs keys — separate from the AI keys. These are for real
+   *  clinical/medical data APIs (openFDA, RxNav, UMLS, WebMD/RxList). */
+  healthApis?: Record<string, HealthApiKey>;
   learningProfile: {
     preferredExplanation: string[];
   };
@@ -428,6 +456,7 @@ export type WardEntryType =
 
 export interface WardEntry extends BaseRecord {
   roundId: string;
+  patientLabel?: string; // e.g. "Patient 1" — groups captures under a patient within the round
   type: WardEntryType;
   title: string; // short subject, e.g. "Amlodipine" (may be empty for notes)
   content: string; // the student's own words — NEVER modified by AI
@@ -765,6 +794,115 @@ export interface Goal extends ProfessionalRecord {
   milestones?: GoalMilestone[];
   academic?: AcademicLink;
   notes?: string;
+}
+
+// ===========================================================================
+// 💊 COMMUNITY PHARMACY WORKSTATION
+// A smart, AI-powered counter simulator + study tool. Records patient
+// encounters (OTC consults, prescriptions, counselling), drug study cards
+// and practice scenarios. AI discusses every entry the student makes.
+// ===========================================================================
+
+export type CPEncounterType =
+  | 'otc-consult'       // patient asks for OTC recommendation
+  | 'prescription'     // dispensing / checking a prescription
+  | 'counselling'      // pure counselling (new medicine, MUR, NMS)
+  | 'side-effect'      // patient reports adverse effect
+  | 'interaction'      // patient asks about interaction / duplicate therapy
+  | 'referral'         // red-flag symptoms needing GP/A&E referral
+  | 'minor-ailment'    // minor ailment scheme
+  | 'other';
+
+export type CPActionType =
+  | 'recommend-otc'
+  | 'refer-to-doctor'
+  | 'refer-emergency'
+  | 'counsel-only'
+  | 'dispense-as-written'
+  | 'contact-prescriber'
+  | 'lifestyle-advice'
+  | 'refuse-sale';
+
+export type CPFollowUp = 'none' | '24h' | '48h' | '1-week' | 'see-gp-if';
+
+/** One community-pharmacy encounter — a real or simulated patient at the counter. */
+export interface CPEncounter extends ProfessionalRecord {
+  /** Short headline, e.g. "32F headache asking for paracetamol". */
+  title: string;
+  encounterType: CPEncounterType;
+  date: string;
+  /** Free-text patient story — exactly what they said at the counter. */
+  patientPresentation: string;
+  /** Patient factors the pharmacist gathered (age, pregnancy, comorbidities, current meds, allergies). */
+  patientContext: {
+    ageGroup?: 'infant' | 'child' | 'adolescent' | 'adult' | 'elderly';
+    pregnantOrBreastfeeding?: boolean;
+    comorbidities?: string[];
+    currentMeds?: string[];
+    allergies?: string[];
+    otherNotes?: string;
+  };
+  /** Symptoms / complaint the student captured (structured). */
+  symptoms: string[];
+  /** Duration & severity in the student's words. */
+  duration?: string;
+  redFlags?: string[];
+  /** What the student decided / did. */
+  actionTaken: CPActionType;
+  recommendedProduct?: string;
+  dosageGiven?: string;
+  counsellingProvided?: string[];
+  warningsGiven?: string[];
+  followUp?: CPFollowUp;
+  referralReason?: string;
+  /** Student's own reflection — what they found hard / what they'd do differently. */
+  reflection?: string;
+  /** Knowledge gaps the student wants to study after this encounter. */
+  knowledgeGaps?: string[];
+  /** Auto-linked drug card IDs that this encounter involved. */
+  drugCardIds?: string[];
+  /** 1-5 self-rated confidence. */
+  confidence?: 1 | 2 | 3 | 4 | 5;
+}
+
+/** A drug study card — a medicine the student wants to master for community practice. */
+export interface CPDrugCard extends ProfessionalRecord {
+  genericName: string;
+  brandNames?: string[];
+  drugClass?: string;
+  schedule?: 'GSL' | 'P' | 'POM' | 'CD'; // UK-style; adapts to OTC/Rx internationally.
+  indicationsCommunity?: string[]; // common things you see it used for BEHIND THE COUNTER
+  contraindications?: string[];
+  cautions?: string[]; // e.g. "avoid in elderly", "caution in renal impairment"
+  commonSideEffects?: string[];
+  interactionsToFlag?: string[]; // the ones a community pharmacist MUST catch
+  counsellingPoints?: string[]; // exact words you would say
+  doseAdult?: string;
+  doseChild?: string;
+  redFlagsRefer?: string[]; // when you MUST refer
+  /** Similar / related drugs the student confuses this with. */
+  easilyConfusedWith?: string[];
+  /** Student mnemonic / memory hook. */
+  mnemonic?: string;
+  confidence?: 1 | 2 | 3 | 4 | 5;
+  timesUsed?: number;
+}
+
+/** Practice scenario — a simulation / case for the student to work through. */
+export interface CPScenario extends ProfessionalRecord {
+  scenario: string; // presenting complaint text
+  /** Hidden model answer / ideal pharmacist approach, revealed after the student answers. */
+  idealApproach?: string;
+  redFlags?: string[];
+  appropriateActions?: string[];
+  inappropriateActions?: string[];
+  /** Student's answer before reveal. */
+  studentAnswer?: string;
+  /** AI's feedback after the student answered. */
+  aiFeedback?: string;
+  difficulty?: 'beginner' | 'intermediate' | 'advanced';
+  tags?: string[];
+  completed?: boolean;
 }
 
 /** A per-level snapshot computed from REAL stored data — never fabricated. */

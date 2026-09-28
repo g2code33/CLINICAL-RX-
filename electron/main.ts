@@ -31,18 +31,38 @@ function initUpdater() {
 
   autoUpdater.autoDownload = false;
   autoUpdater.autoInstallOnAppQuit = true;
+  autoUpdater.allowPrerelease = false;
+  autoUpdater.allowDowngrade = false;
   autoUpdater.setFeedURL({
     provider: 'github',
     owner: UPDATE_OWNER,
     repo: UPDATE_REPO,
   });
 
+  // Compare semver strings a.b.c; returns <0 if a<b, 0 if equal, >0 if a>b.
+  // We compare in-process so stale cached updates / equal-version responses
+  // from electron-updater never surface a false "Update available" pill.
+  const cmpVer = (a?: string, b?: string) => {
+    const pa = String(a || '0.0.0').split('.').map((n) => parseInt(n, 10) || 0);
+    const pb = String(b || '0.0.0').split('.').map((n) => parseInt(n, 10) || 0);
+    for (let i = 0; i < 3; i++) {
+      if ((pa[i] || 0) < (pb[i] || 0)) return -1;
+      if ((pa[i] || 0) > (pb[i] || 0)) return 1;
+    }
+    return 0;
+  };
+  const isNewer = (remote?: string) => cmpVer(remote, app.getVersion()) > 0;
+
   autoUpdater.on('checking-for-update', () => sendToRenderer('update:status', { state: 'checking' }));
   autoUpdater.on('update-available', (info) => {
+    if (!isNewer(info?.version)) {
+      sendToRenderer('update:status', { state: 'up-to-date', version: app.getVersion() });
+      return;
+    }
     sendToRenderer('update:status', { state: 'available', version: info.version });
   });
   autoUpdater.on('update-not-available', (info) => {
-    sendToRenderer('update:status', { state: 'up-to-date', version: info.version });
+    sendToRenderer('update:status', { state: 'up-to-date', version: info?.version || app.getVersion() });
   });
   autoUpdater.on('error', (err) => sendToRenderer('update:status', { state: 'error', message: err?.message || 'Update error' }));
   autoUpdater.on('download-progress', (p) =>
@@ -468,6 +488,16 @@ function initIpc() {
     return { ok: true };
   });
   ipcMain.handle('app:platform', () => process.platform);
+  // Diagnostic channel — logs from the renderer show up in the main-process
+  // terminal (and stderr on Linux) so adapter/storage issues are diagnosable
+  // from user reports without needing devtools.
+  ipcMain.handle('app:log', (_e, level: string, args: unknown[]) => {
+    const ts = new Date().toISOString();
+    const prefix = `[renderer ${ts}]`;
+    const fn = (console as any)[level] ?? console.log;
+    try { fn(prefix, ...(Array.isArray(args) ? args : [args])); } catch { console.log(prefix, args); }
+    return { ok: true };
+  });
   ipcMain.handle('notify', (_e, payload: any) => {
     // Clamp notification text so the renderer cannot spawn giant OS toasts.
     const title = typeof payload?.title === 'string' ? payload.title.slice(0, 200) : undefined;
@@ -518,9 +548,7 @@ function initIpc() {
     }
   });
   ipcMain.handle('update:getState', () => {
-    // Reflect the installed version so the renderer can confirm it's current
-    // after a restart (electron-updater exposes no reliable "staged" flag).
-    return { appVersion: app.getVersion() };
+    return { appVersion: app.getVersion(), timestamp: Date.now() };
   });
   ipcMain.handle('update:install', async () => {
     if (!app.isPackaged) return { ok: false, reason: 'dev' };

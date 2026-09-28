@@ -7,20 +7,32 @@ function acct() {
 }
 
 /**
- * 🔐 API KEYS ARE NEVER SYNCHRONISED (Phase 7 §36).
+ * 🔐 API KEY SYNC — ENABLED per explicit user request (2026-09-28).
  *
- * An API key belongs to the DEVICE, not the account. Configuring Clinical AI
- * on a desktop must never hand that key to a phone that later signs in.
+ * The previous version deliberately stripped apiKey/localModel before sync.
+ * The user's standing instruction is: "cloud login must bring back everything
+ * in the cloud including API keys." apiKey is therefore synced and rehydrated
+ * on every login and every app start when connected.
  *
- * These fields are stripped before anything leaves the device, and stripped
- * again on the way back in so a legacy cloud document containing a key can
- * never re-populate a local one.
+ * localModel is still stripped: it points to a local file path on a specific
+ * device and is meaningless on another machine.
+ *
+ * Security model:
+ *  - On Electron desktop, keys additionally live in OS keychain (safeStorage)
+ *    via the preload bridge. After a cloud pull, any apiKey received is
+ *    re-stashed in the OS keychain automatically, so a new device / reinstall
+ *    gets the same key without the user retyping it.
+ *  - On web, keys are held in memory only (existing sessionKeys Map) so
+ *    closing the tab clears them — but they repopulate from the cloud on the
+ *    next sign-in.
+ *  - Keys are never logged by the app.
  */
-const DEVICE_ONLY_FIELDS = ['apiKey', 'localModel'] as const;
+
+const DEVICE_ONLY_FIELDS = ['localModel'] as const;
 
 type AiConfigMap = Record<string, AiModuleConfig>;
 
-/** Remove device-only secrets from an AI config map. */
+/** Strip only fields that are truly device-specific (local model paths). */
 export function stripDeviceSecrets(config: AiConfigMap | undefined): AiConfigMap {
   const out: AiConfigMap = {};
   for (const [key, cfg] of Object.entries(config ?? {})) {
@@ -33,19 +45,18 @@ export function stripDeviceSecrets(config: AiConfigMap | undefined): AiConfigMap
 }
 
 /**
- * Merge a cloud config over the local one WITHOUT touching this device's
- * secrets. Cloud owns shareable preferences (provider, model, temperature,
- * mode, instructions); the device keeps its own key and local model.
+ * Merge a cloud config over the local one. For every module, cloud's fields
+ * win, EXCEPT device-only fields (local model paths) which stay local.
+ * Unknown future fields present locally but absent in cloud are retained.
  */
-function mergePreservingSecrets(local: AiConfigMap, cloud: AiConfigMap): AiConfigMap {
+function mergeAll(local: AiConfigMap, cloud: AiConfigMap): AiConfigMap {
   const merged: AiConfigMap = { ...local };
-  for (const [key, remote] of Object.entries(stripDeviceSecrets(cloud))) {
+  for (const [key, remote] of Object.entries(cloud)) {
     const mine = local[key];
     merged[key] = {
-      ...(mine ?? ({} as AiModuleConfig)),
+      ...(merged[key] ?? ({} as AiModuleConfig)),
       ...remote,
-      // This device's secrets always win — they are never in `remote` anyway.
-      apiKey: mine?.apiKey ?? '',
+      // Device-only fields always come from this device — never from cloud.
       localModel: mine?.localModel,
     } as AiModuleConfig;
   }
@@ -58,13 +69,28 @@ export interface AiSyncResult {
 }
 
 /**
+ * After we've merged cloud → local, re-stash any apiKeys in the OS keychain
+ * (desktop) or the web session map so the AI subsystem can find them. We
+ * fire-and-forget this; aiSecrets will pick them up on the next call.
+ */
+async function rehydrateKeys(aiConfig: AiConfigMap): Promise<void> {
+  try {
+    const secretsMod = await import('./aiSecrets');
+    for (const [moduleKey, cfg] of Object.entries(aiConfig)) {
+      const key = (cfg as any)?.apiKey;
+      if (typeof key === 'string' && key.trim()) {
+        try { await secretsMod.setApiKey(moduleKey, key); } catch { /* ignore per-module */ }
+      }
+    }
+  } catch { /* secrets module unavailable — non-fatal */ }
+}
+
+/**
  * Two-way AI config sync with the cloud account.
  *
- * - Cloud has a config  -> merge it over the local one. Cloud wins per-module,
- *   but modules the cloud doesn't know about are kept locally, so nothing the
- *   user configured is ever wiped.
- * - Cloud has nothing   -> seed it with the local config, so a fresh login on
- *   another device still gets the keys.
+ * - Cloud has a config  → merge it over the local one (including apiKeys),
+ *   then rehydrate OS-keychain / session keys.
+ * - Cloud has nothing   -> seed it with the local config.
  *
  * Called on login, on manual "Sync now", and once at app start when connected.
  */
@@ -79,13 +105,13 @@ export async function syncAiConfig(): Promise<AiSyncResult> {
   if (!settings) return { pulled: false, pushed: false };
 
   if (cloud && typeof cloud === 'object' && !Array.isArray(cloud)) {
-    // Cloud owns shareable preferences; this device keeps its own API keys.
-    const merged = mergePreservingSecrets(settings.ai ?? {}, cloud as AiConfigMap);
+    const merged = mergeAll(settings.ai ?? {}, cloud as AiConfigMap);
     await useData.getState().saveSettings({ ...settings, updatedAt: Date.now(), ai: merged });
+    await rehydrateKeys(merged);
     return { pulled: true, pushed: false };
   }
 
-  // Nothing in the cloud yet — seed it with the local PREFERENCES only.
+  // Nothing in the cloud yet — seed it with the local config (keys included).
   const save = await syncClient.saveAiConfig(a.backendUrl, a.token, stripDeviceSecrets(settings.ai));
   return { pulled: false, pushed: save.ok };
 }
@@ -95,7 +121,6 @@ export async function pushAiConfig(): Promise<boolean> {
   const a = acct();
   const settings = useData.getState().settings;
   if (!a?.connected || !a.token || !settings) return false;
-  // Preferences only — never the key.
   const res = await syncClient.saveAiConfig(a.backendUrl, a.token, stripDeviceSecrets(settings.ai));
   return res.ok;
 }

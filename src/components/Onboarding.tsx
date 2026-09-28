@@ -51,7 +51,7 @@ export function Onboarding() {
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-brand-700 to-slate-900 p-6">
-      <div className="w-full max-w-lg rounded-2xl bg-white p-8 shadow-xl dark:bg-slate-800">
+      <div className="w-full max-w-lg rounded-2xl bg-white p-8 text-slate-900 shadow-xl dark:bg-slate-800 dark:text-slate-100">
         <div className="mb-6 text-center">
           <img src="./v2.PNG" alt="CLINICAL Rx logo" className="mx-auto h-20 w-20 rounded-2xl object-cover shadow-lg" />
           <h1 className="mt-3 text-2xl font-extrabold text-brand-700 dark:text-brand-300">

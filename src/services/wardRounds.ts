@@ -158,7 +158,7 @@ export async function addEntry(
   title: string,
   content: string,
   priority: WardEntry['priority'] = 'medium',
-  opts: { linkId?: string; reasoning?: WardEntry['reasoning']; noLink?: boolean } = {}
+  opts: { linkId?: string; reasoning?: WardEntry['reasoning']; noLink?: boolean; patientLabel?: string } = {}
 ): Promise<WardEntry | null> {
   const text = content.trim();
   const name = title.trim();
@@ -167,6 +167,7 @@ export async function addEntry(
   const entry = newWardEntry(roundId, type, name, text);
   entry.priority = priority;
   if (opts.reasoning) entry.reasoning = opts.reasoning;
+  if (opts.patientLabel?.trim()) entry.patientLabel = opts.patientLabel.trim();
 
   // LINK-ON-CAPTURE: resolve the canonical Clinical Learning record straight
   // away (reusing an existing one where possible) so the ward round points at
@@ -370,17 +371,65 @@ export function roundToMarkdown(round: WardRound): string {
   if (round.focus) lines.push(`**Focus:** ${round.focus}  `);
   lines.push(`**Status:** ${round.status}`);
   lines.push('');
-  for (const type of ENTRY_TYPES) {
-    const items = entries.filter((e) => e.type === type);
-    if (!items.length) continue;
-    const meta = WARD_ENTRY_META[type];
-    lines.push(`## ${meta.icon} ${meta.plural}`);
-    lines.push('');
-    for (const e of items) {
-      lines.push(e.title && e.content ? `- **${e.title}** — ${e.content}` : `- ${e.title || e.content}`);
+
+  // Group entries by patient label (stable order by first capture).
+  const order: string[] = [];
+  const byPatient = new Map<string, WardEntry[]>();
+  const unassigned: WardEntry[] = [];
+  for (const e of entries) {
+    const p = (e.patientLabel || '').trim();
+    if (!p) { unassigned.push(e); continue; }
+    if (!byPatient.has(p)) {
+      byPatient.set(p, []);
+      order.push(p);
     }
-    lines.push('');
+    byPatient.get(p)!.push(e);
   }
+
+  function renderEntry(e: WardEntry) {
+    lines.push(e.title && e.content ? `- **${e.title}** — ${e.content}` : `- ${e.title || e.content}`);
+  }
+
+  for (const label of order) {
+    const items = byPatient.get(label)!;
+    lines.push(`## 🛏️ ${label}`);
+    lines.push('');
+    // Within a patient, group by type for readability.
+    for (const type of ENTRY_TYPES) {
+      const itemsOfType = items.filter((e) => e.type === type);
+      if (!itemsOfType.length) continue;
+      const meta = WARD_ENTRY_META[type];
+      lines.push(`### ${meta.icon} ${meta.label}`);
+      for (const e of itemsOfType) renderEntry(e);
+      lines.push('');
+    }
+  }
+  if (unassigned.length) {
+    lines.push(`## 📎 Unassigned (no patient)`);
+    lines.push('');
+    for (const type of ENTRY_TYPES) {
+      const items = unassigned.filter((e) => e.type === type);
+      if (!items.length) continue;
+      const meta = WARD_ENTRY_META[type];
+      lines.push(`### ${meta.icon} ${meta.plural}`);
+      for (const e of items) renderEntry(e);
+      lines.push('');
+    }
+  }
+
+  // Flat fallback (useful when no patient labels exist — keeps old format).
+  if (order.length === 0) {
+    for (const type of ENTRY_TYPES) {
+      const items = entries.filter((e) => e.type === type);
+      if (!items.length) continue;
+      const meta = WARD_ENTRY_META[type];
+      lines.push(`## ${meta.icon} ${meta.plural}`);
+      lines.push('');
+      for (const e of items) renderEntry(e);
+      lines.push('');
+    }
+  }
+
   const analysis = analysisFor(round.id);
   if (analysis && analysis.status === 'completed') {
     lines.push('---');

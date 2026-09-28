@@ -73,7 +73,7 @@ export function LockScreen({ onUnlocked }: { onUnlocked: () => void }) {
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-slate-100 p-4 dark:bg-slate-900">
-      <div className="w-full max-w-sm rounded-2xl bg-white p-6 text-center shadow-xl dark:bg-slate-800">
+      <div className="w-full max-w-sm rounded-2xl bg-white p-6 text-center text-slate-900 shadow-xl dark:bg-slate-800 dark:text-slate-100">
         <div className="text-4xl" aria-hidden="true">
           🔒
         </div>

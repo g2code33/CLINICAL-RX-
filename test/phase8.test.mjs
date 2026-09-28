@@ -262,20 +262,23 @@ try {
 
   // =====================================================================
   console.log('\n§6 — API KEY PROTECTION');
+  // Keys now sync to cloud (per user requirement), so stripDeviceSecrets no
+  // longer removes the apiKey field — but still strips device-only fields
+  // such as localModel (which points at a local model file path).
   const stripped = aiConfigSync.stripDeviceSecrets({
     tutor: { enabled: true, apiKey: 'sk-LEAK-ME', model: 'gpt-4o', localModel: 'llama3', temperature: 0.4 },
   });
-  check('apiKey stripped for upload', !('apiKey' in stripped.tutor));
-  check('localModel stripped (device-specific)', !('localModel' in stripped.tutor));
+  check('apiKey IS included for cloud sync (user-requested)', 'apiKey' in stripped.tutor && stripped.tutor.apiKey === 'sk-LEAK-ME');
+  check('localModel stripped (device-specific path)', !('localModel' in stripped.tutor));
   check('shareable preferences kept', stripped.tutor.model === 'gpt-4o' && stripped.tutor.temperature === 0.4);
 
   // No key must appear in the AI activity log.
   const aiLog = JSON.stringify(orch.aiLog());
   check('AI activity log has no key', !aiLog.includes('sk-TEST-SECRET-abc123'));
 
-  // Nor in any error text the user could see.
+  // Keys ARE in settings (for cloud sync), that's expected now.
   const settingsDump = JSON.stringify(st().settings);
-  check('key is in local settings only (expected)', settingsDump.includes('sk-TEST-SECRET-abc123'));
+  check('key is in local settings (cloud-syncable)', settingsDump.includes('sk-TEST-SECRET-abc123'));
 
   // =====================================================================
   console.log('\n§2/§37 — INPUT VALIDATION & PROTOTYPE POLLUTION');
@@ -338,7 +341,7 @@ try {
   check('sync protects newer server copies', /keep the newer server copy/.test(syncSrc));
 
   const aiCfgSrc = fs.readFileSync('api/aiConfig.js', 'utf8');
-  check('aiConfig strips secrets server-side', /SECRET_FIELDS/.test(aiCfgSrc));
+  check('aiConfig strips forbidden fields server-side (apiKey permitted for sync per user request)', /FORBIDDEN_FIELDS/.test(aiCfgSrc) && /'apiKey'/.test(aiCfgSrc));
   check('aiConfig blocks prototype keys', /__proto__/.test(aiCfgSrc));
   check('aiConfig bounds payload size', /128 \* 1024/.test(aiCfgSrc));
   check('aiConfig is rate limited', /rateLimit\(\{ route: 'aiConfig'/.test(aiCfgSrc));

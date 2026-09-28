@@ -1,36 +1,43 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useData } from '../stores/data';
 import { EmptyState, PageHeader, Pill } from '../components/ui';
 import { allStages, buildCourse, currentStage, periodsFor, saveCourse } from '../services/academic';
 
 /**
- * Courses — the Phase 1 foundation.
+ * Courses — simple, focused.
  *
- * A course belongs to an academic stage and (optionally) a semester, which is
- * what will later let clinical learning and AI understand the academic context
- * of a note ("this was during Level 200, Semester 1, Pharmacology").
- *
- * Deliberately simple: add, rename, move between semesters, delete. Grades,
- * credits, timetables and course-linked learning come in later phases.
+ * By default the page opens on your CURRENT level (e.g. Level 300) and shows
+ * just its two semesters. Past / future levels live in a compact dropdown so
+ * you can file courses there without the page being flooded by a wall of
+ * placeholder pills.
  */
 export function Courses() {
   const stages = useData((s) => s.academicStages);
   const courses = useData((s) => s.courses);
-  const periodsAll = useData((s) => s.academicPeriods);
   const remove = useData((s) => s.remove);
 
   const ordered = useMemo(() => allStages(), [stages]);
-  const active = currentStage();
-  const [stageId, setStageId] = useState<string>(active?.id ?? ordered[0]?.id ?? '');
+  const active = useMemo(() => currentStage(), [stages]);
+  const [stageId, setStageId] = useState<string>('');
   const [title, setTitle] = useState('');
   const [periodId, setPeriodId] = useState('');
   const [code, setCode] = useState('');
   const [busy, setBusy] = useState(false);
 
+  // Land on the CURRENT stage the first time we have data, or on stage change.
+  useEffect(() => {
+    if (!stageId && (active?.id || ordered[0]?.id)) {
+      setStageId(active?.id ?? ordered[0]!.id);
+    }
+    // If the current stage somehow vanished (e.g. a delete), fall back.
+    if (stageId && !ordered.some((s) => s.id === stageId)) {
+      setStageId(active?.id ?? ordered[0]?.id ?? '');
+    }
+  }, [ordered, active, stageId]);
+
   const stage = ordered.find((s) => s.id === stageId) ?? null;
   const periods = stage ? periodsFor(stage.id) : [];
   const stageCourses = courses.filter((c) => c.stageId === stageId);
-  void periodsAll;
 
   async function add() {
     if (!title.trim() || !stageId || busy) return;
@@ -60,25 +67,40 @@ export function Courses() {
         subtitle="Courses belong to an academic year and semester, so future learning can be filed against them."
       />
 
-      {/* Stage selector */}
-      <div className="mb-4 flex flex-wrap gap-1.5">
-        {ordered.map((s) => (
-          <button
-            key={s.id}
-            className={`rounded-full px-3 py-1.5 text-sm font-medium transition-colors ${
-              s.id === stageId
-                ? 'bg-brand-600 text-white'
-                : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-700 dark:text-slate-300'
-            }`}
-            onClick={() => {
-              setStageId(s.id);
+      {/* Compact stage selector — dropdown, not a wall of pills. Defaults to your
+          CURRENT level so on first open you see just the one level you're in. */}
+      <div className="mb-5 flex flex-wrap items-center gap-3">
+        <label className="text-sm font-medium text-slate-600 dark:text-slate-300">Viewing:</label>
+        <select
+          className="input !w-auto !py-1.5 text-sm"
+          value={stageId}
+          onChange={(e) => {
+            setStageId(e.target.value);
+            setPeriodId('');
+          }}
+        >
+          {ordered.map((s) => {
+            const tag =
+              s.status === 'current' ? ' (current)' :
+              s.status === 'completed' ? ' (completed)' : ' (upcoming)';
+            return (
+              <option key={s.id} value={s.id}>
+                {s.name} · {s.academicYear}{tag}
+              </option>
+            );
+          })}
+        </select>
+        <button
+          className="rounded-md border border-slate-300 px-2.5 py-1 text-xs font-medium text-slate-600 hover:bg-slate-100 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-700"
+          onClick={() => {
+            if (active) {
+              setStageId(active.id);
               setPeriodId('');
-            }}
-          >
-            {s.name}
-            {s.status === 'current' && <span className="ml-1.5 text-[10px]">🟢</span>}
-          </button>
-        ))}
+            }
+          }}
+        >
+          ← Jump to current
+        </button>
       </div>
 
       {stage && (
@@ -91,28 +113,44 @@ export function Courses() {
               </h2>
               {stage.status === 'completed' && <Pill color="green">Archived</Pill>}
               {stage.status === 'current' && <Pill color="amber">Current</Pill>}
+              {stage.status === 'upcoming' && <Pill color="slate">Upcoming</Pill>}
+              <span className="ml-auto text-xs text-slate-400">
+                {stageCourses.length} course{stageCourses.length === 1 ? '' : 's'} · {periods.length} semester{periods.length === 1 ? '' : 's'}
+              </span>
             </div>
 
-            {!stageCourses.length ? (
-              <EmptyState icon="📚" title="No courses for this stage yet" hint="Add your first course on the right." />
+            {periods.length === 0 ? (
+              <EmptyState icon="📅" title="No semesters on this level" hint="This stage has no semesters yet — add one in Journey settings." />
+            ) : !stageCourses.length ? (
+              <EmptyState icon="📚" title={`No courses for ${stage.name} yet`} hint="Add your first course on the right." />
             ) : (
               <>
                 {periods.map((p) => {
                   const list = stageCourses.filter((c) => c.periodId === p.id);
-                  if (!list.length) return null;
+                  const unassigned = stageCourses.filter(
+                    (c) => !c.periodId || !periods.some((pp) => pp.id === c.periodId)
+                  );
                   return (
                     <div key={p.id}>
                       <div className="label">{p.name}</div>
-                      <div className="space-y-1.5">
-                        {list.map((c) => (
-                          <CourseRow key={c.id} title={c.title} code={c.code} onDelete={() => remove('course', c.id)} />
-                        ))}
-                      </div>
+                      {list.length ? (
+                        <div className="space-y-1.5">
+                          {list.map((c) => (
+                            <CourseRow key={c.id} title={c.title} code={c.code} onDelete={() => remove('course', c.id)} />
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="rounded-lg border border-dashed border-slate-200 px-3 py-2 text-xs italic text-slate-400 dark:border-slate-700">
+                          No courses in {p.name} yet.
+                        </p>
+                      )}
                     </div>
                   );
                 })}
                 {(() => {
-                  const unassigned = stageCourses.filter((c) => !c.periodId || !periods.some((p) => p.id === c.periodId));
+                  const unassigned = stageCourses.filter(
+                    (c) => !c.periodId || !periods.some((p) => p.id === c.periodId)
+                  );
                   if (!unassigned.length) return null;
                   return (
                     <div>
@@ -145,7 +183,7 @@ export function Courses() {
               </div>
               <div>
                 <label className="label">Course code (optional)</label>
-                <input className="input" placeholder="e.g. PHAR 201" value={code} onChange={(e) => setCode(e.target.value)} />
+                <input className="input" placeholder="e.g. PHAR 301" value={code} onChange={(e) => setCode(e.target.value)} />
               </div>
               <div>
                 <label className="label">Semester</label>
@@ -159,11 +197,11 @@ export function Courses() {
                 </select>
               </div>
               <button className="btn-primary w-full" onClick={add} disabled={!title.trim() || busy}>
-                ＋ Add course
+                ＋ Add course to {stage.name}
               </button>
               <p className="text-[11px] text-slate-400">
-                Adding to <strong>{stage.name}</strong> ({stage.academicYear}). Switch stage above to file a course under a
-                different year — including years you've already completed.
+                Course will be filed under <strong>{stage.name}</strong> ({stage.academicYear})
+                {periodId ? ', ' + (periods.find((p) => p.id === periodId)?.name ?? '') : ''}. Switch level using the dropdown above.
               </p>
             </div>
           </div>
@@ -175,13 +213,18 @@ export function Courses() {
 
 function CourseRow({ title, code, onDelete }: { title: string; code?: string; onDelete: () => void }) {
   return (
-    <div className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 dark:border-slate-700">
+    <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-800/50">
       <span className="text-base">📚</span>
       <div className="min-w-0 flex-1">
         <div className="truncate text-sm font-medium text-slate-800 dark:text-slate-100">{title}</div>
         {code && <div className="text-[11px] text-slate-400">{code}</div>}
       </div>
-      <button className="text-xs text-red-500 hover:underline focus-ring" onClick={onDelete} aria-label={`Delete course ${title}`} title="Delete course">
+      <button
+        className="rounded p-1 text-xs text-slate-400 hover:bg-red-50 hover:text-red-500 focus-ring dark:hover:bg-red-900/30"
+        onClick={onDelete}
+        aria-label={`Delete course ${title}`}
+        title="Delete course"
+      >
         <span aria-hidden="true">✕</span>
       </button>
     </div>

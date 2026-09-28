@@ -37,7 +37,7 @@ export interface AuthProvider {
   readonly label: string;
   /** Does this provider support these optional capabilities? */
   readonly supports: { passwordReset: boolean; oauth: boolean };
-  signUp(email: string, password: string, name?: string): Promise<AuthResult>;
+  signUp(email: string, password: string, name?: string, securityQuestion?: string, securityAnswer?: string): Promise<AuthResult>;
   signIn(email: string, password: string): Promise<AuthResult>;
   signOut(token: string): Promise<void>;
   getCurrentUser(token: string): Promise<AuthUser | null>;
@@ -55,8 +55,8 @@ export const clinicalRxAuthProvider: AuthProvider = {
   label: 'CLINICAL Rx Cloud',
   supports: { passwordReset: true, oauth: false },
 
-  async signUp(email, password, name) {
-    const res = await syncClient.register(backendUrl(), email, password, name ?? '');
+  async signUp(email: string, password: string, name?: string, securityQuestion?: string, securityAnswer?: string) {
+    const res = await syncClient.register(backendUrl(), email, password, name ?? '', securityQuestion, securityAnswer);
     if (!res.ok) return { ok: false, error: res.error };
     const d: any = res.data ?? {};
     return { ok: true, token: d.token, user: { id: d.user?.id ?? d.userId ?? '', email, name } };
@@ -75,7 +75,12 @@ export const clinicalRxAuthProvider: AuthProvider = {
 
   async getCurrentUser(token) {
     const res = await syncClient.me(backendUrl(), token);
-    if (!res.ok) return null;
+    // 401 / 403 = genuinely invalid/expired token. Any other failure
+    // (network, 5xx, CORS, DNS) is treated as "we couldn't reach the server
+    // to verify", NOT as a signed-out state — see getCurrentUser() below.
+    if (!res.ok) {
+      return { invalid: res.status === 401 || res.status === 403 } as any;
+    }
     const d: any = res.data ?? {};
     const u = d.user ?? d;
     return u?.id ? { id: u.id, email: u.email, name: u.name } : null;
@@ -235,8 +240,8 @@ async function persistAccount(patch: Record<string, unknown>): Promise<void> {
 
 // ---- Public API (§6) ---------------------------------------------------
 
-export async function signUp(email: string, password: string, name?: string): Promise<AuthResult> {
-  const res = await provider.signUp(email, password, name);
+export async function signUp(email: string, password: string, name?: string, securityQuestion?: string, securityAnswer?: string): Promise<AuthResult> {
+  const res = await provider.signUp(email, password, name, securityQuestion, securityAnswer);
   if (res.ok && res.token) {
     audit('auth.signup', { ok: true });
     await ensureDeviceIdentity();
@@ -304,7 +309,7 @@ export async function resetPassword(email: string): Promise<{ ok: boolean; error
   return provider.requestPasswordReset(email);
 }
 
-export async function getCurrentUser(): Promise<AuthUser | null> {
+export async function getCurrentUser(): Promise<AuthUser | null | { invalid: true }> {
   const a = useData.getState().settings?.onlineAccount;
   if (!a?.token) return null;
   const online = typeof navigator === 'undefined' ? true : navigator.onLine;
@@ -313,17 +318,28 @@ export async function getCurrentUser(): Promise<AuthUser | null> {
   if (!online) {
     return a.cloudUserId || a.email ? { id: a.cloudUserId ?? '', email: a.email, name: a.name } : null;
   }
+  let result: any = null;
   try {
-    return await provider.getCurrentUser(a.token);
+    result = await provider.getCurrentUser(a.token);
   } catch {
-    return a.email ? { id: a.cloudUserId ?? '', email: a.email, name: a.name } : null;
+    result = null;
   }
+  // Provider returned explicit "token is invalid" (401/403). Propagate so
+  // refreshSession can request reauth. This is the ONLY case we ever ask for
+  // credentials again.
+  if (result && (result as any).invalid) return { invalid: true };
+  if (result && (result as AuthUser).id) return result as AuthUser;
+  // Network/5xx/DNS failure: trust the cached session, treat as online-unknown.
+  return a.email ? { id: a.cloudUserId ?? '', email: a.email, name: a.name } : null;
 }
 
 /**
  * Validate the cached session when connectivity returns.
- * A failure here NEVER signs the user out on its own — it records the problem
- * so the UI can offer a graceful re-login (§45).
+ *
+ * A failure here NEVER signs the user out on its own — the local profile
+ * and all local data remain signed-in forever. We only record the problem
+ * so the UI can offer a graceful re-login to resume CLOUD SYNC (§45).
+ * An explicit button press in Sync Center is the ONLY way to sign out.
  */
 export async function refreshSession(): Promise<{ ok: boolean; needsReauth: boolean }> {
   const a = useData.getState().settings?.onlineAccount;
@@ -339,8 +355,20 @@ export async function refreshSession(): Promise<{ ok: boolean; needsReauth: bool
     }
   }
   const user = await getCurrentUser();
+  // Explicit 401/403 = token is genuinely invalid → ask for credentials again.
+  // Anything else (network down, 5xx, etc.) keeps the session alive; we are
+  // offline-first and will retry on the next sync.
+  if (user && (user as any).invalid) {
+    // IMPORTANT: we do NOT clear connected/token here. The UI shows a
+    // "re-sign in to resume syncing" notice but keeps the local signed-in
+    // state so all offline features keep working and the badge does not flip
+    // to "signed out" over a transient server error. Only an explicit Sign out
+    // (or a successful fresh sign-in) changes those fields.
+    await persistAccount({ lastError: 'Please sign in again to resume cloud sync.' });
+    audit('auth.session-expired', { ok: false });
+    return { ok: false, needsReauth: true };
+  }
   if (user) return { ok: true, needsReauth: false };
-  await persistAccount({ lastError: 'Your session expired. Sign in again to resume syncing.' });
-  audit('auth.session-expired', { ok: false });
-  return { ok: false, needsReauth: true };
+  // No user info and no explicit invalid → network/startup race; stay signed in.
+  return { ok: true, needsReauth: false };
 }

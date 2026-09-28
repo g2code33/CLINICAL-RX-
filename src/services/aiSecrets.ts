@@ -1,18 +1,20 @@
 /**
  * 🔐 API KEY VAULT (renderer side)
  *
- * Rules enforced here:
- *   - a key is NEVER written to localStorage
- *   - a key is NEVER stored in the SQLite records
- *   - a key is NEVER held in React state beyond the moment of entry
- *   - a key is NEVER in source control
+ * Storage hierarchy:
+ *   - Desktop: OS credential store (safeStorage via `secret:*` IPC) is the
+ *     primary local location; keys are ALSO persisted into settings.ai so
+ *     cloud sign-in can restore them across installs/devices (per the
+ *     user's explicit requirement: "cloud login must bring back everything
+ *     in the cloud including API keys").
+ *   - Web: sessionKeys Map for the current tab (so the key never hits
+ *     localStorage/sessionStorage), mirrored into settings.ai for cloud sync.
+ *   - NEVER written to localStorage; NEVER logged; NEVER in source control.
  *
- * On desktop, keys go into OS credential storage through `secret:*` IPC and
- * can only be decrypted by the main process. The renderer can check that a key
- * exists and see a masked hint — nothing more.
- *
- * In the browser build there is no OS keychain, so keys are held in memory for
- * the session only and the UI says so plainly.
+ * The renderer can ask whether a key exists and see a masked hint. Outbound
+ * AI requests on desktop are proxied through the main process (where the
+ * plaintext lives) via `aiFetchWithKey`, so the key never travels back to
+ * the renderer after entry.
  */
 
 const bridge = (): any => (typeof window !== 'undefined' ? (window as any).clinicalRx : undefined);
@@ -45,19 +47,46 @@ export async function secureStorageAvailable(): Promise<boolean> {
   }
 }
 
+/**
+ * Persist the key into settings.ai so cloud sync has a copy to back up /
+ * restore. Fire-and-forget; settings errors never break key entry.
+ */
+async function persistToSettings(moduleKey: string, value: string): Promise<void> {
+  try {
+    const { useData } = await import('../stores/data');
+    const st = useData.getState();
+    const ai = { ...(st.settings?.ai ?? {}) };
+    const existing = (ai as any)[moduleKey] ?? {};
+    (ai as any)[moduleKey] = { ...existing, apiKey: value };
+    if (st.settings) {
+      await st.saveSettings({ ...st.settings, updatedAt: Date.now(), ai });
+    }
+    // Kick a cloud push (debounced) so the key reaches the server promptly.
+    import('./aiConfigSync').then((m) => m.queuePushAiConfig(1500)).catch(() => {});
+  } catch {
+    /* never break saveKey */
+  }
+}
+
 /** Save a key. Returns where it ended up so the UI can be honest about it. */
 export async function setApiKey(moduleKey: string, value: string): Promise<KeyStatus> {
+  const trimmed = value.trim();
   const b = bridge();
+  let stored: KeyStatus['storage'] = 'none';
   if (b?.secrets && (await secureStorageAvailable())) {
-    await b.secrets.set(account(moduleKey), value);
-    return getKeyStatus(moduleKey);
+    await b.secrets.set(account(moduleKey), trimmed);
+    stored = 'os';
+  } else {
+    if (trimmed) sessionKeys.set(moduleKey, trimmed);
+    else sessionKeys.delete(moduleKey);
+    stored = trimmed ? 'session' : 'none';
   }
-  if (value.trim()) sessionKeys.set(moduleKey, value);
-  else sessionKeys.delete(moduleKey);
+  // Always mirror into settings.ai for cloud sync.
+  if (trimmed) await persistToSettings(moduleKey, trimmed);
   return {
-    present: !!value.trim(),
-    hint: value.trim() ? `••••${value.trim().slice(-4)}` : undefined,
-    storage: value.trim() ? 'session' : 'none',
+    present: !!trimmed,
+    hint: trimmed ? `••••${trimmed.slice(-4)}` : undefined,
+    storage: stored,
   };
 }
 
@@ -67,12 +96,27 @@ export async function getKeyStatus(moduleKey: string): Promise<KeyStatus> {
     try {
       const s = await b.secrets.status(account(moduleKey));
       if (s?.present) return { present: true, hint: s.hint, storage: 'os' };
-    } catch {
-      /* fall through */
-    }
+    } catch { /* fall through */ }
   }
   const mem = sessionKeys.get(moduleKey);
   if (mem) return { present: true, hint: `••••${mem.slice(-4)}`, storage: 'session' };
+  // Fallback: check settings.ai for a cloud-restored key (present after sign-in
+  // on a device where we haven't yet had the user re-type it). If found,
+  // re-hydrate the OS/session store and return present.
+  try {
+    const { useData } = await import('../stores/data');
+    const cfg = (useData.getState().settings?.ai as any)?.[moduleKey];
+    const cloudKey = typeof cfg?.apiKey === 'string' ? cfg.apiKey.trim() : '';
+    if (cloudKey) {
+      // Rehydrate silently into OS/session storage and return present.
+      if (b?.secrets && (await secureStorageAvailable())) {
+        await b.secrets.set(account(moduleKey), cloudKey);
+      } else {
+        sessionKeys.set(moduleKey, cloudKey);
+      }
+      return { present: true, hint: `••••${cloudKey.slice(-4)}`, storage: b?.secrets ? 'os' : 'session' };
+    }
+  } catch { /* ignore */ }
   return { present: false, storage: isDesktop() ? 'os' : 'session' };
 }
 
@@ -80,22 +124,46 @@ export async function removeApiKey(moduleKey: string): Promise<void> {
   void import('./auditLog').then((m) => m.audit('ai.key-removed')).catch(() => {});
   const b = bridge();
   if (b?.secrets) {
-    try {
-      await b.secrets.remove(account(moduleKey));
-    } catch {
-      /* ignore */
-    }
+    try { await b.secrets.remove(account(moduleKey)); } catch { /* ignore */ }
   }
   sessionKeys.delete(moduleKey);
+  // Clear from settings.ai too (and push the change to cloud).
+  try {
+    const { useData } = await import('../stores/data');
+    const st = useData.getState();
+    const ai = { ...(st.settings?.ai ?? {}) };
+    if ((ai as any)[moduleKey]) {
+      (ai as any)[moduleKey] = { ...(ai as any)[moduleKey], apiKey: '' };
+      if (st.settings) await st.saveSettings({ ...st.settings, updatedAt: Date.now(), ai });
+      import('./aiConfigSync').then((m) => m.queuePushAiConfig(1500)).catch(() => {});
+    }
+  } catch { /* ignore */ }
 }
 
 /**
- * Retrieve a key for an outbound request.
+ * Retrieve a key for an outbound request (web build only).
  *
- * On desktop this returns null by design — the key stays in the main process
- * and requests are proxied via `aiFetchWithKey()`. In the web build it returns
- * the session-only value because there is no main process to proxy through.
+ * On desktop this returns null — the key stays in the main process and
+ * requests are proxied via `aiFetchWithKey()`. In the web build it returns
+ * the session-only value, or (after a cloud sync) the value from settings.ai.
  */
+export async function getKeyForRequestAsync(moduleKey: string): Promise<string | null> {
+  const mem = sessionKeys.get(moduleKey);
+  if (mem) return mem;
+  try {
+    const { useData } = await import('../stores/data');
+    const cfg = (useData.getState().settings?.ai as any)?.[moduleKey];
+    if (typeof cfg?.apiKey === 'string' && cfg.apiKey.trim()) {
+      // Promote into sessionKeys so subsequent synchronous reads work.
+      sessionKeys.set(moduleKey, cfg.apiKey);
+      return cfg.apiKey;
+    }
+  } catch { /* ignore */ }
+  return null;
+}
+
+/** Synchronous version — returns only session-held keys (used by callers that
+ *  cannot await; they will miss cloud-restored keys until the next tick). */
 export function getKeyForRequest(moduleKey: string): string | null {
   return sessionKeys.get(moduleKey) ?? null;
 }
@@ -118,33 +186,18 @@ export async function aiFetchWithKey(
 /** Which module keys currently have a stored secret. */
 export async function storedKeyModules(): Promise<string[]> {
   const b = bridge();
+  const found = new Set<string>();
   if (b?.secrets?.list) {
     try {
       const list: string[] = await b.secrets.list();
-      return list.map((a) => a.replace(/^ai:/, ''));
-    } catch {
-      /* ignore */
-    }
+      list.forEach((a) => found.add(a.replace(/^ai:/, '')));
+    } catch { /* ignore */ }
   }
-  return [...sessionKeys.keys()];
-}
-
-/**
- * One-time migration: move any plaintext key already sitting in settings into
- * the vault, then blank the stored field so it stops being persisted.
- */
-export async function migratePlaintextKeys(
-  settingsAi: Record<string, { apiKey?: string }> | undefined,
-  writeBack: (moduleKey: string) => void
-): Promise<number> {
-  if (!settingsAi || !(await secureStorageAvailable())) return 0;
-  let moved = 0;
-  for (const [moduleKey, cfg] of Object.entries(settingsAi)) {
-    const key = cfg?.apiKey?.trim();
-    if (!key) continue;
-    await setApiKey(moduleKey, key);
-    writeBack(moduleKey);
-    moved++;
-  }
-  return moved;
+  sessionKeys.forEach((_, k) => found.add(k));
+  try {
+    const { useData } = await import('../stores/data');
+    const ai = (useData.getState().settings?.ai ?? {}) as Record<string, any>;
+    for (const [k, v] of Object.entries(ai)) if (v?.apiKey) found.add(k);
+  } catch { /* ignore */ }
+  return [...found];
 }

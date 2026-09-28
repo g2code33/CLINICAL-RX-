@@ -131,6 +131,11 @@ export function WardEntryCard({
               )}
               <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-slate-400">
                 <span>Captured {timeOf(entry.createdAt)}</span>
+                {entry.patientLabel && (
+                  <span className="rounded-full bg-brand-50 px-1.5 py-0.5 font-semibold text-brand-700 dark:bg-brand-950 dark:text-brand-300" title="Patient label">
+                    🛏️ {entry.patientLabel}
+                  </span>
+                )}
                 {entry.type === 'question' && (
                   <span className="rounded-full bg-slate-100 px-1.5 py-0.5 capitalize dark:bg-slate-700">
                     Priority: {entry.priority}

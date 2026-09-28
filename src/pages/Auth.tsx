@@ -5,6 +5,7 @@ import { syncClient, DEFAULT_BACKEND_URL } from '../services/syncClient';
 import { autoSyncOnLogin } from '../services/syncEngine';
 import { hasElectronBridge } from '../db/adapter';
 import { PasswordInput } from '../components/ui';
+import { signIn as authSignIn, signUp as authSignUp } from '../services/authService';
 
 type Mode = 'signin' | 'signup';
 
@@ -30,26 +31,32 @@ export function AuthPage() {
     setBusy(true);
     setMsg('');
     try {
+      // Pin the backend URL on settings BEFORE calling authSignIn so the
+      // provider reads the right URL (backendUrl() reads from settings).
+      const current = useData.getState().settings;
+      if (!current) throw new Error('Settings not loaded');
+      await persist({ ...current, updatedAt: Date.now(), onlineAccount: {
+        ...(current.onlineAccount ?? { connected: false }),
+        backendUrl: effectiveUrl,
+      }});
+
       const res = mode === 'signin'
-        ? await syncClient.login(effectiveUrl, form.email.trim(), form.password)
-        : await syncClient.register(effectiveUrl, form.email.trim(), form.password, form.name.trim(), form.securityQuestion.trim() || undefined, form.securityAnswer.trim() || undefined);
+        ? await authSignIn(form.email.trim(), form.password)
+        : await authSignUp(
+            form.email.trim(),
+            form.password,
+            form.name.trim(),
+            form.securityQuestion.trim() || undefined,
+            form.securityAnswer.trim() || undefined
+          );
+
       if (!res.ok) {
         setMsg('⚠️ ' + (res.error || 'Failed.'));
         return;
       }
-      const acc = {
-        connected: true,
-        email: res.data.user.email,
-        name: res.data.user.name,
-        token: res.data.token,
-        backendUrl: effectiveUrl,
-        lastSynced: undefined,
-        syncing: false,
-      };
-      const current = useData.getState().settings;
-      if (!current) throw new Error('Settings not loaded');
-      await persist({ ...current, updatedAt: Date.now(), onlineAccount: acc });
-      setStatus(`✓ Connected as ${res.data.user.email}`);
+      // authSignIn/authSignUp already persist connected/token/email/name/
+      // cloudUserId via persistAccount(); backendUrl is already pinned above.
+      setStatus(`✓ Connected as ${form.email.trim()}`);
       const outcome = await autoSyncOnLogin();
       if (outcome.ok) setMsg(`✓ Signed in · pulled ${outcome.pulled} record(s)`);
       setTimeout(() => navigate('/'), 1200);

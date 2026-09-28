@@ -224,66 +224,200 @@ export interface BootstrapInput {
 }
 
 /**
- * Create the initial journey at onboarding: every level from the list, with
- * the user's current level marked `current`, earlier ones `completed` and
- * later ones `upcoming`. Academic years are back- and forward-filled.
+ * Create the initial journey at onboarding: **only the student's current
+ * level**, pre-populated with two semesters. Earlier and later levels are
+ * created on demand (promotion / "Add level"), not pre-filled — that keeps
+ * the Courses page clean on day 1 (one level, two semesters) instead of
+ * spamming a wall of placeholder pills for levels the student hasn't
+ * reached yet.
  */
 export async function bootstrapJourney(input: BootstrapInput): Promise<{ stage: AcademicStage; period: AcademicPeriod | null }> {
-  const levels = (input.levels ?? ['100', '200', '300', '400'])
-    .map(String)
-    .concat(String(input.level))
-    .filter((v, i, a) => a.indexOf(v) === i)
-    .sort((a, b) => levelNumber(a) - levelNumber(b));
+  const lvl = String(input.level);
+  let year = input.academicYear;
+  const stage = buildStage({
+    level: lvl,
+    academicYear: year,
+    status: 'current',
+    order: levelNumber(lvl),
+    programme: input.programme,
+    institution: input.institution,
+  });
+  await saveStage(stage);
 
-  const currentIdx = levels.indexOf(String(input.level));
-  let current: AcademicStage | null = null;
-  let currentPeriodRec: AcademicPeriod | null = null;
+  const periods: AcademicPeriod[] = [];
+  for (const [idx, name] of ['Semester 1', 'Semester 2'].entries()) {
+    const p = buildPeriod(stage.id, name, idx + 1);
+    await savePeriod(p);
+    periods.push(p);
+  }
 
-  for (let i = 0; i < levels.length; i++) {
-    const lvl = levels[i];
-    // Walk academic years outward from the current stage.
-    let year = input.academicYear;
-    const delta = i - currentIdx;
-    if (delta > 0) for (let k = 0; k < delta; k++) year = nextAcademicYear(year);
-    if (delta < 0) {
-      const start = Number(input.academicYear.slice(0, 4)) + delta;
-      year = `${start}/${start + 1}`;
-    }
+  const currentPeriodRec = periods.find((p) => p.name === input.semesterName) ?? periods[0] ?? null;
+  return { stage, period: currentPeriodRec };
+}
 
-    const status: StageStatus = i < currentIdx ? 'completed' : i === currentIdx ? 'current' : 'upcoming';
-    const stage = buildStage({
-      level: lvl,
-      academicYear: year,
-      status,
-      order: levelNumber(lvl),
-      programme: input.programme,
-      institution: input.institution,
-    });
-    if (status === 'completed') stage.completedAt = Date.now();
-    await saveStage(stage);
+/**
+ * Repair duplicate academic stages / periods that accumulated from earlier
+ * versions (v1.11.15–v1.11.17 persistence bugs caused multiple bootstrap
+ * runs, leaving 50+ duplicate "Level 100/200/..." pills on screen).
+ *
+ * Safe to run on every launch — returns true if anything was cleaned up.
+ *
+ * Strategy:
+ *   - Group stages by (level, status, academicYear). The first created per
+ *     group wins; others are deleted along with their orphaned periods.
+ *   - If NO stage is marked `current`, promote the highest-level non-completed
+ *     stage (or the latest stage by order) to current.
+ *   - Periods are deduped by (stageId, name); courses re-pointed at the
+ *     surviving period if both exist.
+ */
+export async function repairDuplicateJourney(): Promise<number> {
+  const st = useData.getState();
+  const stages = [...st.academicStages];
+  if (!stages.length) return 0;
 
-    const periods: AcademicPeriod[] = [];
-    for (const [idx, name] of ['Semester 1', 'Semester 2'].entries()) {
-      const p = buildPeriod(stage.id, name, idx + 1);
-      await savePeriod(p);
-      periods.push(p);
-    }
-
-    if (status === 'current') {
-      current = stage;
-      currentPeriodRec = periods.find((p) => p.name === input.semesterName) ?? periods[0] ?? null;
+  // 1) Deduplicate stages by (level, status, academicYear).
+  const stageKey = (s: AcademicStage) => `${s.level}|${s.status}|${s.academicYear}`;
+  const keepStage = new Map<string, AcademicStage>();
+  const dropStageIds = new Set<string>();
+  for (const s of [...stages].sort((a, b) => a.createdAt - b.createdAt)) {
+    const k = stageKey(s);
+    if (keepStage.has(k)) {
+      dropStageIds.add(s.id);
+    } else {
+      keepStage.set(k, s);
     }
   }
 
-  return { stage: current!, period: currentPeriodRec };
+  // 2) If duplicates existed for the SAME (level, ANY status, same year),
+  //    merge periods from the duplicates into the surviving stage and then
+  //    delete the duplicates. For stages at different statuses (e.g. one
+  //    "completed" and one "current" Level 300), keep the more advanced
+  //    status (current > upcoming > completed) and drop the other.
+  const byLevelYear = new Map<string, AcademicStage[]>();
+  for (const s of stages) {
+    const k = `${s.level}|${s.academicYear}`;
+    if (!byLevelYear.has(k)) byLevelYear.set(k, []);
+    byLevelYear.get(k)!.push(s);
+  }
+  const statusRank: Record<StageStatus, number> = { current: 3, upcoming: 2, completed: 1 };
+  for (const [, group] of byLevelYear) {
+    if (group.length <= 1) continue;
+    const sorted = [...group].sort((a, b) => (statusRank[b.status] ?? 0) - (statusRank[a.status] ?? 0) || a.createdAt - b.createdAt);
+    const winner = sorted[0];
+    for (const loser of sorted.slice(1)) {
+      if (loser.id !== winner.id) dropStageIds.add(loser.id);
+    }
+  }
+
+  // Ensure exactly one "current" stage exists.
+  const survivors = stages.filter((s) => !dropStageIds.has(s.id));
+  const currentSurvivors = survivors.filter((s) => s.status === 'current');
+  if (currentSurvivors.length === 0 && survivors.length) {
+    // Pick the latest non-completed stage; fall back to highest order.
+    const candidate =
+      survivors.find((s) => s.status === 'upcoming') ??
+      [...survivors].sort((a, b) => b.order - a.order)[0];
+    candidate.status = 'current';
+    await saveStage(candidate);
+  } else if (currentSurvivors.length > 1) {
+    // Multiple "current" — keep the highest order, demote the rest to upcoming.
+    const sorted = [...currentSurvivors].sort((a, b) => b.order - a.order);
+    for (const extra of sorted.slice(1)) {
+      extra.status = 'upcoming';
+      await saveStage(extra);
+    }
+  }
+
+  if (!dropStageIds.size) return 0;
+
+  // 3) Re-point courses/periods that reference dropped stages to the
+  //    surviving stage of the same level+year (if one exists); otherwise
+  //    move them under the surviving "current" stage so they aren't lost.
+  const periods = [...st.academicPeriods];
+  const courses = [...st.courses];
+  const fallbackStage = survivors.find((s) => s.status === 'current') ?? survivors[0];
+  const survivorFor = (loser: AcademicStage): AcademicStage | null => {
+    return (
+      [...keepStage.values()].find(
+        (s) => s.level === loser.level && s.academicYear === loser.academicYear && s.id !== loser.id
+      ) ??
+      null
+    );
+  };
+
+  // Build a map of dropped stageId -> surviving stage
+  const redirect = new Map<string, AcademicStage>();
+  for (const id of dropStageIds) {
+    const loser = stages.find((s) => s.id === id);
+    if (!loser) continue;
+    const winner = survivorFor(loser) ?? fallbackStage;
+    if (winner && winner.id !== id) redirect.set(id, winner);
+  }
+
+  // Deduplicate periods per (stageId, name) as well.
+  const seenPeriods = new Set<string>();
+  const dropPeriodIds = new Set<string>();
+  for (const p of periods) {
+    const newStageId = redirect.get(p.stageId)?.id ?? p.stageId;
+    const k = `${newStageId}|${p.name}`;
+    if (seenPeriods.has(k)) {
+      dropPeriodIds.add(p.id);
+    } else {
+      seenPeriods.add(k);
+      if (newStageId !== p.stageId) {
+        await savePeriod({ ...p, stageId: newStageId });
+      }
+    }
+  }
+
+  // Repoint courses that reference dropped stages or dropped periods.
+  const survivingPeriodBy = (stageId: string, name: string) =>
+    periods.find((pp) => !dropPeriodIds.has(pp.id) && (redirect.get(pp.stageId)?.id ?? pp.stageId) === stageId && pp.name === name);
+
+  for (const c of courses) {
+    const origStageId = c.stageId;
+    const newStageId = redirect.get(origStageId)?.id ?? origStageId;
+    let newPeriodId = c.periodId;
+    if (c.periodId) {
+      const per = periods.find((pp) => pp.id === c.periodId);
+      if (per) {
+        const perStageId = redirect.get(per.stageId)?.id ?? per.stageId;
+        const target = survivingPeriodBy(newStageId, per.name);
+        if (target) newPeriodId = target.id;
+        else newPeriodId = undefined;
+        // Period was orphaned (no equivalent on survivor) — drop assignment.
+        if (perStageId !== newStageId && !target) newPeriodId = undefined;
+      } else if (dropPeriodIds.has(c.periodId)) {
+        newPeriodId = undefined;
+      }
+    }
+    if (newStageId !== origStageId || newPeriodId !== c.periodId) {
+      await useData.getState().save('course', { ...c, stageId: newStageId, periodId: newPeriodId }, { fromSync: true });
+    }
+  }
+
+  // Actually delete dropped periods/stages.
+  for (const id of dropPeriodIds) {
+    await useData.getState().remove('academicPeriod', id);
+  }
+  for (const id of dropStageIds) {
+    // deleteStage would also remove the periods/courses under it — but we've
+    // already repointed the keepers, so just remove the stage row itself.
+    await useData.getState().remove('academicStage', id);
+  }
+
+  return dropStageIds.size;
 }
 
 /**
  * Repair/backfill: if a profile exists from an older version with no journey,
  * build one from the profile's level so the app is never in a broken state.
- * Safe to call on every launch — it no-ops when stages already exist.
+ * Safe to call on every launch — it no-ops when stages already exist (after
+ * dedup).
  */
 export async function ensureJourney(): Promise<boolean> {
+  // Always run dedup repair first — cleans up data left by v1.11.15/16/17.
+  await repairDuplicateJourney();
   const st = useData.getState();
   if (st.academicStages.length) return false;
   const profile = st.profile;

@@ -7,6 +7,12 @@ import type {
   BaseRecord,
   Certification,
   ClinicalExperience,
+  CPActionType,
+  CPDrugCard,
+  CPEncounter,
+  CPEncounterType,
+  CPFollowUp,
+  CPScenario,
   EvidenceRef,
   Goal,
   GoalCategory,
@@ -213,6 +219,168 @@ export function newGoal(title: string, category: GoalCategory = 'academic'): Goa
 
 export function newMilestone(title: string): GoalMilestone {
   return { id: uid(), title, done: false };
+}
+
+// ---- Community Pharmacy workstation -----------------------------------
+
+export const CP_ENCOUNTER_TYPES: { key: CPEncounterType; label: string; icon: string }[] = [
+  { key: 'otc-consult', label: 'OTC consult', icon: '🛒' },
+  { key: 'prescription', label: 'Prescription dispensing', icon: '💊' },
+  { key: 'counselling', label: 'Counselling / MUR', icon: '💬' },
+  { key: 'side-effect', label: 'Side effect report', icon: '⚠️' },
+  { key: 'interaction', label: 'Interaction query', icon: '🔄' },
+  { key: 'referral', label: 'Referral (red flag)', icon: '🚨' },
+  { key: 'minor-ailment', label: 'Minor ailment scheme', icon: '🩹' },
+  { key: 'other', label: 'Other', icon: '📝' },
+];
+
+export const CP_ACTION_TYPES: { key: CPActionType; label: string; tone: string }[] = [
+  { key: 'recommend-otc', label: 'Recommended OTC', tone: 'brand' },
+  { key: 'dispense-as-written', label: 'Dispensed as written', tone: 'brand' },
+  { key: 'counsel-only', label: 'Counselling only', tone: 'indigo' },
+  { key: 'lifestyle-advice', label: 'Lifestyle advice', tone: 'teal' },
+  { key: 'contact-prescriber', label: 'Contacted prescriber', tone: 'amber' },
+  { key: 'refuse-sale', label: 'Refused sale (safety)', tone: 'red' },
+  { key: 'refer-to-doctor', label: 'Referred to GP', tone: 'amber' },
+  { key: 'refer-emergency', label: 'Referred to A&E', tone: 'red' },
+];
+
+export const CP_FOLLOWUPS: { key: CPFollowUp; label: string }[] = [
+  { key: 'none', label: 'No follow-up' },
+  { key: '24h', label: 'Come back in 24 h' },
+  { key: '48h', label: 'Come back in 48 h' },
+  { key: '1-week', label: 'Check in 1 week' },
+  { key: 'see-gp-if', label: 'See GP if not better' },
+];
+
+export function newCPEncounter(title: string, encounterType: CPEncounterType = 'otc-consult'): CPEncounter {
+  return {
+    ...base(),
+    title,
+    encounterType,
+    date: todayIso(),
+    patientPresentation: '',
+    patientContext: { comorbidities: [], currentMeds: [], allergies: [] },
+    symptoms: [],
+    redFlags: [],
+    actionTaken: 'recommend-otc',
+    counsellingProvided: [],
+    warningsGiven: [],
+    knowledgeGaps: [],
+    drugCardIds: [],
+    confidence: 3,
+    academic: stamp(),
+    visibility: 'private',
+  } as CPEncounter;
+}
+
+export function newCPDrugCard(genericName: string): CPDrugCard {
+  return {
+    ...base(),
+    title: genericName,
+    genericName,
+    brandNames: [],
+    schedule: 'P',
+    indicationsCommunity: [],
+    contraindications: [],
+    cautions: [],
+    commonSideEffects: [],
+    interactionsToFlag: [],
+    counsellingPoints: [],
+    redFlagsRefer: [],
+    easilyConfusedWith: [],
+    confidence: 2,
+    timesUsed: 0,
+    academic: stamp(),
+    visibility: 'private',
+  } as CPDrugCard;
+}
+
+export function newCPScenario(scenario: string): CPScenario {
+  return {
+    ...base(),
+    title: scenario.slice(0, 80),
+    scenario,
+    redFlags: [],
+    appropriateActions: [],
+    inappropriateActions: [],
+    difficulty: 'beginner',
+    tags: [],
+    completed: false,
+    academic: stamp(),
+    visibility: 'private',
+  } as CPScenario;
+}
+
+/** Build a rich pre-seeded prompt for the journey AI to discuss this record. */
+export function cpEncounterPrompt(enc: CPEncounter): string {
+  const lines = [
+    `You are my community pharmacy preceptor discussing this patient encounter I just logged.`,
+    `Be Socratic first — ask me 2-3 probing questions — then give detailed teaching.`,
+    ``,
+    `ENCOUNTER: ${enc.title}`,
+    `Type: ${CP_ENCOUNTER_TYPES.find((t) => t.key === enc.encounterType)?.label ?? enc.encounterType}`,
+    `Date: ${enc.date}`,
+    ``,
+    `PATIENT SAID (verbatim):\n${enc.patientPresentation || '(not recorded)'}`,
+    ``,
+    `Patient context: ${JSON.stringify(enc.patientContext)}`,
+    `Symptoms: ${(enc.symptoms || []).join(', ') || '(not listed)'}`,
+    `Duration: ${enc.duration || '—'}`,
+    `Red flags I noticed: ${(enc.redFlags || []).join(', ') || '(none noted)'}`,
+    ``,
+    `My action: ${CP_ACTION_TYPES.find((a) => a.key === enc.actionTaken)?.label ?? enc.actionTaken}`,
+    `Recommended: ${enc.recommendedProduct || '—'}`,
+    `Dose: ${enc.dosageGiven || '—'}`,
+    `Counselling I gave: ${(enc.counsellingProvided || []).join('; ') || '—'}`,
+    `Warnings I gave: ${(enc.warningsGiven || []).join('; ') || '—'}`,
+    `Follow-up: ${CP_FOLLOWUPS.find((f) => f.key === enc.followUp)?.label ?? enc.followUp ?? 'none'}`,
+    `Referral reason: ${enc.referralReason || '—'}`,
+    `My confidence: ${enc.confidence ?? '—'}/5`,
+    `My reflection: ${enc.reflection || '(not written)'}`,
+    `Knowledge gaps I want to study: ${(enc.knowledgeGaps || []).join(', ') || '—'}`,
+    ``,
+    `Please: (1) tell me what I did well, (2) what red flags or drug interactions I might have missed, (3) what the ideal pharmacist would do, (4) teach me the drug/class involved and counselling pearls, (5) suggest 2-3 Socratic questions to test my reasoning. Use West-African / Ghanaian community-pharmacy context where relevant.`,
+  ];
+  return lines.join('\n');
+}
+
+export function cpDrugCardPrompt(card: CPDrugCard): string {
+  const lines = [
+    `You are my community pharmacy tutor teaching me this drug like I'm standing behind the counter.`,
+    `Drug: ${card.genericName} ${card.brandNames?.length ? '(' + card.brandNames.join(', ') + ')' : ''}`,
+    `Class: ${card.drugClass || '?'}   Schedule: ${card.schedule || '?'}`,
+    ``,
+    `What I already have:`,
+    `Common community indications: ${(card.indicationsCommunity || []).join(', ') || '—'}`,
+    `Contraindications: ${(card.contraindications || []).join(', ') || '—'}`,
+    `Cautions: ${(card.cautions || []).join(', ') || '—'}`,
+    `Side effects to warn about: ${(card.commonSideEffects || []).join(', ') || '—'}`,
+    `Interactions I MUST catch: ${(card.interactionsToFlag || []).join(', ') || '—'}`,
+    `Counselling points (my version): ${(card.counsellingPoints || []).join('; ') || '—'}`,
+    `Red flags that mean refer: ${(card.redFlagsRefer || []).join(', ') || '—'}`,
+    `Dose (adult): ${card.doseAdult || '?'}   Dose (child): ${card.doseChild || '?'}`,
+    `My confidence: ${card.confidence ?? '?'}/5   Mnemonic: ${card.mnemonic || '—'}`,
+    ``,
+    `Please fill gaps, correct anything wrong, give me the exact 30-second counselling script a community pharmacist would actually say, highlight the 2-3 interactions or red flags that get pharmacists in trouble, and end with 3 Socratic questions.`,
+  ];
+  return lines.join('\n');
+}
+
+export function cpScenarioPrompt(s: CPScenario, withAnswer = false): string {
+  const head = withAnswer
+    ? `You are my preceptor. Here is a community-pharmacy scenario plus my answer. Give feedback: what did I get right, what did I miss (red flags!), what would the ideal pharmacist do, and 2-3 teaching points.`
+    : `You are my community pharmacy preceptor. Present this scenario to me like a real patient walking up to the counter and ask me what I would do. Wait for my answer before giving feedback. Make it feel like real life.`;
+  return [
+    head,
+    ``,
+    `Scenario: ${s.scenario}`,
+    `Difficulty: ${s.difficulty || 'beginner'}`,
+    `Tags: ${(s.tags || []).join(', ') || '—'}`,
+    withAnswer ? `\nMy answer:\n${s.studentAnswer || '(blank)'}` : '',
+  ]
+    .filter(Boolean)
+    .join('\n');
 }
 
 // ---- Generic persistence ----------------------------------------------

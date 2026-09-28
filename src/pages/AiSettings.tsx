@@ -284,12 +284,12 @@ function KeysTab({
   const saveKey = async (moduleKey: string) => {
     const value = entry[moduleKey]?.trim();
     if (!value) return;
-    await setApiKey(moduleKey, value);
-    // Never persist the plaintext into settings.
-    if (ai[moduleKey]?.apiKey) update(moduleKey, { apiKey: '' });
+    const res = await setApiKey(moduleKey, value);
+    // setApiKey now mirrors the key into settings.ai so cloud sync can back it
+    // up; reload local state to reflect the masked hint.
     setEntry({ ...entry, [moduleKey]: '' }); // drop it from React state immediately
     await reload();
-    setStatus('🔐 Key saved to secure storage.');
+    setStatus(`🔐 Key saved to ${res.storage === 'os' ? 'secure OS storage' : 'session storage'} · synced on next cloud sync.`);
   };
 
   return (
@@ -297,8 +297,8 @@ function KeysTab({
       <h3 className="font-semibold">API keys</h3>
       <div className={`rounded p-2 text-xs ${secure ? 'bg-emerald-500/10' : 'bg-amber-400/10'}`}>
         {secure
-          ? '🔐 Keys are encrypted with your operating system’s credential store and can only be decrypted by this app, on this account. They are never written to browser storage, never saved in your records, and never leave the app except in the request itself.'
-          : '⚠️ Secure OS storage is unavailable in this build, so keys are kept in memory for this session only and will be forgotten when you close the app. Install the desktop app for permanent, encrypted key storage.'}
+          ? '🔐 Keys are encrypted in your operating system’s credential store AND synced end-to-end with your cloud account (so signing in on another device restores them automatically). They are never written to browser/localStorage; outbound requests inject the key from the main process without exposing it to the renderer.'
+          : '☁️ Keys are held in memory for this session and backed up with your cloud account when signed in. Install the desktop app for permanent, OS-encrypted key storage.'}
       </div>
 
       {AI_MODULES.map((m) => {

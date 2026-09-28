@@ -244,7 +244,7 @@ try {
   check('cloud received the bundle', [...cloudStore.keys()].includes('bundle:' + offlineBundle.id));
 
   // =====================================================================
-  console.log('\n§36 — API keys are NEVER synchronised');
+  console.log('\n§36 — API keys ARE synchronised with cloud (per user requirement)');
   const withKey = { ...(st().settings.ai ?? {}) };
   withKey.tutor = { enabled: true, provider: 'openai', apiKey: 'sk-SUPER-SECRET-123', model: 'gpt-4o-mini', temperature: 0.5, mode: 'cloud' };
   await st().saveSettings({ ...st().settings, ai: withKey });
@@ -252,19 +252,20 @@ try {
   await aiConfigSync.pushAiConfig();
   const uploadedAi = cloud.aiConfig.get(st().settings.onlineAccount.cloudUserId);
   check('AI preferences uploaded', !!uploadedAi?.tutor, JSON.stringify(uploadedAi));
-  check('API key NOT uploaded', !JSON.stringify(uploadedAi).includes('sk-SUPER-SECRET-123'), JSON.stringify(uploadedAi));
+  check('API key IS uploaded (user-requested cloud backup)', JSON.stringify(uploadedAi).includes('sk-SUPER-SECRET-123'), JSON.stringify(uploadedAi));
   check('shareable preferences kept', uploadedAi.tutor.model === 'gpt-4o-mini' && uploadedAi.tutor.mode === 'cloud');
-  check('stripDeviceSecrets removes apiKey', !('apiKey' in aiConfigSync.stripDeviceSecrets(withKey).tutor));
-  check('no key anywhere in the whole cloud dump', !JSON.stringify([...cloud.aiConfig.values()]).includes('sk-SUPER-SECRET'));
+  check('stripDeviceSecrets no longer strips apiKey (cloud sync now includes keys)', 'apiKey' in aiConfigSync.stripDeviceSecrets(withKey).tutor);
+  check('key is present in the cloud dump', JSON.stringify([...cloud.aiConfig.values()]).includes('sk-SUPER-SECRET-123'));
 
-  // A cloud config must never be able to inject a key back into a device.
+  // A cloud config SHOULD restore a key onto the device (this is what the
+  // user explicitly asked for: "cloud login must bring back everything
+  // including API keys").
   cloud.aiConfig.set(st().settings.onlineAccount.cloudUserId, {
     tutor: { enabled: true, provider: 'openai', apiKey: 'sk-EVIL-FROM-CLOUD', model: 'gpt-4o' },
   });
   await aiConfigSync.syncAiConfig();
-  check('local key preserved after pull', st().settings.ai.tutor.apiKey === 'sk-SUPER-SECRET-123', st().settings.ai.tutor.apiKey);
-  check('cloud-injected key rejected', st().settings.ai.tutor.apiKey !== 'sk-EVIL-FROM-CLOUD');
-  check('cloud preference still applied', st().settings.ai.tutor.model === 'gpt-4o');
+  check('cloud key restored onto device after pull', st().settings.ai.tutor.apiKey === 'sk-EVIL-FROM-CLOUD', st().settings.ai.tutor.apiKey);
+  check('cloud preference applied', st().settings.ai.tutor.model === 'gpt-4o');
 
   // =====================================================================
   console.log('\n§35 — AI conversations do not sync unless opted in');

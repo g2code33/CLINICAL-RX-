@@ -70,18 +70,26 @@ async function call(fn, req, res) { await fn(req, res); return res; }
   assert.strictEqual(r.body.records.length, 0, 'incremental');
 
   // aiConfig round trip.
-  // Phase 8 §6: the SERVER strips credentials, so a modified client cannot
-  // park an API key in the cloud. Shareable preferences must still survive.
+  // apiKey is NOW ROUND-TRIPPED per explicit user request ("cloud login must
+  // bring back everything including API keys"). Generic credential fields
+  // (secret/token/password/api_key) are still stripped server-side.
   ({ req, res } = makeReqRes()); req.method = 'POST'; req.headers.authorization = 'Bearer ' + token;
   req.body = { aiConfig: { tutor: { enabled: true, provider: 'openai', apiKey: 'sk-t', model: 'gpt-4o-mini' } } };
   r = await call(aiConfig, req, res);
   assert.strictEqual(r.statusCode, 200, 'aiConfig save');
   ({ req, res } = makeReqRes()); req.method = 'GET'; req.headers.authorization = 'Bearer ' + token;
   r = await call(aiConfig, req, res);
-  assert.strictEqual(r.body.aiConfig.tutor.apiKey, undefined, 'aiConfig strips apiKey server-side');
+  assert.strictEqual(r.body.aiConfig.tutor.apiKey, 'sk-t', 'apiKey round-trips (cloud sync enabled per user)');
   assert.strictEqual(r.body.aiConfig.tutor.model, 'gpt-4o-mini', 'aiConfig keeps preferences');
   assert.strictEqual(r.body.aiConfig.tutor.enabled, true, 'aiConfig keeps enabled flag');
-  assert.ok(!JSON.stringify(r.body).includes('sk-t'), 'no credential anywhere in the response');
+  // Generic secret fields must still be stripped (defence in depth).
+  ({ req, res } = makeReqRes()); req.method = 'POST'; req.headers.authorization = 'Bearer ' + token;
+  req.body = { aiConfig: { tutor: { enabled: true, model: 'gpt-4o-mini', token: 'should-be-stripped', secret: 'also-stripped' } } };
+  r = await call(aiConfig, req, res);
+  ({ req, res } = makeReqRes()); req.method = 'GET'; req.headers.authorization = 'Bearer ' + token;
+  r = await call(aiConfig, req, res);
+  assert.strictEqual(r.body.aiConfig.tutor.token, undefined, 'generic token field stripped');
+  assert.strictEqual(r.body.aiConfig.tutor.secret, undefined, 'generic secret field stripped');
 
   // security-question
   ({ req, res } = makeReqRes()); req.method = 'POST'; req.body = { action: 'security-question', email: 'test@example.com' };

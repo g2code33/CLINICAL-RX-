@@ -2,6 +2,23 @@ function ok(res, status, body) {
   return res.status(status).json(body);
 }
 
+/**
+ * Issue a fresh session token as an X-New-Token response header on successful
+ * authenticated responses. The client swaps the token when it sees this header,
+ * giving a sliding session: as long as the user opens the app regularly their
+ * login never expires. The only ways a session ends are (a) explicit sign-out
+ * on the client (the client drops the token), (b) account deletion, or (c) a
+ * year of total inactivity.
+ */
+function okWithToken(res, status, body, userId) {
+  if (userId) {
+    // Lazy-import signToken to avoid circular require at module load.
+    const { signToken } = require('./auth.js');
+    res.setHeader('X-New-Token', signToken(userId));
+  }
+  return res.status(status).json(body);
+}
+
 function fail(res, status, message, extra) {
   return res.status(status).json({ error: message, ...extra });
 }
@@ -14,6 +31,7 @@ function setCors(res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-admin-token');
+  res.setHeader('Access-Control-Expose-Headers', 'X-New-Token');
   res.setHeader('Access-Control-Max-Age', '86400');
   if (!res.headersSent) res.setHeader('Vary', 'Origin');
 }
@@ -62,4 +80,4 @@ function guard(fn) {
   };
 }
 
-module.exports = { ok, fail, guard, setCors, clientError };
+module.exports = { ok, okWithToken, fail, guard, setCors, clientError };

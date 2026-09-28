@@ -227,14 +227,15 @@ export const WRITE_TOOLS: Record<string, ToolDef> = {
     kind: 'write',
     description: 'Create a new learning note in the student\'s records.',
     confirmLabel: (a) => `Create a learning note titled "${a?.title ?? 'Untitled'}"?`,
-    run: (a: { title: string; content: string; tags?: string[] }) => {
+    run: async (a: { title: string; content: string; tags?: string[] }) => {
       const st = useData.getState();
-      const rec = st.save('lesson', {
+      const rec: any = {
         title: a.title || 'AI note',
         body: { content: a.content ?? '', aiGenerated: true },
         tags: a.tags ?? [],
-      } as any);
-      return { created: true, id: (rec as any)?.id };
+      };
+      await st.save('lesson', rec);
+      return { created: true, id: rec.id };
     },
   },
   createQuestion: {
@@ -242,14 +243,15 @@ export const WRITE_TOOLS: Record<string, ToolDef> = {
     kind: 'write',
     description: 'Save a question to the student\'s question bank.',
     confirmLabel: (a) => `Save the question "${String(a?.question ?? '').slice(0, 60)}"?`,
-    run: (a: { question: string; answer?: string; tags?: string[] }) => {
+    run: async (a: { question: string; answer?: string; tags?: string[] }) => {
       const st = useData.getState();
-      const rec = st.save('question', {
+      const rec: any = {
         title: a.question,
         body: { question: a.question, answer: a.answer ?? '', aiGenerated: true },
         tags: a.tags ?? [],
-      } as any);
-      return { created: true, id: (rec as any)?.id };
+      };
+      await st.save('question', rec);
+      return { created: true, id: rec.id };
     },
   },
   createBundle: {
@@ -273,13 +275,14 @@ export const WRITE_TOOLS: Record<string, ToolDef> = {
     kind: 'write',
     description: 'Add a record to the spaced-repetition revision queue.',
     confirmLabel: (a) => `Add "${a?.title ?? a?.id}" to your revision queue?`,
-    run: (a: { module: string; id: string; title?: string }) => {
+    run: async (a: { module: string; id: string; title?: string }) => {
       const st = useData.getState();
-      const rec = st.save('revision', {
+      const rec: any = {
         title: a.title ?? 'Revision item',
         body: { sourceType: a.module, sourceId: a.id, confidence: 1, due: todayIso() },
-      } as any);
-      return { created: true, id: (rec as any)?.id };
+      };
+      await st.save('revision', rec);
+      return { created: true, id: rec.id };
     },
   },
 };
